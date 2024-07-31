@@ -34,6 +34,7 @@ LABEL_TAIL_FREE1 = "末尾1: "
 LABEL_TAIL_S     = "s オプション: "
 LABEL_TAIL_AR    = "ar オプション: "
 LABEL_TAIL_CHAOS = "chaos オプション: "
+LABEL_TAIL_Q     = "q オプション: "
 LABEL_TAIL_WEIRD = "weird オプション: "
 FREE_TEXTS = [
     "",
@@ -44,6 +45,7 @@ FREE_TEXTS = [
 S_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "300", "400", "500", "600", "700", "800", "900", "1000"]
 AR_OPTIONS = ["", "16:9", "9:16", "4:3", "3:4"]  # 'ar'オプションの項目
 CHAOS_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]  # 'chaos'オプションの項目
+Q_OPTIONS = ["", "1", "2"]
 WEIRD_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "500", "750", "1000", "1250", "1500", "1750", "2000", "2250", "2500", "2750", "3000"]  # 'weird'オプションの項目
 
 # 定数としてホスト名を取得
@@ -110,7 +112,7 @@ class CSVImportWindow:
         # "画像プロンプトランダム生成ツール" ウインドウの少し右下側に設定
         offset_x = 50  # 右側へのオフセット
         offset_y = 50  # 下側へのオフセット
-        self.window.geometry(f"500x350+{master_x + offset_x}+{master_y + offset_y}")
+        self.window.geometry(f"500x355+{master_x + offset_x}+{master_y + offset_y}")
         
         self.update_callback = update_callback
 
@@ -279,6 +281,18 @@ class TextGeneratorApp:
         self.combo_tail_chaos.bind("<<ComboboxSelected>>", self.auto_update)
         self.label_tail_chaos_text = tk.Label(self.tail_chaos_text_frame, text=LABEL_TAIL_CHAOS)
         self.label_tail_chaos_text.pack(side='left')
+        
+        # 末尾テキスト入力UI(--q)
+        self.tail_q_text_frame = tk.Frame(self.main_frame)
+        self.tail_q_text_frame.pack(fill='x')
+        self.add_tail_q_text_var = tk.BooleanVar()
+        self.checkbox_tail_q_text = tk.Checkbutton(self.tail_q_text_frame, variable=self.add_tail_q_text_var)
+        self.checkbox_tail_q_text.pack(side='right')
+        self.combo_tail_q = ttk.Combobox(self.tail_q_text_frame, values=Q_OPTIONS, width=5)
+        self.combo_tail_q.pack(side='right')
+        self.combo_tail_q.bind("<<ComboboxSelected>>", self.auto_update)
+        self.label_tail_q_text = tk.Label(self.tail_q_text_frame, text=LABEL_TAIL_Q)
+        self.label_tail_q_text.pack(side='left')
         
         # 末尾テキスト入力UI(--weird)
         self.tail_weird_text_frame = tk.Frame(self.main_frame)
@@ -470,10 +484,11 @@ class TextGeneratorApp:
         tail_ar_text    = " --ar "    + self.combo_tail_ar.get() if self.combo_tail_ar.get() and self.add_tail_ar_text_var.get() else ''
         tail_s_text    = " --s "    + self.combo_tail_s_text.get() if self.combo_tail_s_text.get() and self.add_tail_s_text_var.get() else ''
         tail_chaos_text = " --chaos " + self.combo_tail_chaos.get() if self.combo_tail_chaos.get() and self.add_tail_chaos_text_var.get() else ''
+        tail_q_text = " --q " + self.combo_tail_q.get() if self.combo_tail_q.get() and self.add_tail_q_text_var.get() else ''
         tail_weird_text = " --weird " + self.combo_tail_weird.get() if self.combo_tail_weird.get() and self.add_tail_weird_text_var.get() else ''
         
         # オプションプロンプトの更新
-        self.option_prompt = tail_ar_text + tail_s_text + tail_chaos_text + tail_weird_text
+        self.option_prompt = tail_ar_text + tail_s_text + tail_chaos_text + tail_q_text + tail_weird_text
 
     def make_free_texts(self):
         # 末尾固定文の生成
