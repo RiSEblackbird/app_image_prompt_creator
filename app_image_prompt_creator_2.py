@@ -2,7 +2,9 @@
 # アプリ名: 9. 画像プロンプトランダム生成ツール
 
 import sys
+import os
 import traceback
+import subprocess
 import tkinter as tk
 import tkinter.filedialog
 import tkinter.scrolledtext
@@ -47,6 +49,9 @@ AR_OPTIONS = ["", "16:9", "9:16", "4:3", "3:4"]  # 'ar'オプションの項目
 CHAOS_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]  # 'chaos'オプションの項目
 Q_OPTIONS = ["", "1", "2"]
 WEIRD_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "500", "750", "1000", "1250", "1500", "1750", "2000", "2250", "2500", "2750", "3000"]  # 'weird'オプションの項目
+
+LABEL_EXCLUSION_WORDS = "除外語句："
+# DEFAULT_EXCLUSION_WORDS = ["", "sculpture", "ring", "rain", "sphere", "stature", "sphere, rain, people, sculpture"]
 
 # 定数としてホスト名を取得
 HOSTNAME = socket.gethostname()
@@ -305,6 +310,18 @@ class TextGeneratorApp:
         self.combo_tail_weird.bind("<<ComboboxSelected>>", self.auto_update)
         self.label_tail_weird_text = tk.Label(self.tail_weird_text_frame, text=LABEL_TAIL_WEIRD)
         self.label_tail_weird_text.pack(side='left')
+        
+        # 除外語句入力UI
+        self.exclusion_words_frame = tk.Frame(self.main_frame)
+        self.exclusion_words_frame.pack(fill='x')
+        self.add_exclusion_words_var = tk.BooleanVar()
+        self.checkbox_exclusion_words = tk.Checkbutton(self.exclusion_words_frame, variable=self.add_exclusion_words_var)
+        self.checkbox_exclusion_words.pack(side='right')
+        self.combo_exclusion_words = ttk.Combobox(self.exclusion_words_frame, values=DEFAULT_EXCLUSION_WORDS, width=50)
+        self.combo_exclusion_words.pack(side='right')
+        self.combo_exclusion_words.bind("<<ComboboxSelected>>", self.auto_update)
+        self.label_exclusion_words = tk.Label(self.exclusion_words_frame, text=LABEL_EXCLUSION_WORDS)
+        self.label_exclusion_words.pack(side='left')
 
         # 生成ボタン
         self.button_generate = tk.Button(self.main_frame, text=BUTTON_GENERATE, command=self.generate_text)
@@ -338,6 +355,10 @@ class TextGeneratorApp:
         self.button_options_copy = tk.Button(self.sub_buttons_frame, text=BUTTON_OPTIONS_COPY, padx=5, width=30, font=self.sub_buttons_font, command=self.copy_options_to_clipboard)
         self.button_options_copy.pack(pady=5, fill='none')
 
+        # 除外語句CSVを開くボタン
+        self.button_open_exclusion_csv = tk.Button(self.sub_buttons_frame, text="除外語句CSVを開く", padx=5, width=30, font=self.sub_buttons_font, command=self.open_exclusion_csv)
+        self.button_open_exclusion_csv.pack(pady=5, fill='none')
+
         # 変数初期化
         self.file_lines = []
         self.main_prompt = ""
@@ -368,6 +389,18 @@ class TextGeneratorApp:
 
     def open_csv_import_window(self):
         CSVImportWindow(self.master, self.update_attribute_details)
+
+    def open_exclusion_csv(self):
+        try:
+            if os.name == 'nt':  # Windows
+                subprocess.Popen(['notepad.exe', EXCLUSION_CSV])
+            elif os.name == 'posix':  # macOS and Linux
+                if sys.platform == 'darwin':  # macOS
+                    subprocess.call(['open', '-a', 'TextEdit', EXCLUSION_CSV])
+                else:  # Linux
+                    subprocess.call(['xdg-open', EXCLUSION_CSV])
+        except Exception as e:
+            messagebox.showerror("エラー", f"CSVファイルを開けませんでした: {str(e)}")
 
     def update_attribute_details(self):
         self.load_attribute_data()
@@ -419,7 +452,6 @@ class TextGeneratorApp:
             detail_combo.option_add('*TCombobox*Listbox.font', self.combo_font)
             count_combo.option_add('*TCombobox*Listbox.font', self.combo_font)
 
-
     def generate_text(self):
         try:
             conn = sqlite3.connect(DEFAULT_DB_PATH)
@@ -428,6 +460,9 @@ class TextGeneratorApp:
             total_lines = int(self.entry_row_num.get())
             selected_lines = []
             
+            exclusion_words = [word.strip() for word in self.combo_exclusion_words.get().split(',') if word.strip()]
+            if self.add_exclusion_words_var.get() and exclusion_words:
+                self.update_exclusion_words()  # 除外語句を更新
             for attribute_type in self.attribute_types:
                 detail_combo = self.attribute_detail_combos[attribute_type['id']]
                 count_combo = self.attribute_count_combos[attribute_type['id']]
@@ -441,19 +476,37 @@ class TextGeneratorApp:
                         detail_description = detail.split(' (')[0]  # Remove the content count
                         detail_value = next((d['value'] for d in self.attribute_details if d['description'] == detail_description), None)
                         if detail_value:
-                            cursor.execute('''
-                                SELECT p.content 
-                                FROM prompts p
-                                JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
-                                JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
-                                WHERE ad.value = ?
-                            ''', (detail_value,))
+                            if self.add_exclusion_words_var.get() and exclusion_words:
+                                exclusion_condition = ' AND ' + ' AND '.join(f"p.content NOT LIKE ?" for _ in exclusion_words)
+                                query = f'''
+                                    SELECT p.content 
+                                    FROM prompts p
+                                    JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
+                                    JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
+                                    WHERE ad.value = ? {exclusion_condition}
+                                '''
+                                params = [detail_value] + [f'%{word}%' for word in exclusion_words]
+                                cursor.execute(query, params)
+                            else:
+                                cursor.execute('''
+                                    SELECT p.content 
+                                    FROM prompts p
+                                    JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
+                                    JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
+                                    WHERE ad.value = ?
+                                ''', (detail_value,))
                             matching_lines = cursor.fetchall()
                             selected_lines.extend(random.sample(matching_lines, min(count, len(matching_lines))))
             
             remaining_lines = total_lines - len(selected_lines)
             if remaining_lines > 0:
-                cursor.execute('SELECT content FROM prompts')
+                # cursor.execute('SELECT content FROM prompts')
+                if self.add_exclusion_words_var.get() and exclusion_words:
+                    exclusion_condition = ' AND ' + ' AND '.join(f"content NOT LIKE ?" for _ in exclusion_words)
+                    query = f'SELECT content FROM prompts WHERE 1=1 {exclusion_condition}'
+                    cursor.execute(query, [f'%{word}%' for word in exclusion_words])
+                else:
+                    cursor.execute('SELECT content FROM prompts')
                 all_prompts = cursor.fetchall()
                 remaining_pool = [line for line in all_prompts if line not in selected_lines]
                 selected_lines.extend(random.sample(remaining_pool, remaining_lines))
@@ -477,7 +530,6 @@ class TextGeneratorApp:
             messagebox.showerror("エラー", "行数は整数で入力してください。")
         except Exception as e:
             messagebox.showerror("エラー", f"エラーが発生しました: {get_exception_trace()}")
-
 
     def make_option_prompt(self):
         # オプションテキストの生成
@@ -544,6 +596,29 @@ class TextGeneratorApp:
     def generate_and_copy_all_to_clipboard(self):
         self.generate_text()
         self.copy_all_to_clipboard()
+        
+    def update_exclusion_words(self):
+        new_words = [word.strip() for word in self.combo_exclusion_words.get().split(',') if word.strip()]
+        new_words.sort()
+        new_phrase = ", ".join(new_words)
+        
+        current_words = load_exclusion_words()
+        if new_phrase and new_phrase not in current_words:
+            with open(EXCLUSION_CSV, 'a', encoding='utf-8', newline='') as file:
+                writer = csv.writer(file, quotechar='"', quoting=csv.QUOTE_ALL)
+                writer.writerow([new_phrase])
+            
+            # プルダウンメニューを更新
+            updated_words = load_exclusion_words()
+            self.combo_exclusion_words['values'] = updated_words
+
+def load_exclusion_words():
+    try:
+        with open(EXCLUSION_CSV, 'r', encoding='utf-8', newline='') as file:
+            reader = csv.reader(file, quotechar='"', quoting=csv.QUOTE_ALL)
+            return [""] + [row[0] for row in reader if row]
+    except FileNotFoundError:
+        return [""]
 
 # YAML設定ファイルパス
 yaml_settings_path = 'desktop_gui_settings.yaml'
@@ -552,6 +627,9 @@ BASE_FOLDER = settings["app_image_prompt_creator"]["BASE_FOLDER"]
 DEFAULT_TXT_PATH = settings["app_image_prompt_creator"]["DEFAULT_TXT_PATH"]
 DEFAULT_DB_PATH = settings["app_image_prompt_creator"]["DEFAULT_DB_PATH"]
 POSITION_FILE = settings["app_image_prompt_creator"]["POSITION_FILE"]
+EXCLUSION_CSV = settings["app_image_prompt_creator"]["EXCLUSION_CSV"]
+
+DEFAULT_EXCLUSION_WORDS = load_exclusion_words()
 
 if __name__ == '__main__':
     try:
