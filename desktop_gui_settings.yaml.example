@@ -1,0 +1,35 @@
+# Sample settings for Image Prompt Creator
+# Only parameters used by this app are included.
+
+app_image_prompt_creator:
+  # Window position record file (kept for compatibility; saving/restoring may be disabled)
+  POSITION_FILE: window_position_app_image_prompt_creator.txt
+
+  # Base folder for this app (used for resolving relative paths if needed)
+  BASE_FOLDER: ./app_image_prompt_creator
+
+  # Paths to your data assets
+  DEFAULT_TXT_PATH: ./app_image_prompt_creator/image_prompt_parts.txt
+  DEFAULT_DB_PATH: ./app_image_prompt_creator/image_prompt_parts.db
+  EXCLUSION_CSV: ./app_image_prompt_creator/exclusion_targets.csv
+
+  # Preset file for arrange (worldview/style) guidance
+  ARRANGE_PRESETS_YAML: ./app_image_prompt_creator/arrange_presets.yaml
+
+  # LLM settings
+  # Enable/disable LLM-based arrange
+  LLM_ENABLED: true
+  # Model name (must be available in your environment)
+  LLM_MODEL: gpt-5-mini
+  # Completion tokens limit for the arrange call
+  LLM_MAX_COMPLETION_TOKENS: 800
+  # HTTP timeout seconds for the arrange call
+  LLM_TIMEOUT: 30
+  # Environment variable name that stores your API key
+  OPENAI_API_KEY_ENV: OPENAI_API_KEY
+  # Whether to include "temperature" field in the payload (some models only support default=1)
+  LLM_INCLUDE_TEMPERATURE: false
+  # Temperature value when included
+  LLM_TEMPERATURE: 1
+
+

@@ -1,2 +1,4 @@
 desktop_gui_settings.yaml
 export_prompts_to_csv.py
+window_position_app_image_prompt_creator.txt
+\__pycache__

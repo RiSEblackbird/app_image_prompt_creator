@@ -1,0 +1,125 @@
+presets:
+  - id: fantasy
+    label: ファンタジー
+    guidance: >-
+      High/epic fantasy tone with magic, enchanted forests, ancient ruins, medieval
+      armors, mythical creatures. Rich, wondrous, adventurous atmosphere.
+  - id: dark_fantasy
+    label: ダークファンタジー
+    guidance: >-
+      Gloomy fantasy with occult motifs, eldritch whispers, decayed castles, misty
+      swamps, ominous runes. Moody and foreboding.
+  - id: high_fantasy
+    label: ハイファンタジー
+    guidance: >-
+      Grand kingdoms, noble heroes, soaring citadels, divine magic, legendary artifacts,
+      sweeping epic scale.
+  - id: mythological
+    label: 神話風
+    guidance: >-
+      Mythological tone with deities, sacred beasts, oracle symbolism, marble temples,
+      ceremonial garments.
+
+  - id: cyberpunk
+    label: サイバーパンク
+    guidance: >-
+      Neon-lit dystopia, rain-soaked alleys, holograms, cybernetics, megacities, kanji
+      signage, high-tech low-life.
+  - id: solarpunk
+    label: ソーラーパンク
+    guidance: >-
+      Bright eco-futurism, lush greenery integrated with clean technology, sustainable
+      architecture, positive optimism.
+  - id: steampunk
+    label: スチームパンク
+    guidance: >-
+      Brass gears, steam-driven machinery, goggles, Victorian clothing, dirigibles,
+      retro-futuristic engineering.
+  - id: dieselpunk
+    label: ディーゼルパンク
+    guidance: >-
+      Interwar industrial aesthetics, heavy machinery, oil-stained textures, riveted
+      steel, early aviation motifs.
+  - id: post_apocalyptic
+    label: ポストアポカリプス
+    guidance: >-
+      Ruined civilization, scavenged gear, dust storms, cracked concrete, survivalist
+      mood, improvised repairs.
+
+  - id: wafuu
+    label: 和風
+    guidance: >-
+      Traditional Japanese aesthetics (English wording in output). Use descriptors like
+      wabi-sabi sensibility, washi paper textures, kimono textile patterns, tatami mats,
+      shoji screens, seasonal nature motifs.
+  - id: ukiyoe
+    label: 浮世絵
+    guidance: >-
+      Woodblock print (ukiyo-e) look in English wording: bold outlines, flat colors,
+      stylized wave and cloud patterns, Edo-period scenic stylization.
+  - id: samurai
+    label: 侍
+    guidance: >-
+      Edo-period samurai spirit, katana, hakama, lacquered armor, solemn dignity,
+      historical ambience.
+  - id: ninja
+    label: 忍者
+    guidance: >-
+      Stealthy silhouettes, shuriken, shinobi garb, moonlit rooftops, swift motion,
+      mysterious atmosphere.
+
+  - id: gothic
+    label: ゴシック
+    guidance: >-
+      Gothic architecture, pointed arches, stained glass, candlelight, melancholic
+      romanticism.
+  - id: art_deco
+    label: アール・デコ
+    guidance: >-
+      Geometric ornament, streamlined luxury, metallic accents, bold symmetry,
+      1920s-30s modern glamour.
+  - id: art_nouveau
+    label: アール・ヌーヴォー
+    guidance: >-
+      Organic flowing lines, floral patterns, elegant whiplash curves, natural motifs,
+      decorative refinement.
+  - id: watercolor
+    label: 水彩画
+    guidance: >-
+      Soft washes, granulation, bleeding edges, translucent layers, gentle color
+      harmonies.
+  - id: manga
+    label: 漫画
+    guidance: >-
+      Bold line art, screentone textures, stylized expressions, dynamic panels,
+      clean storytelling.
+  - id: anime
+    label: アニメ
+    guidance: >-
+      Filmic anime style, expressive character design, cel-shaded lighting,
+      cinematic framing and movement.
+
+  - id: sci_fi
+    label: サイファイ
+    guidance: >-
+      Futuristic sleek materials, advanced interfaces, clean neon accents, starships,
+      speculative technology.
+  - id: noir
+    label: ノワール
+    guidance: >-
+      High contrast, moody shadows, rain-drenched streets, vintage crime drama tone,
+      minimal color palette.
+  - id: vaporwave
+    label: ヴェイパーウェーブ
+    guidance: >-
+      Retro-futuristic neon, gradient sunsets, chrome, classical busts, liminal mall
+      aesthetics.
+  - id: palette_pastel
+    label: パステル
+    guidance: >-
+      Pastel color palette, soft and airy mood, gentle contrast, cozy atmosphere.
+  - id: palette_neon
+    label: ネオン
+    guidance: >-
+      Neon color palette, vibrant glow, saturated highlights, nightlife energy.
+
