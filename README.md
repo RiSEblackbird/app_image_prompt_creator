@@ -1,6 +1,6 @@
 # 画像プロンプトランダム生成ツール
 
-![image](https://github.com/user-attachments/assets/ab9d4136-7a42-4a38-83fa-436622a536b2)
+<img width="1246" height="1102" alt="image" src="https://github.com/user-attachments/assets/4c5c9c6d-c324-4343-827c-9a678fe4ddaf" />
 
 ## 概要
 このアプリケーションは、Midjourney向けの画像生成プロンプトをランダムに生成するためのツールです。データベースに登録された属性や特徴を組み合わせて、多様な画像プロンプトを作成することができます。
