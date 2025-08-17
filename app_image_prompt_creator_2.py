@@ -18,6 +18,7 @@ import yaml
 import requests
 from pathlib import Path
 from export_prompts_to_csv import MJImage
+import re
 
 # 定数の定義
 WINDOW_TITLE = "画像プロンプトランダム生成ツール"
@@ -438,6 +439,20 @@ class TextGeneratorApp:
         )
         self.combo_length_adjust.pack(side='left', padx=5)
         self.combo_length_adjust.bind("<<ComboboxSelected>>", self.auto_update)
+        
+        # 固定文字数（優先）
+        self.label_fixed_length = tk.Label(self.length_adjust_frame, text="固定:")
+        self.label_fixed_length.pack(side='left')
+        self.fixed_length_var = tk.StringVar(value="")
+        self.combo_fixed_length = ttk.Combobox(
+            self.length_adjust_frame,
+            values=["", "50", "100", "150", "200", "250", "300"],
+            textvariable=self.fixed_length_var,
+            width=5,
+            state="readonly"
+        )
+        self.combo_fixed_length.pack(side='left', padx=5)
+        self.combo_fixed_length.bind("<<ComboboxSelected>>", self.auto_update)
 
         # アレンジプリセット（YAMLから読み込み）
         self.arrange_presets = load_arrange_presets(ARRANGE_PRESETS_YAML)
@@ -457,6 +472,7 @@ class TextGeneratorApp:
                 print(f"  - {preset['label']} (id: {preset['id']}, guidance: {preset.get('guidance', 'なし')})")
         
         preset_labels = [p["label"] for p in self.arrange_presets]
+        print(f"UIに設定するプリセットラベル: {preset_labels}")
 
         self.combo_arrange = ttk.Combobox(
             self.arrange_frame,
@@ -839,19 +855,26 @@ class TextGeneratorApp:
             length_adjust = self.length_adjust_var.get()
             original_length = len(src)
             
-            # 文字数調整の倍率を計算
-            length_multipliers = {
-                "半分": 0.5,
-                "2割減": 0.8,
-                "同程度": 1.0,
-                "2割増": 1.2,
-                "倍": 2.0
-            }
-            target_length_multiplier = length_multipliers.get(length_adjust, 1.0)
-            target_length = int(original_length * target_length_multiplier)
+            # 固定文字数が選択されていれば優先
+            fixed_value = (self.fixed_length_var.get() or "").strip()
+            if fixed_value.isdigit():
+                target_length = int(fixed_value)
+                length_adjust_display = f"固定{fixed_value}文字"
+            else:
+                # 文字数調整の倍率を計算
+                length_multipliers = {
+                    "半分": 0.5,
+                    "2割減": 0.8,
+                    "同程度": 1.0,
+                    "2割増": 1.2,
+                    "倍": 2.0
+                }
+                target_length_multiplier = length_multipliers.get(length_adjust, 1.0)
+                target_length = int(original_length * target_length_multiplier)
+                length_adjust_display = length_adjust
             
             print(f"文字数調整処理開始:")
-            print(f"  調整設定: {length_adjust}")
+            print(f"  調整設定: {length_adjust_display}")
             print(f"  元の文字数: {original_length}")
             print(f"  目標文字数: {target_length}")
             
@@ -860,7 +883,7 @@ class TextGeneratorApp:
             
             if adjusted_text:
                 # 調整前後の比較表示ダイアログを表示
-                self.show_length_adjust_comparison_dialog(src, adjusted_text, length_adjust)
+                self.show_length_adjust_comparison_dialog(src, adjusted_text, length_adjust_display)
                 self.text_output.delete('1.0', tk.END)
                 self.text_output.insert(tk.END, adjusted_text)
                 return True
@@ -1055,16 +1078,21 @@ class TextGeneratorApp:
         length_adjust = self.length_adjust_var.get()
         original_length = len(text)
         
-        # 文字数調整の倍率を計算
-        length_multipliers = {
-            "半分": 0.5,
-            "2割減": 0.8,
-            "同程度": 1.0,
-            "2割増": 1.2,
-            "倍": 2.0
-        }
-        target_length_multiplier = length_multipliers.get(length_adjust, 1.0)
-        target_length = int(original_length * target_length_multiplier)
+        # 固定文字数が選択されていれば優先
+        fixed_value = (getattr(self, 'fixed_length_var', tk.StringVar(value="")).get() or "").strip()
+        if fixed_value.isdigit():
+            target_length = int(fixed_value)
+        else:
+            # 文字数調整の倍率を計算
+            length_multipliers = {
+                "半分": 0.5,
+                "2割減": 0.8,
+                "同程度": 1.0,
+                "2割増": 1.2,
+                "倍": 2.0
+            }
+            target_length_multiplier = length_multipliers.get(length_adjust, 1.0)
+            target_length = int(original_length * target_length_multiplier)
         
         print(f"  文字数調整: {length_adjust} (元: {original_length}文字 → 目標: {target_length}文字)")
 
@@ -1092,12 +1120,19 @@ class TextGeneratorApp:
         # エラー詳細を初期化
         self._last_error_details = []
 
+        # ブレンド・アンカー設定
+        blend_weight_map = {0: 20, 1: 35, 2: 65, 3: 80}  # guidance割合の目安（%）
+        blend_weight = blend_weight_map.get(strength, 55)
+        anchor_terms = self._extract_anchor_terms(text, max_terms=8)
+        hybrid_cues = self._generate_hybrid_cues(anchor_terms, preset, guidance, max_items=5)
+        must_keep_count = 3 if strength <= 2 else 2
+
         # 強度に応じたシステムプロンプトを動的に生成
         strength_descriptions = {
             0: "Apply very subtle, minimal changes. Keep almost everything the same, just minor word improvements.",
             1: "Apply gentle, tasteful variations. Improve wording and style while keeping the core concept intact.",
             2: "Apply moderate creative variations. Enhance style, add vivid descriptors, and improve composition.",
-            3: "Apply bold, creative transformations. Significantly enhance style, add dramatic descriptors, and create more impactful visual language."
+            3: "Apply bold, creative transformations. Enhance style and add dramatic descriptors while preserving the original subject and key elements."
         }
         
         strength_instruction = strength_descriptions.get(strength, strength_descriptions[2])
@@ -1106,8 +1141,16 @@ class TextGeneratorApp:
         if strength == 3:
             system_prompt = (
                 f"You are a creative prompt artist. Transform this Midjourney prompt with {strength_instruction}. "
-                f"Be BOLD and CREATIVE - change the visual style, add dramatic effects, use more vivid and cinematic language. "
-                f"Don't just rephrase - completely reimagine the visual approach while keeping the core subject. "
+                f"If guidance is provided, it SHOULD influence style but MUST BLEND with the original content. "
+                f"Do NOT eliminate original cultural/subject elements; preserve and merge them with the guidance. "
+                f"Be BOLD and CREATIVE - enhance the visual style with dramatic effects and vivid cinematic language. "
+                f"STYLE BLENDING RULES:\n"
+                f"- Express guidance via lighting, palette, materials, VFX, and subtle accessories\n"
+                f"- Avoid replacing the identities of original subjects; avoid introducing brand-new subjects\n"
+                f"- Keep cultural cues (e.g., traditional motifs) and merge them with the guidance style\n"
+                f"CONTENT PRESERVATION RULES:\n"
+                f"- Keep the scene's core setting and composition\n"
+                f"- Preserve original environmental motifs and objects whenever possible\n"
                 f"PROPER NOUN ABSTRACTION RULES:\n"
                 f"- REPLACE: Brand names (Nike → sports brand), company names (Apple → tech company), product names (iPhone → smartphone)\n"
                 f"- REPLACE: Person names (John Smith → a person), celebrity names (Beyoncé → a famous singer)\n"
@@ -1120,9 +1163,26 @@ class TextGeneratorApp:
                 f"Preserve any --options at the end. Output only the transformed prompt."
             )
         else:
+            # 強度に応じてガイダンスの適用度を調整
+            guidance_system_instruction = ""
+            if strength == 0:
+                guidance_system_instruction = "If guidance is provided, apply it very subtly or ignore it. Focus on minimal improvements only."
+            elif strength == 1:
+                guidance_system_instruction = "If guidance is provided, apply it gently and blend it subtly with the original content."
+            elif strength == 2:
+                guidance_system_instruction = "If guidance is provided, apply it moderately via hybridization of materials, textures, lighting while keeping core elements."
+            
             system_prompt = (
                 f"Rewrite Midjourney prompts with {strength_instruction}. "
+                f"{guidance_system_instruction} "
                 f"Keep core content and --options. "
+                f"STYLE BLENDING RULES:\n"
+                f"- Blend guidance via lighting, palette, materials, VFX, and subtle accessories\n"
+                f"- Do not replace the identities of original subjects; avoid new subjects unless present\n"
+                f"- Keep cultural/setting cues and merge them with the guidance style\n"
+                f"CONTENT PRESERVATION RULES:\n"
+                f"- Keep the scene's core setting and composition\n"
+                f"- Preserve original environmental motifs and objects whenever possible\n"
                 f"PROPER NOUN ABSTRACTION RULES:\n"
                 f"- REPLACE: Brand names (Nike → sports brand), company names (Apple → tech company), product names (iPhone → smartphone)\n"
                 f"- REPLACE: Person names (John Smith → a person), celebrity names (Beyoncé → a famous singer)\n"
@@ -1166,25 +1226,44 @@ class TextGeneratorApp:
                     f"Preset: {preset}, Strength: {strength} (MAXIMUM CREATIVITY)\n"
                     f"Nonce: {nonce}\n"
                     + (f"Guidance: {guidance}\n" if guidance else "") +
-                    f"Rules: Be BOLD and CREATIVE - transform the visual style dramatically\n"
+                    f"Rules: Be BOLD and CREATIVE while preserving original elements\n"
                     f"Strength rules: {'; '.join(current_rules)}\n"
+                    f"Blend weight target: ~{blend_weight}% guidance / ~{100 - blend_weight}% original\n"
+                    + (f"Anchor terms (verbatim): {', '.join(anchor_terms)}\n" if anchor_terms else "") +
+                    f"CRITICAL: Include at least {must_keep_count} of the anchor terms verbatim. Keep the original subject and cultural motifs.\n"
+                    + ("Hybridization suggestions: " + "; ".join(hybrid_cues) + "\n" if hybrid_cues else "") +
+                    f"VISIBLE HYBRIDIZATION: Apply 3–5 hybrid changes to surfaces or objects (materials, textures, subtle tech details).\n"
+                    f"Express guidance mainly via lighting, palette, materials, VFX, and accessories. Do NOT replace the entire scene; avoid introducing brand-new subjects.\n"
                     f"Length adjustment: {length_adjust} (target: ~{target_length} chars, original: {original_length} chars)\n"
                     f"CRITICAL: Make the output {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original\n"
-                    f"Important: Completely reimagine the visual approach while keeping the core subject\n"
-                    f"PROPER NOUN ABSTRACTION: Replace brands/companies/products with generic terms, keep geographic/temporal terms\n"
                     f"Prompt: {text}"
                 )
             else:
+                # 強度に応じてガイダンスの適用度を調整
+                guidance_instruction = ""
+                if strength == 0:
+                    guidance_instruction = "Apply guidance very subtly if at all. Focus on minimal improvements."
+                elif strength == 1:
+                    guidance_instruction = "Apply guidance gently. Blend it subtly with the original content."
+                elif strength == 2:
+                    guidance_instruction = "Apply guidance moderately. Enhance the style while keeping core elements."
+                
                 user_prompt = (
                     f"Preset: {preset}, Strength: {strength} (0=minimal, 3=bold)\n"
                     f"Nonce: {nonce}\n"
                     + (f"Guidance: {guidance}\n" if guidance else "") +
+                    f"Guidance instruction: {guidance_instruction}\n"
                     f"Rules: Keep core content, enhance style per strength level, preserve --options\n"
                     f"Strength rules: {'; '.join(current_rules)}\n"
+                    f"Blend weight target: ~{blend_weight}% guidance / ~{100 - blend_weight}% original\n"
+                    + (f"Anchor terms (verbatim): {', '.join(anchor_terms)}\n" if anchor_terms else "") +
+                    f"CRITICAL: Include at least {must_keep_count} of the anchor terms verbatim. Keep the original subject and cultural motifs.\n"
+                    + ("Hybridization suggestions: " + "; ".join(hybrid_cues) + "\n" if hybrid_cues else "") +
+                    f"VISIBLE HYBRIDIZATION: Apply 3–5 hybrid changes to surfaces or objects (materials, textures, subtle tech details).\n"
+                    f"Express guidance mainly via lighting, palette, materials, VFX, and accessories. Do NOT replace the entire scene; avoid introducing brand-new subjects.\n"
                     f"Length adjustment: {length_adjust} (target: ~{target_length} chars, original: {original_length} chars)\n"
                     f"CRITICAL: Make the output {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original\n"
                     f"Important: Adjust length to {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than original\n"
-                    f"PROPER NOUN ABSTRACTION: Replace brands/companies/products with generic terms, keep geographic/temporal terms\n"
                     f"Prompt: {text}"
                 )
 
@@ -1364,6 +1443,122 @@ class TextGeneratorApp:
             updated_words = load_exclusion_words()
             self.combo_exclusion_words['values'] = updated_words
 
+    def _extract_anchor_terms(self, text: str, max_terms: int = 8):
+        """原文から保持すべきアンカー語句（名詞・象徴語）を抽出する簡易ロジック。
+        - 英単語のうち、文化・自然・建築・和要素などを優先
+        - 記号を除去し、短すぎる語を除く
+        """
+        try:
+            cleaned = re.sub(r"[^A-Za-z0-9\-\s]", " ", text)
+            tokens = [t.strip('-') for t in cleaned.split()]
+            tokens = [t for t in tokens if len(t) >= 3]
+            # 和風・自然・建築などのキーワードを優先
+            priority = set([
+                'cherry', 'blossom', 'blossoms', 'lantern', 'lanterns', 'temple', 'shrine', 'garden',
+                'tea', 'bamboo', 'maple', 'zen', 'wabi', 'sabi', 'imperfection', 'architecture', 'wood', 'paper',
+                'stone', 'bridge', 'pond', 'kimono', 'tatami', 'shoji', 'bonsai'
+            ])
+            scored = []
+            for t in tokens:
+                score = 1
+                lt = t.lower()
+                if lt in priority:
+                    score += 3
+                if any(k in lt for k in ['garden', 'temple', 'shrine', 'lantern', 'blossom', 'bamboo', 'maple', 'tea', 'zen']):
+                    score += 1
+                scored.append((score, t))
+            scored.sort(reverse=True)
+            anchors = []
+            seen = set()
+            for _, w in scored:
+                lw = w.lower()
+                if lw not in seen:
+                    anchors.append(w)
+                    seen.add(lw)
+                if len(anchors) >= max_terms:
+                    break
+            return anchors
+        except Exception:
+            return []
+
+    def _generate_hybrid_cues(self, anchors, preset: str, guidance: str, max_items: int = 5):
+        """任意のアンカー語をスタイル語彙と合成し、置き換えではなく“ハイブリッド化”を促すサジェストを動的生成する。"""
+        try:
+            if not anchors:
+                return []
+            preset_l = (preset or "").lower()
+            guidance_l = (guidance or "").lower()
+            def _style_key():
+                keys = [preset_l, guidance_l]
+                if any("cyber" in k for k in keys):
+                    return "cyberpunk"
+                if any("noir" in k for k in keys):
+                    return "noir"
+                if any(k in ("sci-fi", "scifi", "science fiction") for k in keys):
+                    return "scifi"
+                if any("vapor" in k for k in keys):
+                    return "vaporwave"
+                return "generic"
+            style = _style_key()
+            # スタイル別語彙
+            vocab = {
+                "cyberpunk": {
+                    "materials": ["brushed metal", "titanium inlays", "carbon-fiber", "chromed edges", "micro-etched steel", "polymer plates"],
+                    "lighting": ["neon rim-light", "cyan underglow", "magenta accent light", "dynamic LED seams", "HUD glow", "soft holographic glow"],
+                    "vfx": ["holographic flicker", "pixel shimmer", "AR overlay", "scanline sheen", "glitch speckles", "volumetric haze"],
+                    "detail": ["micro-circuit veins", "fiber-optic threads", "embedded sensors", "heat vents", "panel seams", "thin cabling"]
+                },
+                "noir": {
+                    "materials": ["matte enamel", "lacquered wood", "worn steel", "velvet texture"],
+                    "lighting": ["hard rim-light", "moody backlight", "rain-soaked reflections", "venetian blind shadows"],
+                    "vfx": ["film grain", "soft bloom", "cigarette smoke wisps"],
+                    "detail": ["sleek rivets", "aged patina", "subtle scratches"]
+                },
+                "scifi": {
+                    "materials": ["brushed alloy", "ceramic composite", "graphene panels", "satin titanium"],
+                    "lighting": ["cool rim-light", "ambient panel glow", "bioluminescent accents"],
+                    "vfx": ["force-field shimmer", "ionized haze", "specular flares"],
+                    "detail": ["hex-mesh patterns", "micro-actuators", "servo joints"]
+                },
+                "vaporwave": {
+                    "materials": ["pastel plastic", "glossy acrylic", "pearlescent enamel"],
+                    "lighting": ["pink-cyan gradient glow", "retro grid light", "soft bloom"],
+                    "vfx": ["CRT scanlines", "pixel dust", "checkerboard reflections"],
+                    "detail": ["chrome trims", "90s decals", "retro stickers"]
+                },
+                "generic": {
+                    "materials": ["brushed metal", "ceramic-metal composite", "polished steel"],
+                    "lighting": ["edge underglow", "accent rim-light", "soft backlight"],
+                    "vfx": ["subtle holographic shimmer", "fine grain", "soft bloom"],
+                    "detail": ["micro-engraving", "thin inlays", "fiber threads"]
+                }
+            }
+            lex = vocab.get(style, vocab["generic"])
+            templates = [
+                "{a} with {materials} accents and {lighting}",
+                "{a} featuring {detail} and a hint of {vfx}",
+                "part of the {a} converted to {materials} with {lighting}",
+                "{a} showing {detail} beneath the surface and subtle {vfx}",
+                "{a} integrating {materials} inlays and {lighting}"
+            ]
+            cues = []
+            # アンカーごとにテンプレートと語彙をローテーション
+            for i, a in enumerate(anchors):
+                if len(cues) >= max_items:
+                    break
+                t = templates[i % len(templates)]
+                cue = t.format(
+                    a=a,
+                    materials=lex["materials"][i % len(lex["materials"])],
+                    lighting=lex["lighting"][i % len(lex["lighting"])],
+                    vfx=lex["vfx"][i % len(lex["vfx"])],
+                    detail=lex["detail"][i % len(lex["detail"])],
+                )
+                cues.append(cue)
+            return cues
+        except Exception:
+            return []
+
     def show_arrange_comparison_dialog(self, original_text, arranged_text, preset_label, strength):
         """アレンジ前後のプロンプトを比較表示するダイアログ"""
         dialog = tk.Toplevel(self.master)
@@ -1383,7 +1578,12 @@ class TextGeneratorApp:
         header_frame.pack(fill='x', padx=10, pady=5)
         
         tk.Label(header_frame, text="アレンジ設定:", font=('Arial', 10, 'bold')).pack(anchor='w')
-        tk.Label(header_frame, text=f"プリセット: {preset_label} | 強度: {strength} | 文字数調整: {self.length_adjust_var.get()}").pack(anchor='w')
+        try:
+            fixed_value = (self.fixed_length_var.get() or "").strip()
+        except Exception:
+            fixed_value = ""
+        length_adjust_label = f"固定{fixed_value}文字" if fixed_value.isdigit() else self.length_adjust_var.get()
+        tk.Label(header_frame, text=f"プリセット: {preset_label} | 強度: {strength} | 文字数調整: {length_adjust_label}").pack(anchor='w')
         
         # 比較表示エリア
         comparison_frame = tk.Frame(dialog)
@@ -1441,8 +1641,8 @@ class TextGeneratorApp:
         )
         close_button.pack(side='right')
         
-        # 完了通知
-        messagebox.showinfo("アレンジ完了", f"プロンプトのアレンジが完了しました。\nプリセット: {preset_label}\n強度: {strength}\n文字数調整: {self.length_adjust_var.get()}\n文字数: {len(original_text)} → {len(arranged_text)}")
+        # # 完了通知
+        # messagebox.showinfo("アレンジ完了", f"プロンプトのアレンジが完了しました。\nプリセット: {preset_label}\n強度: {strength}\n文字数調整: {self.length_adjust_var.get()}\n文字数: {len(original_text)} → {len(arranged_text)}")
 
     def copy_text_to_clipboard(self, text, dialog):
         """テキストをクリップボードにコピー"""
@@ -1603,8 +1803,8 @@ class TextGeneratorApp:
         )
         close_button.pack(side='right')
         
-        # 完了通知
-        messagebox.showinfo("文字数調整完了", f"プロンプトの文字数調整が完了しました。\n調整設定: {length_adjust}\n文字数: {len(original_text)} → {len(adjusted_text)}")
+        # # 完了通知
+        # messagebox.showinfo("文字数調整完了", f"プロンプトの文字数調整が完了しました。\n調整設定: {length_adjust}\n文字数: {len(original_text)} → {len(adjusted_text)}")
 
 def load_exclusion_words():
     try:
@@ -1616,9 +1816,11 @@ def load_exclusion_words():
 
 def load_arrange_presets(yaml_path: str):
     try:
+        print(f"プリセットファイルを読み込み中: {yaml_path}")
         with open(yaml_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f) or {}
         presets = data.get('presets', [])
+        print(f"YAMLから読み込んだプリセット数: {len(presets)}")
         normalized = []
         for p in presets:
             normalized.append({
@@ -1626,8 +1828,16 @@ def load_arrange_presets(yaml_path: str):
                 'label': p.get('label') or p.get('name') or p.get('id'),
                 'guidance': p.get('guidance') or ''
             })
-        return [p for p in normalized if p['id']]
+        result = [p for p in normalized if p['id']]
+        print(f"正規化後のプリセット数: {len(result)}")
+        for preset in result:
+            print(f"  - {preset['label']} (id: {preset['id']})")
+        return result
     except FileNotFoundError:
+        print(f"プリセットファイルが見つかりません: {yaml_path}")
+        return []
+    except Exception as e:
+        print(f"プリセット読み込みエラー: {e}")
         return []
 
 def sanitize_to_english(text: str) -> str:

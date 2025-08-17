@@ -2,195 +2,269 @@ presets:
   - id: fantasy
     label: ファンタジー
     guidance: >-
-      FANTASY SCENE: majestic floating castle in sky with crystal spires, dragon flying around castle, 
-      magical portal with swirling energy, enchanted forest with glowing mushrooms and fairy lights, 
-      mythical creature drinking from crystal stream, floating islands connected by rainbow bridges, 
-      legendary bird rising from flames, ancient ruins with glowing runes, 
-      magical creatures and enchanted beings
+      FANTASY MOOD: evoke mythic wonder through atmosphere, light, and grand scale without naming specific
+      creatures, places, or artifacts. Keep the subject partially undefined; suggest ancient magic through
+      glow, haze, silhouettes, and resonant patterns. Allow 2–3 surprising, non-literal metaphors to emerge.
+      Composition should feel dreamlike and open-ended.
   - id: dark_fantasy
     label: ダークファンタジー
     guidance: >-
-      DARK FANTASY SCENE: shadowy figure in dark robes casting dark magic, blood-red moon in sky, 
-      twisted gnarled trees with faces, eldritch tentacles emerging from dark portal, 
-      cursed castle with gargoyles and dark towers, demonic creatures with multiple eyes, 
-      dark magic circles and forbidden symbols, nightmarish landscape with bone trees, 
-      corrupted artifacts and dark sorcery
+      DARK FANTASY MOOD: ominous, ritual ambience with occult undertones—no explicit monsters or gore.
+      Use long shadows, fractured light, unsettling geometry, and textured symbols. Keep specifics
+      ambiguous; hint at forbidden power via patterns and negative space. Add one quiet, beautiful
+      counterpoint to heighten dread.
   - id: high_fantasy
     label: ハイファンタジー
     guidance: >-
-      HIGH FANTASY SCENE: epic battle between massive dragon and legendary warrior, 
-      golden palace with divine light cascading from heavens, celestial beings descending from clouds, 
-      sacred temple with marble columns and golden statues, royal court with jeweled throne, 
-      epic landscape with floating mountains and waterfalls, divine intervention with lightning, 
-      legendary artifacts pulsing with power, epic scale armies clashing
+      HIGH FANTASY MOOD: grand, luminous, heroic atmosphere without explicit characters, battles, or
+      named relics. Convey divine scale through elevation, radiance, and vast depth. Let nobility and awe
+      be implied by light and composition rather than concrete subjects.
   - id: mythological
     label: 神話風
     guidance: >-
-      MYTHOLOGICAL SCENE: thunder god throwing lightning bolts from mountain peak, sea god rising from ocean with trident, 
-      sun god's golden chariot racing across sky, monster with writhing snake hair, 
-      beast in labyrinth maze, winged horse soaring through clouds, goddess with wisdom aura, 
-      legendary hero performing great feats, divine mountain floating in heavens, 
-      divine judgment scene with gods and mortals, sacred animals with supernatural powers
+      MYTHOLOGICAL MOOD: archetypal, timeless energy. Allude to elemental forces—sky, sea, fire, earth—
+      without naming deities or creatures. Use symbolic silhouettes, halos, repeating rhythms, and ritual
+      symmetry. Keep narrative abstract and allegorical.
 
   - id: cyberpunk
     label: サイバーパンク
     guidance: >-
-      CYBERPUNK SCENE: neon-drenched megacity street with flying cars, cyberpunk figure with glowing implants, 
-      massive corporate towers with holographic advertisements, rain-slicked streets reflecting neon, 
-      cybernetic robot/android walking street, digital glitch effects in air, 
-      augmented reality overlays visible, cybernetic limbs with exposed wiring, 
-      neon signs flickering on buildings, high-tech low-life contrast scene
+      CYBERPUNK MOOD: saturated neon, dense layering, synthetic textures—avoid naming gadgets, brands, or
+      vehicles. Convey high-tech/low-life tension through reflections, glitches, signage fragments, and
+      humid atmosphere. Leave any protagonist undefined; let surfaces and light tell the story.
   - id: solarpunk
     label: ソーラーパンク
     guidance: >-
-      SOLARPUNK SCENE: futuristic city covered in vertical gardens and solar panels, 
-      sustainable transportation vehicles (electric bikes, solar cars), 
-      buildings with integrated wind turbines and green roofs, clean energy flowing visibly, 
-      nature and technology harmoniously combined, bright optimistic cityscape, 
-      solar-powered robots maintaining gardens, eco-friendly architecture everywhere, 
-      positive utopian atmosphere with clean air and green spaces
+      SOLARPUNK MOOD: optimistic ecological harmony. Suggest renewable systems and living integration via
+      textures, dappled light, and rhythmic greenery—no named devices. Emphasize convivial atmosphere,
+      soft futurism, and gentle prosperity.
   - id: steampunk
     label: スチームパンク
     guidance: >-
-      STEAMPUNK SCENE: Victorian-era street with brass and copper machinery, steam-powered airship floating above, 
-      figure wearing elaborate goggles and mechanical accessories, steam-powered robot walking street, 
-      elaborate clockwork mechanisms and gears visible, Victorian clothing with mechanical elements, 
-      steam billowing from engines and pipes, retro-futuristic inventions everywhere, 
-      brass fittings and ornate mechanical details
+      STEAMPUNK MOOD: retro-mechanical charm through brass tones, pressure, and rhythmic mechanisms
+      without naming engines or vehicles. Express invention through joints, gauges, valves, and soft steam
+      hints. Keep the subject open and suggestive.
   - id: dieselpunk
     label: ディーゼルパンク
     guidance: >-
-      DIESELPUNK SCENE: industrial cityscape with massive machinery and riveted steel buildings, 
-      early aviation planes with propellers flying overhead, heavy diesel engines and industrial smoke, 
-      art deco architecture with industrial elements, massive war machines and tanks, 
-      workers in industrial gear operating machinery, oil-stained textures and heavy metal construction, 
-      interwar period aesthetics with mechanical complexity
+      DIESELPUNK MOOD: industrial mass and interwar grit—no named machines or weapons. Use heavy geometry,
+      riveted textures, oily patina, and smoky gradients. Undercurrent of art-deco cadence without explicit
+      references.
   - id: post_apocalyptic
     label: ポストアポカリプス
     guidance: >-
-      POST-APOCALYPTIC SCENE: crumbling skyscrapers overgrown with vegetation, survivor with scavenged gear, 
-      rusted vehicles and makeshift shelters, dust storm raging through abandoned city, 
-      survival equipment and weapons, radioactive glow in distance, 
-      improvised repairs and modifications to equipment, harsh lighting through broken windows, 
-      evidence of civilization's collapse everywhere
+      POST-APOCALYPTIC MOOD: quiet aftermath and adaptive survival without named ruins or weaponry. Let
+      nature reclaim forms; use weathered textures, broken symmetry, dust-haze, and sharp shafts of light.
+      Keep human presence ambiguous.
 
   - id: wafuu
     label: 和風
     guidance: >-
-      JAPANESE SCENE: traditional Japanese garden with cherry blossoms falling, figure in kimono, 
-      tatami room with shoji screens and paper lanterns, traditional architecture with curved roofs, 
-      zen garden with raked sand and stones, calligraphy being written with brush, 
-      traditional tea ceremony setup, seasonal elements (maple leaves, bamboo, plum blossoms), 
-      traditional Japanese weapons and armor, wabi-sabi aesthetic with natural imperfections
+      JAPANESE AESTHETIC MOOD: serene, restrained elegance; imply wood, paper, stone, water, and seasonal
+      transience without naming clothing or utensils. Use negative space, asymmetry, quiet textures, and
+      subtle patina to suggest wabi-sabi.
   - id: ukiyoe
     label: 浮世絵
     guidance: >-
-      UKIYO-E SCENE: woodblock print style scene with bold black outlines, stylized wave patterns, 
-      Edo-period figures in traditional clothing, traditional Japanese architecture and landscapes, 
-      flat color areas with limited palette, stylized facial expressions and poses, 
-      traditional Japanese perspective and composition, historical Japanese scenes and activities, 
-      bold graphic elements and stylized natural forms
+      UKIYO-E MOOD: woodblock sensibility—bold outlines, flat fields, rhythmic patterns—without specific
+      historical actors or scenes. Emphasize pattern flow, stylized perspective, and graphic simplicity.
   - id: samurai
     label: 侍
     guidance: >-
-      SAMURAI SCENE: Edo-period warrior in full armor with katana, traditional Japanese castle or temple, 
-      warrior in ceremonial pose with family crests, traditional Japanese landscape with mountains, 
-      warrior training or battle scene, traditional Japanese architecture and gardens, 
-      period-accurate clothing and accessories, bushido spirit and solemn dignity, 
-      traditional Japanese weapons and armor details
+      SAMURAI MOOD: stoic discipline and honor implied through composition and material cues—avoid naming
+      armor or weapons. Suggest presence via controlled posture-like silhouettes, fabric flow, and restrained
+      tension.
   - id: ninja
     label: 忍者
     guidance: >-
-      NINJA SCENE: ninja in black shinobi garb on rooftop, traditional Japanese castle or temple at night, 
-      shuriken in motion, stealthy poses and dynamic movement, moonlit traditional Japanese architecture, 
-      ninja tools and equipment visible, mysterious atmosphere with shadows, 
-      traditional Japanese weapons and ninja techniques, night-time settings with dramatic lighting
+      NINJA MOOD: stealth and moonlit suspense without explicit tools, rooftops, or pursuits. Use layered
+      shadows, sudden highlights, and pauses of stillness. Keep identity undefined and elusive.
 
   - id: gothic
     label: ゴシック
     guidance: >-
-      GOTHIC SCENE: towering gothic cathedral with pointed arches and flying buttresses, 
-      figure in gothic fashion with elaborate details, gargoyles perched on building ledges, 
-      stained glass windows casting colored light, candlelight creating dramatic shadows, 
-      gothic architecture with ornate decorations, dark romantic atmosphere, 
-      medieval gothic elements and gothic horror elements, dramatic lighting effects
+      GOTHIC MOOD: vertical awe and melancholic beauty—no named cathedrals or figures. Use tracery-like
+      patterns, stained-light atmospherics, candle-dark contrasts, and solemn grandeur.
   - id: art_deco
     label: アール・デコ
     guidance: >-
-      ART DECO SCENE: 1920s-30s luxury interior with geometric ornamentation, figure in art deco fashion, 
-      stepped architecture with metallic accents, elaborate geometric motifs and patterns, 
-      luxury materials (marble, gold, silver) everywhere, stylized floral and animal motifs, 
-      sophisticated elegance and machine age aesthetics, opulent decorative elements, 
-      streamlined luxury design with sharp angles
+      ART DECO MOOD: geometric opulence and streamline elegance without specific places or decades.
+      Emphasize stepped forms, metallic sheen, symmetrical rhythm, and luxe restraint.
   - id: art_nouveau
     label: アール・ヌーヴォー
     guidance: >-
-      ART NOUVEAU SCENE: elegant interior with organic flowing lines and curves, 
-      figure with stylized flowing hair and drapery, stylized floral patterns and natural motifs, 
-      ornate decorative borders and flowing organic shapes, elegant whiplash curves everywhere, 
-      natural forms stylized into decorative elements, sophisticated aesthetic with intricate details, 
-      flowing organic shapes and elegant refinement
+      ART NOUVEAU MOOD: organic flow and whiplash curves; floral suggestions without naming species or
+      portraits. Highlight sinuous lines, integrated ornament, and lyrical continuity.
   - id: watercolor
     label: 水彩画
     guidance: >-
-      WATERCOLOR SCENE: landscape or scene painted in watercolor style, soft color washes with granulation, 
-      bleeding edges where colors meet naturally, translucent layers showing paper texture, 
-      watercolor paint flowing and blending naturally, soft atmospheric effects and gentle lighting, 
-      delicate brush strokes and watercolor paper texture visible, 
-      traditional watercolor techniques and ethereal quality
+      WATERCOLOR MOOD: soft washes, granulation, translucent layering; edges breathe and pigments wander.
+      Avoid concrete subjects—let forms emerge from color and atmosphere.
   - id: manga
     label: 漫画
     guidance: >-
-      MANGA SCENE: manga-style figure with large eyes and stylized proportions, 
-      bold black line art with clean outlines, screentone textures for shading, 
-      dynamic panel composition with speed lines, manga-style speech bubbles and text, 
-      stylized hair and clothing, dramatic angles and perspectives, 
-      expressive character emotions and clean storytelling visuals
+      MANGA MOOD: clean line emphasis and dynamic framing without specific characters or text. Use speed,
+      onomatopoeic energy, screentone-like textures, and panel-aware composition.
   - id: anime
     label: アニメ
     guidance: >-
-      ANIME SCENE: anime-style figure with large expressive eyes, cel-shaded animation style, 
-      cinematic framing and camera angles, smooth animation-like quality, 
-      vibrant colors with clean shading, dynamic poses and expressions, 
-      detailed backgrounds with anime-style proportions, dramatic lighting effects, 
-      smooth line work and filmic anime aesthetic
+      ANIME MOOD: cinematic, cel-shaded clarity with vibrant yet disciplined palette. Avoid named subjects;
+      emphasize framing, motion cues, and lighting beats to imply narrative without stating it.
 
   - id: sci_fi
     label: サイファイ
     guidance: >-
-      SCI-FI SCENE: futuristic space station or starship interior, space explorer, 
-      advanced holographic interfaces and displays, sleek futuristic materials and metallic surfaces, 
-      advanced robotics and AI systems, space exploration equipment and technology, 
-      futuristic transportation and advanced weaponry, clean minimalist design with neon accents, 
-      speculative technology and futuristic architecture
+      SCI-FI MOOD: speculative materiality and luminous interfaces suggested through surfaces and light—no
+      named spacecraft, robots, or weapons. Imply futurity via minimal forms, color logic, and quiet
+      technology.
   - id: noir
     label: ノワール
     guidance: >-
-      NOIR SCENE: detective in trench coat on rain-drenched street, high contrast black and white photography, 
-      deep moody shadows and dramatic lighting, vintage crime drama atmosphere, 
-      mysterious and suspenseful mood with dramatic shadows, vintage detective office or crime scene, 
-      film noir aesthetic with minimal color palette, dramatic lighting patterns and atmospheric effects
+      NOIR MOOD: high-contrast tension, rain-slick atmosphere, and moral ambiguity—no detectives or props
+      named. Let silhouettes, blind-shadow patterns, and smoke-like haze carry the drama.
   - id: vaporwave
     label: ヴェイパーウェーブ
     guidance: >-
-      VAPORWAVE SCENE: retro-futuristic mall or liminal space, classical busts with neon effects, 
-      gradient sunsets (pink to purple) in background, chrome and metallic surfaces, 
-      80s/90s retro elements and computer graphics, glitch art effects and digital distortion, 
-      pastel neon colors and nostalgic digital aesthetic, surreal and dreamlike atmosphere, 
-      empty spaces with retro-futuristic neon colors
+      VAPORWAVE MOOD: nostalgic digital haze and pastel surrealism without specific statues or malls. Use
+      gradients, grids, chrome hints, lo-fi texture, and liminal emptiness.
   - id: palette_pastel
     label: パステル
     guidance: >-
-      PASTEL SCENE: soft pastel colored environment (pink, blue, yellow, mint, lavender), 
-      gentle and airy mood with soft lighting, cozy and comforting atmosphere, 
-      dreamy quality with soft focus effects, peaceful and calming aesthetic, 
-      soft contrast with no harsh shadows, gentle color transitions and warm inviting colors, 
-      gentle saturation levels throughout entire scene
+      PASTEL PALETTE MOOD: gentle, airy chroma with low contrast and soft transitions. Avoid concrete
+      objects; focus on comfort, lightness, and dreamlike gradients.
   - id: palette_neon
     label: ネオン
     guidance: >-
-      NEON SCENE: vibrant neon colored environment (electric blue, hot pink, bright green, purple, orange), 
-      glowing neon effects and bright neon lighting, nightlife energy and atmosphere, 
-      cyberpunk-inspired color scheme, vibrant and energetic mood, neon glow effects everywhere, 
-      bright and bold colors with high contrast neon elements, electrifying color palette throughout scene
+      NEON PALETTE MOOD: electrified chroma and high-contrast glow. Avoid naming objects; let light interplay,
+      reflections, and afterimages convey the energy.
+
+  - id: ultra_realistic_photo
+    label: 超高精細写真
+    guidance: >-
+      ULTRA-REALISTIC PHOTO MOOD: photographic credibility, natural optics, and precise materials without
+      prescribing subject matter. Let authenticity emerge through light, texture, and depth-of-field; keep
+      the topic open and unforced.
+
+  - id: surrealism
+    label: シュルレアリスム
+    guidance: >-
+      SURREALISM MOOD: dream-logic juxtapositions and elastic scale—no named objects or artists.
+      Fuse mismatched textures, floating perspectives, and impossible shadows. Keep meaning
+      ambiguous; let subconscious patterns surface.
+
+  - id: minimalism
+    label: ミニマリズム
+    guidance: >-
+      MINIMALISM MOOD: radical reduction, spare geometry, and generous negative space.
+      Avoid concrete items; rely on proportion, rhythm, and subtle material shifts.
+      Tension should arise from placement and silence.
+
+  - id: brutalism
+    label: ブルータリズム
+    guidance: >-
+      BRUTALISM MOOD: raw mass and honest materiality—no named buildings.
+      Emphasize monolithic forms, rough concrete-like textures, stark light, and hard edges.
+      Keep composition severe yet dignified.
+
+  - id: baroque
+    label: バロック
+    guidance: >-
+      BAROQUE MOOD: dramatic contrast, swirling movement, and gilded abundance without saints or palaces.
+      Use cascading curves, theatrical light, and layered ornament. Emotion implied through motion and glow.
+
+  - id: impressionism
+    label: 印象派
+    guidance: >-
+      IMPRESSIONISM MOOD: fleeting light, broken color, and airy stroke-like texture—no named scenes.
+      Let atmosphere dissolve edges; emphasize momentary glow and outdoor freshness.
+
+  - id: abstract_expressionism
+    label: 抽象表現主義
+    guidance: >-
+      ABSTRACT EXPRESSIONISM MOOD: gestural energy and field-like immersion—no figures or symbols.
+      Use sweeping motion, layered pigment, and charged emptiness. Let scale feel bodily and immediate.
+
+  - id: biopunk
+    label: バイオパンク
+    guidance: >-
+      BIOPUNK MOOD: organic-mechanical tension and lab-adjacent ambience—no named tech or organs.
+      Suggest membranes, filaments, growth patterns, and clinical glow. Beauty edged with unease.
+
+  - id: afrofuturism
+    label: アフロフューチャリズム
+    guidance: >-
+      AFROFUTURISM MOOD: diasporic futurity and radiant cultural synthesis without naming people or motifs.
+      Use warm cosmic palettes, rhythmic patterning, and ceremonial light. Uplift through dignity and wonder.
+
+  - id: dreamcore
+    label: ドリームコア
+    guidance: >-
+      DREAMCORE MOOD: nostalgic softness and quiet unreality—no named places or props.
+      Use off-hours light, empty arrangements, pastel fog, and gentle dislocation. Comfort tinged with melancholy.
+
+  - id: liminal_spaces
+    label: リミナルスペース
+    guidance: >-
+      LIMINAL SPACES MOOD: thresholds and in-between stillness without signage or brands.
+      Emphasize vacant architecture, fluorescent hum, long perspective, and quiet echo. Unease through emptiness.
+
+  - id: glitchcore
+    label: グリッチコア
+    guidance: >-
+      GLITCHCORE MOOD: signal failure, scanlines, bitrot, and compression ghosts—no devices or UIs named.
+      Let corruption and discontinuity carry the drama; rhythmic errors, temporal smears, and pixel afterimages.
+
+  - id: non_euclidean
+    label: 非ユークリッド
+    guidance: >-
+      NON-EUCLIDEAN MOOD: warped space and paradox perspective without named shapes or places.
+      Elastic angles, recursive corridors, folded adjacency; cool, analytical light maintains calm strangeness.
+
+  - id: synesthesia
+    label: 共感覚
+    guidance: >-
+      SYNESTHESIA MOOD: sound-as-color and taste-as-light logic—no instruments or food.
+      Use resonance rings, chroma pulses, and flowing gradients to imply cross-sense mapping.
+
+  - id: pareidolia
+    label: パレイドリア
+    guidance: >-
+      PAREIDOLIA MOOD: almost-recognizable forms rising from clouds, stone, or woodgrain—do not depict faces.
+      Suggest agency via symmetry hints, near-eyes patterns, and misread silhouettes; keep it ambiguous.
+
+  - id: bio_luminescent_depths
+    label: 生物発光の深層
+    guidance: >-
+      BIOLUMINESCENT DEPTHS MOOD: abyssal hush and networked glow—no named creatures.
+      Membranes, tendrils, particulate drift, and velvet dark; serenity edged with awe.
+
+  - id: infrared_dreamscape
+    label: 赤外線ドリームスケープ
+    guidance: >-
+      INFRARED DREAMSCAPE MOOD: false-color heat logic and foliage inversion—no cameras or sensors.
+      High-key whites, surreal warmth gradients, and airy haze create a lucid, uncanny calm.
+
+  - id: magnetic_fluid
+    label: 磁性流体
+    guidance: >-
+      MAGNETIC FLUID MOOD: field-driven spikes, smooth menisci, and ordered ripples—no lab gear.
+      Glossy black sheen, micro-to-macro ambiguity, and poised tension between flow and structure.
+
+  - id: time_dilation
+    label: 時間伸長
+    guidance: >-
+      TIME DILATION MOOD: layered instants, stretched motion, and ghost trails—avoid clocks or hourglasses.
+      Emphasize duration with repeats, soft echoes, and accumulated light.
+
+  - id: algorithmic_ornament
+    label: アルゴリズミック・オーナメント
+    guidance: >-
+      ALGORITHMIC ORNAMENT MOOD: rule-born elegance—tilings, quasi-crystals, and L-system-like flourishes.
+      Avoid code snippets; highlight emergence, recursion, and delicate constraint.
+
+  - id: hyperspace_blossom
+    label: ハイパースペースの花
+    guidance: >-
+      HYPERSPACE BLOSSOM MOOD: higher-dimensional bloom metaphor expressed via unfolding cross-sections.
+      No sci-fi props; use iridescent gradients and shadows cast from unseen axes.
 
