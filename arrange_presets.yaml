@@ -2,124 +2,195 @@ presets:
   - id: fantasy
     label: ファンタジー
     guidance: >-
-      High/epic fantasy tone with magic, enchanted forests, ancient ruins, medieval
-      armors, mythical creatures. Rich, wondrous, adventurous atmosphere.
+      FANTASY SCENE: majestic floating castle in sky with crystal spires, dragon flying around castle, 
+      magical portal with swirling energy, enchanted forest with glowing mushrooms and fairy lights, 
+      mythical creature drinking from crystal stream, floating islands connected by rainbow bridges, 
+      legendary bird rising from flames, ancient ruins with glowing runes, 
+      magical creatures and enchanted beings
   - id: dark_fantasy
     label: ダークファンタジー
     guidance: >-
-      Gloomy fantasy with occult motifs, eldritch whispers, decayed castles, misty
-      swamps, ominous runes. Moody and foreboding.
+      DARK FANTASY SCENE: shadowy figure in dark robes casting dark magic, blood-red moon in sky, 
+      twisted gnarled trees with faces, eldritch tentacles emerging from dark portal, 
+      cursed castle with gargoyles and dark towers, demonic creatures with multiple eyes, 
+      dark magic circles and forbidden symbols, nightmarish landscape with bone trees, 
+      corrupted artifacts and dark sorcery
   - id: high_fantasy
     label: ハイファンタジー
     guidance: >-
-      Grand kingdoms, noble heroes, soaring citadels, divine magic, legendary artifacts,
-      sweeping epic scale.
+      HIGH FANTASY SCENE: epic battle between massive dragon and legendary warrior, 
+      golden palace with divine light cascading from heavens, celestial beings descending from clouds, 
+      sacred temple with marble columns and golden statues, royal court with jeweled throne, 
+      epic landscape with floating mountains and waterfalls, divine intervention with lightning, 
+      legendary artifacts pulsing with power, epic scale armies clashing
   - id: mythological
     label: 神話風
     guidance: >-
-      Mythological tone with deities, sacred beasts, oracle symbolism, marble temples,
-      ceremonial garments.
+      MYTHOLOGICAL SCENE: thunder god throwing lightning bolts from mountain peak, sea god rising from ocean with trident, 
+      sun god's golden chariot racing across sky, monster with writhing snake hair, 
+      beast in labyrinth maze, winged horse soaring through clouds, goddess with wisdom aura, 
+      legendary hero performing great feats, divine mountain floating in heavens, 
+      divine judgment scene with gods and mortals, sacred animals with supernatural powers
 
   - id: cyberpunk
     label: サイバーパンク
     guidance: >-
-      Neon-lit dystopia, rain-soaked alleys, holograms, cybernetics, megacities, kanji
-      signage, high-tech low-life.
+      CYBERPUNK SCENE: neon-drenched megacity street with flying cars, cyberpunk figure with glowing implants, 
+      massive corporate towers with holographic advertisements, rain-slicked streets reflecting neon, 
+      cybernetic robot/android walking street, digital glitch effects in air, 
+      augmented reality overlays visible, cybernetic limbs with exposed wiring, 
+      neon signs flickering on buildings, high-tech low-life contrast scene
   - id: solarpunk
     label: ソーラーパンク
     guidance: >-
-      Bright eco-futurism, lush greenery integrated with clean technology, sustainable
-      architecture, positive optimism.
+      SOLARPUNK SCENE: futuristic city covered in vertical gardens and solar panels, 
+      sustainable transportation vehicles (electric bikes, solar cars), 
+      buildings with integrated wind turbines and green roofs, clean energy flowing visibly, 
+      nature and technology harmoniously combined, bright optimistic cityscape, 
+      solar-powered robots maintaining gardens, eco-friendly architecture everywhere, 
+      positive utopian atmosphere with clean air and green spaces
   - id: steampunk
     label: スチームパンク
     guidance: >-
-      Brass gears, steam-driven machinery, goggles, Victorian clothing, dirigibles,
-      retro-futuristic engineering.
+      STEAMPUNK SCENE: Victorian-era street with brass and copper machinery, steam-powered airship floating above, 
+      figure wearing elaborate goggles and mechanical accessories, steam-powered robot walking street, 
+      elaborate clockwork mechanisms and gears visible, Victorian clothing with mechanical elements, 
+      steam billowing from engines and pipes, retro-futuristic inventions everywhere, 
+      brass fittings and ornate mechanical details
   - id: dieselpunk
     label: ディーゼルパンク
     guidance: >-
-      Interwar industrial aesthetics, heavy machinery, oil-stained textures, riveted
-      steel, early aviation motifs.
+      DIESELPUNK SCENE: industrial cityscape with massive machinery and riveted steel buildings, 
+      early aviation planes with propellers flying overhead, heavy diesel engines and industrial smoke, 
+      art deco architecture with industrial elements, massive war machines and tanks, 
+      workers in industrial gear operating machinery, oil-stained textures and heavy metal construction, 
+      interwar period aesthetics with mechanical complexity
   - id: post_apocalyptic
     label: ポストアポカリプス
     guidance: >-
-      Ruined civilization, scavenged gear, dust storms, cracked concrete, survivalist
-      mood, improvised repairs.
+      POST-APOCALYPTIC SCENE: crumbling skyscrapers overgrown with vegetation, survivor with scavenged gear, 
+      rusted vehicles and makeshift shelters, dust storm raging through abandoned city, 
+      survival equipment and weapons, radioactive glow in distance, 
+      improvised repairs and modifications to equipment, harsh lighting through broken windows, 
+      evidence of civilization's collapse everywhere
 
   - id: wafuu
     label: 和風
     guidance: >-
-      Traditional Japanese aesthetics (English wording in output). Use descriptors like
-      wabi-sabi sensibility, washi paper textures, kimono textile patterns, tatami mats,
-      shoji screens, seasonal nature motifs.
+      JAPANESE SCENE: traditional Japanese garden with cherry blossoms falling, figure in kimono, 
+      tatami room with shoji screens and paper lanterns, traditional architecture with curved roofs, 
+      zen garden with raked sand and stones, calligraphy being written with brush, 
+      traditional tea ceremony setup, seasonal elements (maple leaves, bamboo, plum blossoms), 
+      traditional Japanese weapons and armor, wabi-sabi aesthetic with natural imperfections
   - id: ukiyoe
     label: 浮世絵
     guidance: >-
-      Woodblock print (ukiyo-e) look in English wording: bold outlines, flat colors,
-      stylized wave and cloud patterns, Edo-period scenic stylization.
+      UKIYO-E SCENE: woodblock print style scene with bold black outlines, stylized wave patterns, 
+      Edo-period figures in traditional clothing, traditional Japanese architecture and landscapes, 
+      flat color areas with limited palette, stylized facial expressions and poses, 
+      traditional Japanese perspective and composition, historical Japanese scenes and activities, 
+      bold graphic elements and stylized natural forms
   - id: samurai
     label: 侍
     guidance: >-
-      Edo-period samurai spirit, katana, hakama, lacquered armor, solemn dignity,
-      historical ambience.
+      SAMURAI SCENE: Edo-period warrior in full armor with katana, traditional Japanese castle or temple, 
+      warrior in ceremonial pose with family crests, traditional Japanese landscape with mountains, 
+      warrior training or battle scene, traditional Japanese architecture and gardens, 
+      period-accurate clothing and accessories, bushido spirit and solemn dignity, 
+      traditional Japanese weapons and armor details
   - id: ninja
     label: 忍者
     guidance: >-
-      Stealthy silhouettes, shuriken, shinobi garb, moonlit rooftops, swift motion,
-      mysterious atmosphere.
+      NINJA SCENE: ninja in black shinobi garb on rooftop, traditional Japanese castle or temple at night, 
+      shuriken in motion, stealthy poses and dynamic movement, moonlit traditional Japanese architecture, 
+      ninja tools and equipment visible, mysterious atmosphere with shadows, 
+      traditional Japanese weapons and ninja techniques, night-time settings with dramatic lighting
 
   - id: gothic
     label: ゴシック
     guidance: >-
-      Gothic architecture, pointed arches, stained glass, candlelight, melancholic
-      romanticism.
+      GOTHIC SCENE: towering gothic cathedral with pointed arches and flying buttresses, 
+      figure in gothic fashion with elaborate details, gargoyles perched on building ledges, 
+      stained glass windows casting colored light, candlelight creating dramatic shadows, 
+      gothic architecture with ornate decorations, dark romantic atmosphere, 
+      medieval gothic elements and gothic horror elements, dramatic lighting effects
   - id: art_deco
     label: アール・デコ
     guidance: >-
-      Geometric ornament, streamlined luxury, metallic accents, bold symmetry,
-      1920s-30s modern glamour.
+      ART DECO SCENE: 1920s-30s luxury interior with geometric ornamentation, figure in art deco fashion, 
+      stepped architecture with metallic accents, elaborate geometric motifs and patterns, 
+      luxury materials (marble, gold, silver) everywhere, stylized floral and animal motifs, 
+      sophisticated elegance and machine age aesthetics, opulent decorative elements, 
+      streamlined luxury design with sharp angles
   - id: art_nouveau
     label: アール・ヌーヴォー
     guidance: >-
-      Organic flowing lines, floral patterns, elegant whiplash curves, natural motifs,
-      decorative refinement.
+      ART NOUVEAU SCENE: elegant interior with organic flowing lines and curves, 
+      figure with stylized flowing hair and drapery, stylized floral patterns and natural motifs, 
+      ornate decorative borders and flowing organic shapes, elegant whiplash curves everywhere, 
+      natural forms stylized into decorative elements, sophisticated aesthetic with intricate details, 
+      flowing organic shapes and elegant refinement
   - id: watercolor
     label: 水彩画
     guidance: >-
-      Soft washes, granulation, bleeding edges, translucent layers, gentle color
-      harmonies.
+      WATERCOLOR SCENE: landscape or scene painted in watercolor style, soft color washes with granulation, 
+      bleeding edges where colors meet naturally, translucent layers showing paper texture, 
+      watercolor paint flowing and blending naturally, soft atmospheric effects and gentle lighting, 
+      delicate brush strokes and watercolor paper texture visible, 
+      traditional watercolor techniques and ethereal quality
   - id: manga
     label: 漫画
     guidance: >-
-      Bold line art, screentone textures, stylized expressions, dynamic panels,
-      clean storytelling.
+      MANGA SCENE: manga-style figure with large eyes and stylized proportions, 
+      bold black line art with clean outlines, screentone textures for shading, 
+      dynamic panel composition with speed lines, manga-style speech bubbles and text, 
+      stylized hair and clothing, dramatic angles and perspectives, 
+      expressive character emotions and clean storytelling visuals
   - id: anime
     label: アニメ
     guidance: >-
-      Filmic anime style, expressive character design, cel-shaded lighting,
-      cinematic framing and movement.
+      ANIME SCENE: anime-style figure with large expressive eyes, cel-shaded animation style, 
+      cinematic framing and camera angles, smooth animation-like quality, 
+      vibrant colors with clean shading, dynamic poses and expressions, 
+      detailed backgrounds with anime-style proportions, dramatic lighting effects, 
+      smooth line work and filmic anime aesthetic
 
   - id: sci_fi
     label: サイファイ
     guidance: >-
-      Futuristic sleek materials, advanced interfaces, clean neon accents, starships,
-      speculative technology.
+      SCI-FI SCENE: futuristic space station or starship interior, space explorer, 
+      advanced holographic interfaces and displays, sleek futuristic materials and metallic surfaces, 
+      advanced robotics and AI systems, space exploration equipment and technology, 
+      futuristic transportation and advanced weaponry, clean minimalist design with neon accents, 
+      speculative technology and futuristic architecture
   - id: noir
     label: ノワール
     guidance: >-
-      High contrast, moody shadows, rain-drenched streets, vintage crime drama tone,
-      minimal color palette.
+      NOIR SCENE: detective in trench coat on rain-drenched street, high contrast black and white photography, 
+      deep moody shadows and dramatic lighting, vintage crime drama atmosphere, 
+      mysterious and suspenseful mood with dramatic shadows, vintage detective office or crime scene, 
+      film noir aesthetic with minimal color palette, dramatic lighting patterns and atmospheric effects
   - id: vaporwave
     label: ヴェイパーウェーブ
     guidance: >-
-      Retro-futuristic neon, gradient sunsets, chrome, classical busts, liminal mall
-      aesthetics.
+      VAPORWAVE SCENE: retro-futuristic mall or liminal space, classical busts with neon effects, 
+      gradient sunsets (pink to purple) in background, chrome and metallic surfaces, 
+      80s/90s retro elements and computer graphics, glitch art effects and digital distortion, 
+      pastel neon colors and nostalgic digital aesthetic, surreal and dreamlike atmosphere, 
+      empty spaces with retro-futuristic neon colors
   - id: palette_pastel
     label: パステル
     guidance: >-
-      Pastel color palette, soft and airy mood, gentle contrast, cozy atmosphere.
+      PASTEL SCENE: soft pastel colored environment (pink, blue, yellow, mint, lavender), 
+      gentle and airy mood with soft lighting, cozy and comforting atmosphere, 
+      dreamy quality with soft focus effects, peaceful and calming aesthetic, 
+      soft contrast with no harsh shadows, gentle color transitions and warm inviting colors, 
+      gentle saturation levels throughout entire scene
   - id: palette_neon
     label: ネオン
     guidance: >-
-      Neon color palette, vibrant glow, saturated highlights, nightlife energy.
+      NEON SCENE: vibrant neon colored environment (electric blue, hot pink, bright green, purple, orange), 
+      glowing neon effects and bright neon lighting, nightlife energy and atmosphere, 
+      cyberpunk-inspired color scheme, vibrant and energetic mood, neon glow effects everywhere, 
+      bright and bold colors with high contrast neon elements, electrifying color palette throughout scene
 

@@ -421,6 +421,24 @@ class TextGeneratorApp:
         self.arrange_frame = tk.Frame(self.sub_buttons_frame)
         self.arrange_frame.pack(fill='x')
 
+        # 文字数調整オプション
+        self.length_adjust_frame = tk.Frame(self.sub_buttons_frame)
+        self.length_adjust_frame.pack(fill='x')
+        
+        self.label_length_adjust = tk.Label(self.length_adjust_frame, text="文字数調整:")
+        self.label_length_adjust.pack(side='left')
+        
+        self.length_adjust_var = tk.StringVar(value="同程度")
+        self.combo_length_adjust = ttk.Combobox(
+            self.length_adjust_frame,
+            values=["半分", "2割減", "同程度", "2割増", "倍"],
+            textvariable=self.length_adjust_var,
+            width=8,
+            state="readonly"
+        )
+        self.combo_length_adjust.pack(side='left', padx=5)
+        self.combo_length_adjust.bind("<<ComboboxSelected>>", self.auto_update)
+
         # アレンジプリセット（YAMLから読み込み）
         self.arrange_presets = load_arrange_presets(ARRANGE_PRESETS_YAML)
         if not self.arrange_presets:
@@ -432,6 +450,12 @@ class TextGeneratorApp:
             self.arrange_presets = [
                 {"id": v, "label": v, "guidance": ""} for v in fallback
             ]
+            print(f"フォールバックプリセットを使用: {fallback}")
+        else:
+            print(f"YAMLからプリセットを読み込み: {len(self.arrange_presets)}個")
+            for preset in self.arrange_presets:
+                print(f"  - {preset['label']} (id: {preset['id']}, guidance: {preset.get('guidance', 'なし')})")
+        
         preset_labels = [p["label"] for p in self.arrange_presets]
 
         self.combo_arrange = ttk.Combobox(
@@ -459,12 +483,12 @@ class TextGeneratorApp:
         def _tooltip_text():
             v = int(round(self.scale_arrange.get()))
             mapping = {
-                0: "極めて穏やかな味変（ニュアンスだけ）",
-                1: "穏やかな味変（軽い言い換え／少量追記）",
-                2: "中程度の味変（明確なスタイル付与）",
-                3: "強い味変（大胆な言い換え・世界観の強調）",
+                0: "最小限の変更（単語の改善のみ）",
+                1: "穏やかな改善（スタイルと表現の向上）",
+                2: "中程度の創造的変更（より鮮やかな描写）",
+                3: "大胆な創造的変換（劇的な視覚的強化）",
             }
-            return f"強度: {v} — " + mapping.get(v, "味変の強さを表します")
+            return f"強度: {v} — " + mapping.get(v, "アレンジの強さを表します")
         DelayedTooltip(self.scale_arrange, _tooltip_text, delay=300)
 
         self.button_arrange_llm = tk.Button(
@@ -487,12 +511,35 @@ class TextGeneratorApp:
         )
         self.button_arrange_llm_copy.pack(pady=5, fill='none')
 
+        # 文字数調整のみボタン
+        self.button_length_adjust_only = tk.Button(
+            self.sub_buttons_frame,
+            text="文字数調整のみ",
+            padx=5,
+            width=30,
+            font=self.sub_buttons_font,
+            command=self.handle_length_adjust_only,
+        )
+        self.button_length_adjust_only.pack(pady=5, fill='none')
+
+        # 文字数調整してコピーボタン
+        self.button_length_adjust_and_copy = tk.Button(
+            self.sub_buttons_frame,
+            text="文字数調整してコピー",
+            padx=5,
+            width=30,
+            font=self.sub_buttons_font,
+            command=self.handle_length_adjust_and_copy,
+        )
+        self.button_length_adjust_and_copy.pack(pady=5, fill='none')
+
         # 変数初期化
         self.file_lines = []
         self.main_prompt = ""
         self.option_prompt = ""
         self.tail_free_texts = ""
         self.last_arranged_output = None
+        self._last_error_details = []  # エラー詳細を保存する変数
 
     def load_attribute_data(self):
         conn = sqlite3.connect(DEFAULT_DB_PATH)
@@ -740,8 +787,13 @@ class TextGeneratorApp:
             if not src:
                 messagebox.showwarning("注意", "まずプロンプトを生成してください。")
                 return False
+            
+            # アレンジ処理の実行
             arranged = self.arrange_with_llm(src, preset, strength, guidance, prev_output=self.last_arranged_output)
+            
             if arranged:
+                # アレンジ前後の比較表示ダイアログを表示
+                self.show_arrange_comparison_dialog(src, arranged, preset_label, strength)
                 self.text_output.delete('1.0', tk.END)
                 self.text_output.insert(tk.END, arranged)
                 self.last_arranged_output = arranged
@@ -750,14 +802,239 @@ class TextGeneratorApp:
                 except Exception:
                     pass
                 return True
-            return False
-        except Exception:
-            messagebox.showerror("エラー", f"LLMアレンジに失敗しました:\n{get_exception_trace()}")
+            else:
+                # アレンジが失敗した場合のエラーダイアログ
+                # エラー詳細を取得（arrange_with_llmで設定されたerror_detailsを使用）
+                error_details = getattr(self, '_last_error_details', [])
+                print(f"取得したエラー詳細: {error_details}")  # デバッグ出力
+                
+                if error_details:
+                    error_details_text = "\n".join([f"• {detail}" for detail in error_details])
+                else:
+                    error_details_text = "• エラー詳細が取得できませんでした"
+                
+                error_message = f"アレンジ処理が失敗しました。\n\nプリセット: {preset_label}\n強度: {strength}\n\nエラー詳細:\n{error_details_text}\n\n考えられる原因:\n• APIキーが正しく設定されていない\n• ネットワーク接続の問題\n• OpenAI APIの一時的な障害\n• プリセット '{preset_label}' が無効\n• モデル '{LLM_MODEL}' が利用できない"
+                
+                # 詳細なエラーダイアログを表示
+                self.show_detailed_error_dialog("アレンジ失敗", error_message, preset_label, strength)
+                return False
+        except Exception as e:
+            error_message = f"LLMアレンジ処理中にエラーが発生しました:\n\nプリセット: {self.combo_arrange.get()}\n強度: {int(round(self.scale_arrange.get()))}\n\nエラー詳細:\n{get_exception_trace()}"
+            messagebox.showerror("エラー", error_message)
             return False
 
     def handle_arrange_llm_and_copy(self):
         if self.handle_arrange_llm():
             self.copy_all_to_clipboard()
+
+    def handle_length_adjust_only(self):
+        """文字数のみを調整する機能"""
+        try:
+            src = self.text_output.get("1.0", tk.END).strip()
+            if not src:
+                messagebox.showwarning("注意", "まずプロンプトを生成してください。")
+                return False
+            
+            # 文字数調整の設定を取得
+            length_adjust = self.length_adjust_var.get()
+            original_length = len(src)
+            
+            # 文字数調整の倍率を計算
+            length_multipliers = {
+                "半分": 0.5,
+                "2割減": 0.8,
+                "同程度": 1.0,
+                "2割増": 1.2,
+                "倍": 2.0
+            }
+            target_length_multiplier = length_multipliers.get(length_adjust, 1.0)
+            target_length = int(original_length * target_length_multiplier)
+            
+            print(f"文字数調整処理開始:")
+            print(f"  調整設定: {length_adjust}")
+            print(f"  元の文字数: {original_length}")
+            print(f"  目標文字数: {target_length}")
+            
+            # 文字数調整のみのプロンプトを生成
+            adjusted_text = self.adjust_text_length_only(src, target_length)
+            
+            if adjusted_text:
+                # 調整前後の比較表示ダイアログを表示
+                self.show_length_adjust_comparison_dialog(src, adjusted_text, length_adjust)
+                self.text_output.delete('1.0', tk.END)
+                self.text_output.insert(tk.END, adjusted_text)
+                return True
+            else:
+                messagebox.showerror("エラー", "文字数調整に失敗しました。")
+                return False
+                
+        except Exception as e:
+            error_message = f"文字数調整処理中にエラーが発生しました:\n\n調整設定: {self.length_adjust_var.get()}\n\nエラー詳細:\n{get_exception_trace()}"
+            messagebox.showerror("エラー", error_message)
+            return False
+
+    def handle_length_adjust_and_copy(self):
+        """文字数調整してコピーする機能"""
+        if self.handle_length_adjust_only():
+            self.copy_all_to_clipboard()
+
+    def adjust_text_length_only(self, text, target_length):
+        """意味を本質的に変えずに文字数のみを調整する"""
+        try:
+            if not LLM_ENABLED:
+                error_msg = "LLMが無効化されています。YAMLの LLM_ENABLED を true にしてください。"
+                print(f"  {error_msg}")
+                messagebox.showwarning("注意", error_msg)
+                return None
+            
+            import os, uuid
+            api_key = os.getenv(OPENAI_API_KEY_ENV)
+            if not api_key:
+                error_msg = f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。"
+                print(f"  {error_msg}")
+                messagebox.showerror("エラー", error_msg)
+                return None
+            
+            print(f"  APIキー確認: {'設定済み' if api_key else '未設定'}")
+            
+            # 文字数調整専用のシステムプロンプト
+            is_reduction = target_length < len(text)
+            reduction_emphasis = ""
+            if is_reduction:
+                reduction_emphasis = (
+                    "MANDATORY LENGTH REDUCTION: You MUST cut the text to approximately {target_length} characters. "
+                    "This is NOT optional - you MUST reduce the length aggressively. "
+                    "Prioritize length reduction over preserving every detail. "
+                    "If you cannot reach the exact target, make it significantly shorter than the original. "
+                    "AGGRESSIVE REDUCTION TECHNIQUES:\n"
+                    "- Remove ALL redundant and repetitive words\n"
+                    "- Combine multiple adjectives into single strong ones\n"
+                    "- Eliminate unnecessary articles (a, an, the) where possible\n"
+                    "- Remove prepositions that don't add meaning\n"
+                    "- Use shorter synonyms for ANY long words\n"
+                    "- Cut descriptive phrases in half\n"
+                    "- Remove any words that don't add essential meaning\n"
+                    "- Combine similar concepts aggressively\n"
+                    "- Shorten technical parameters where possible\n"
+                    "- Remove any repetitive style descriptions\n"
+                    "CRITICAL: Length reduction is MORE important than preserving every detail. "
+                    "Make it shorter even if some details are lost."
+                )
+            
+            system_prompt = (
+                "You are a text length adjustment specialist. Your task is to adjust the length of the given text "
+                f"{'by AGGRESSIVELY REDUCING it' if is_reduction else 'while preserving its core meaning and essence'}. "
+                "Do NOT change the visual style, artistic direction, or creative elements. "
+                f"{'AGGRESSIVELY adjust the length by:' if is_reduction else 'Only adjust the length by:'}\n"
+                "- Adding or removing descriptive words\n"
+                "- Expanding or condensing phrases\n"
+                "- Maintaining all technical parameters (--ar, --s, --chaos, etc.)\n"
+                "- Keeping the same subject and composition\n"
+                "- Preserving any --options at the end\n\n"
+                f"{reduction_emphasis}"
+                "CRITICAL: The output must be approximately the target length. "
+                f"Target: {target_length} characters (original: {len(text)}). "
+                f"{'FORCE REDUCTION - LENGTH IS PRIORITY' if is_reduction else 'LENGTH ADJUSTMENT REQUIRED'}. "
+                "Output only the adjusted prompt."
+            )
+            
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            
+            nonce = uuid.uuid4().hex[:8]
+            is_reduction = target_length < len(text)
+            reduction_instruction = ""
+            if is_reduction:
+                reduction_instruction = (
+                    f"FORCE REDUCTION: You MUST cut {len(text) - target_length} characters from the text. "
+                    "This is MANDATORY - not optional. Be extremely aggressive in shortening. "
+                    "Remove words aggressively, combine concepts, cut descriptions in half. "
+                    "Length reduction is MORE important than preserving meaning. "
+                    "If you cannot reach the target, make it as short as possible. "
+                    "DO NOT preserve every detail - prioritize shortness. "
+                )
+            
+            user_prompt = (
+                f"Length adjustment request\n"
+                f"Nonce: {nonce}\n"
+                f"Target length: {target_length} characters (current: {len(text)})\n"
+                f"{reduction_instruction}"
+                f"Instruction: Adjust length ONLY. Preserve meaning, style, and all technical parameters.\n"
+                f"Text: {text}"
+            )
+            
+            # 文字数削減の場合はより積極的な温度設定
+            base_temperature = 0.3
+            if is_reduction:
+                # 削減の場合は高い温度でより積極的な変更を促す
+                adjusted_temperature = min(base_temperature * 2.0, 0.8)
+            else:
+                adjusted_temperature = base_temperature
+            
+            payload = {
+                "model": LLM_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "max_completion_tokens": LLM_MAX_COMPLETION_TOKENS,
+                "temperature": adjusted_temperature
+            }
+            
+            print(f"    APIリクエスト送信中... (モデル: {LLM_MODEL})")
+            resp = requests.post(url, headers=headers, json=payload, timeout=LLM_TIMEOUT)
+            print(f"    レスポンスステータス: {resp.status_code}")
+            
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if "choices" in data and len(data["choices"]) > 0:
+                raw_content = data["choices"][0]["message"]["content"].strip()
+                print(f"    生レスポンス: '{raw_content}'")
+                
+                if not raw_content:
+                    print(f"    警告: レスポンスが空です")
+                    return None
+                    
+                content = sanitize_to_english(raw_content)
+                print(f"    文字数調整成功: {len(content)} 文字")
+                
+                # 同一チェック
+                if content.strip() == text.strip():
+                    print(f"    同一内容のため調整失敗")
+                    return None
+                    
+                return content
+            else:
+                print(f"    レスポンスにchoicesが含まれていません")
+                return None
+                
+        except requests.HTTPError as e:
+            error_msg = f"HTTPエラー: {e}"
+            print(f"    {error_msg}")
+            messagebox.showerror("エラー", f"文字数調整中にHTTPエラーが発生しました: {error_msg}")
+            return None
+            
+        except requests.exceptions.Timeout as e:
+            error_msg = f"タイムアウト: {e}"
+            print(f"    {error_msg}")
+            messagebox.showerror("エラー", f"文字数調整中にタイムアウトが発生しました: {error_msg}")
+            return None
+            
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"接続エラー: {e}"
+            print(f"    {error_msg}")
+            messagebox.showerror("エラー", f"文字数調整中に接続エラーが発生しました: {error_msg}")
+            return None
+            
+        except Exception as e:
+            error_msg = f"予期しないエラー: {e}"
+            print(f"    {error_msg}")
+            messagebox.showerror("エラー", f"文字数調整中に予期しないエラーが発生しました: {error_msg}")
+            return None
 
     def _on_arrange_scale_change(self, event=None):
         try:
@@ -768,21 +1045,95 @@ class TextGeneratorApp:
 
     def arrange_with_llm(self, text, preset, strength, guidance="", prev_output=None):
         if not LLM_ENABLED:
-            messagebox.showwarning("注意", "LLMが無効化されています。YAMLの LLM_ENABLED を true にしてください。")
+            error_msg = "LLMが無効化されています。YAMLの LLM_ENABLED を true にしてください。"
+            print(f"  {error_msg}")
+            self._last_error_details = [error_msg]
+            messagebox.showwarning("注意", error_msg)
             return None
+        
+        # 文字数調整の設定を取得
+        length_adjust = self.length_adjust_var.get()
+        original_length = len(text)
+        
+        # 文字数調整の倍率を計算
+        length_multipliers = {
+            "半分": 0.5,
+            "2割減": 0.8,
+            "同程度": 1.0,
+            "2割増": 1.2,
+            "倍": 2.0
+        }
+        target_length_multiplier = length_multipliers.get(length_adjust, 1.0)
+        target_length = int(original_length * target_length_multiplier)
+        
+        print(f"  文字数調整: {length_adjust} (元: {original_length}文字 → 目標: {target_length}文字)")
 
         import os, uuid
         api_key = os.getenv(OPENAI_API_KEY_ENV)
         if not api_key:
-            messagebox.showerror("エラー", f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
+            error_msg = f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。"
+            print(f"  {error_msg}")
+            self._last_error_details = [error_msg]
+            messagebox.showerror("エラー", error_msg)
             return None
+        
+        print(f"  APIキー確認: {'設定済み' if api_key else '未設定'}")
+        if api_key:
+            print(f"  APIキー長: {len(api_key)} 文字")
+            print(f"  APIキー先頭: {api_key[:10]}...")
 
-        system_prompt = (
-            "You rewrite Midjourney prompts. Preserve core content and entities. "
-            "Keep or appropriately adjust MJ options that start with --. "
-            "Output only the final prompt in one line without extra commentary. "
-            "Use English only."
-        )
+        # デバッグ情報を出力
+        print(f"アレンジ処理開始:")
+        print(f"  プリセット: {preset}")
+        print(f"  強度: {strength}")
+        print(f"  ガイダンス: {guidance}")
+        print(f"  テキスト長: {len(text)} 文字")
+
+        # エラー詳細を初期化
+        self._last_error_details = []
+
+        # 強度に応じたシステムプロンプトを動的に生成
+        strength_descriptions = {
+            0: "Apply very subtle, minimal changes. Keep almost everything the same, just minor word improvements.",
+            1: "Apply gentle, tasteful variations. Improve wording and style while keeping the core concept intact.",
+            2: "Apply moderate creative variations. Enhance style, add vivid descriptors, and improve composition.",
+            3: "Apply bold, creative transformations. Significantly enhance style, add dramatic descriptors, and create more impactful visual language."
+        }
+        
+        strength_instruction = strength_descriptions.get(strength, strength_descriptions[2])
+        
+        # 強度3の場合はより具体的で強力な指示を使用
+        if strength == 3:
+            system_prompt = (
+                f"You are a creative prompt artist. Transform this Midjourney prompt with {strength_instruction}. "
+                f"Be BOLD and CREATIVE - change the visual style, add dramatic effects, use more vivid and cinematic language. "
+                f"Don't just rephrase - completely reimagine the visual approach while keeping the core subject. "
+                f"PROPER NOUN ABSTRACTION RULES:\n"
+                f"- REPLACE: Brand names (Nike → sports brand), company names (Apple → tech company), product names (iPhone → smartphone)\n"
+                f"- REPLACE: Person names (John Smith → a person), celebrity names (Beyoncé → a famous singer)\n"
+                f"- REPLACE: Movie/TV titles (Star Wars → sci-fi franchise), book titles (Harry Potter → fantasy series)\n"
+                f"- KEEP: Geographic terms (Japan, Tokyo, Paris, New York, Asia, Europe)\n"
+                f"- KEEP: Temporal terms (medieval, renaissance, 1920s, modern, futuristic)\n"
+                f"- KEEP: Cultural styles (zen, art deco, cyberpunk, traditional)\n"
+                f"CRITICAL LENGTH REQUIREMENT: The output must be {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original. "
+                f"Target: approximately {target_length} characters (original: {original_length}). "
+                f"Preserve any --options at the end. Output only the transformed prompt."
+            )
+        else:
+            system_prompt = (
+                f"Rewrite Midjourney prompts with {strength_instruction}. "
+                f"Keep core content and --options. "
+                f"PROPER NOUN ABSTRACTION RULES:\n"
+                f"- REPLACE: Brand names (Nike → sports brand), company names (Apple → tech company), product names (iPhone → smartphone)\n"
+                f"- REPLACE: Person names (John Smith → a person), celebrity names (Beyoncé → a famous singer)\n"
+                f"- REPLACE: Movie/TV titles (Star Wars → sci-fi franchise), book titles (Harry Potter → fantasy series)\n"
+                f"- KEEP: Geographic terms (Japan, Tokyo, Paris, New York, Asia, Europe)\n"
+                f"- KEEP: Temporal terms (medieval, renaissance, 1920s, modern, futuristic)\n"
+                f"- KEEP: Cultural styles (zen, art deco, cyberpunk, traditional)\n"
+                f"CRITICAL LENGTH REQUIREMENT: The output must be {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original. "
+                f"Target: approximately {target_length} characters (original: {original_length}). "
+                f"Output only the prompt."
+            )
         url = "https://api.openai.com/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -792,26 +1143,61 @@ class TextGeneratorApp:
         # 最大2回まで再試行。毎回異なるノンスでバリエーションを促す
         attempts = 2
         last_error = None
-        for _ in range(attempts):
+        error_details = []
+        
+        for attempt in range(attempts):
+            print(f"  試行 {attempt + 1}/{attempts}")
             nonce = uuid.uuid4().hex[:8]
             guidance_block = f"[Guidance] {guidance}\n" if guidance else ""
-            user_prompt = (
-                f"[Goal] Apply tasteful variation to the following Midjourney prompt.\n"
-                f"[Preset] {preset}\n"
-                f"[Strength] {strength}  # 0=mild, 3=strong\n"
-                f"[Nonce] {nonce}  # Use this to encourage variation; DO NOT include it in the output.\n"
-                + guidance_block +
-                (f"[PreviousOutput] {prev_output}\n" if prev_output else "") +
-                f"[Rules]\n"
-                f"- Keep semantics and subject. Improve style/wording.\n"
-                f"- Prefer concise, vivid descriptors. Avoid redundancy.\n"
-                f"- Ensure proper punctuation. Keep options like --ar/--s/--chaos/--q/--weird consistent unless preset implies small adjustments.\n"
-                f"- Output must not be identical to the input wording or [PreviousOutput]; rephrase at least slightly according to Strength.\n"
-                f"- Return only the prompt string.\n"
-                f"- Language: English only. If any non-English words appear (e.g., Japanese such as 和風, 浮世絵), replace with natural English equivalents.\n\n"
-                f"[Prompt]\n{text}"
-            )
+            # 強度に応じた具体的な指示を生成（簡潔版）
+            strength_rules = {
+                0: ["minimal changes", "keep structure", "preserve concepts"],
+                1: ["gentle improvements", "enhance descriptors", "maintain structure"],
+                2: ["moderate enhancements", "vivid language", "improve composition"],
+                3: ["bold transformations", "dramatic descriptors", "cinematic style"]
+            }
+            
+            current_rules = strength_rules.get(strength, strength_rules[2])
+            rules_text = "\n".join(current_rules)
+            
+            # プロンプトを簡潔にしてトークン使用量を削減
+            if strength == 3:
+                user_prompt = (
+                    f"Preset: {preset}, Strength: {strength} (MAXIMUM CREATIVITY)\n"
+                    f"Nonce: {nonce}\n"
+                    + (f"Guidance: {guidance}\n" if guidance else "") +
+                    f"Rules: Be BOLD and CREATIVE - transform the visual style dramatically\n"
+                    f"Strength rules: {'; '.join(current_rules)}\n"
+                    f"Length adjustment: {length_adjust} (target: ~{target_length} chars, original: {original_length} chars)\n"
+                    f"CRITICAL: Make the output {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original\n"
+                    f"Important: Completely reimagine the visual approach while keeping the core subject\n"
+                    f"PROPER NOUN ABSTRACTION: Replace brands/companies/products with generic terms, keep geographic/temporal terms\n"
+                    f"Prompt: {text}"
+                )
+            else:
+                user_prompt = (
+                    f"Preset: {preset}, Strength: {strength} (0=minimal, 3=bold)\n"
+                    f"Nonce: {nonce}\n"
+                    + (f"Guidance: {guidance}\n" if guidance else "") +
+                    f"Rules: Keep core content, enhance style per strength level, preserve --options\n"
+                    f"Strength rules: {'; '.join(current_rules)}\n"
+                    f"Length adjustment: {length_adjust} (target: ~{target_length} chars, original: {original_length} chars)\n"
+                    f"CRITICAL: Make the output {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original\n"
+                    f"Important: Adjust length to {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than original\n"
+                    f"PROPER NOUN ABSTRACTION: Replace brands/companies/products with generic terms, keep geographic/temporal terms\n"
+                    f"Prompt: {text}"
+                )
 
+            # 強度に応じてtemperatureを調整（より創造的な変化を促す）
+            base_temperature = LLM_TEMPERATURE if LLM_INCLUDE_TEMPERATURE and LLM_TEMPERATURE is not None else 0.7
+            strength_temperature = {
+                0: min(base_temperature * 0.5, 0.3),  # 低い創造性
+                1: min(base_temperature * 0.8, 0.6),  # 中程度の創造性
+                2: min(base_temperature * 1.2, 0.9),  # 高い創造性
+                3: min(base_temperature * 1.5, 1.0)   # 最大の創造性
+            }
+            adjusted_temperature = strength_temperature.get(strength, base_temperature)
+            
             payload = {
                 "model": LLM_MODEL,
                 "messages": [
@@ -819,44 +1205,148 @@ class TextGeneratorApp:
                     {"role": "user", "content": user_prompt},
                 ],
                 "max_completion_tokens": LLM_MAX_COMPLETION_TOKENS,
+                "temperature": adjusted_temperature
             }
-            if LLM_INCLUDE_TEMPERATURE and LLM_TEMPERATURE is not None:
-                payload["temperature"] = LLM_TEMPERATURE
 
             try:
+                print(f"    APIリクエスト送信中... (モデル: {LLM_MODEL})")
+                print(f"    プロンプト長: {len(user_prompt)} 文字")
+                print(f"    システムプロンプト長: {len(system_prompt)} 文字")
+                print(f"    トークン制限: {LLM_MAX_COMPLETION_TOKENS}")
                 resp = requests.post(url, headers=headers, json=payload, timeout=LLM_TIMEOUT)
+                print(f"    レスポンスステータス: {resp.status_code}")
+                
                 resp.raise_for_status()
                 data = resp.json()
-                content = sanitize_to_english(data["choices"][0]["message"]["content"].strip())
+                print(f"    レスポンス構造: {data.keys()}")
+                if "choices" in data and len(data["choices"]) > 0:
+                    print(f"    choices[0]構造: {data['choices'][0].keys()}")
+                raw_content = data["choices"][0]["message"]["content"].strip()
+                finish_reason = data["choices"][0].get("finish_reason", "unknown")
+                print(f"    生レスポンス: '{raw_content}'")
+                print(f"    終了理由: {finish_reason}")
+                
+                if finish_reason == "length":
+                    usage_info = data.get("usage", {})
+                    prompt_tokens = usage_info.get("prompt_tokens", 0)
+                    completion_tokens = usage_info.get("completion_tokens", 0)
+                    total_tokens = usage_info.get("total_tokens", 0)
+                    print(f"    警告: トークン制限に達しました。")
+                    print(f"      プロンプトトークン: {prompt_tokens}")
+                    print(f"      完了トークン: {completion_tokens}")
+                    print(f"      総トークン: {total_tokens}")
+                    print(f"      制限: {LLM_MAX_COMPLETION_TOKENS}")
+                    print(f"    対策: プロンプトを短縮するか、トークン制限を増やしてください。")
+                    error_details.append(f"試行{attempt + 1}: トークン制限に達しました (prompt:{prompt_tokens}, completion:{completion_tokens}, limit:{LLM_MAX_COMPLETION_TOKENS})")
+                    continue
+                
+                if not raw_content:
+                    print(f"    警告: レスポンスが空です")
+                    print(f"    完全なレスポンス: {data}")
+                    error_details.append(f"試行{attempt + 1}: レスポンスが空です")
+                    continue
+                    
+                content = sanitize_to_english(raw_content)
+                print(f"    レスポンス取得成功: {len(content)} 文字")
+                
                 # 同一チェック：完全一致ならもう一度試行
                 if content.strip() == text.strip():
+                    print(f"    同一内容のため再試行")
+                    error_details.append(f"試行{attempt + 1}: 同一内容が返されました")
                     continue
                 return content
+                
             except requests.HTTPError as e:
+                error_msg = f"HTTPエラー: {e}"
+                print(f"    {error_msg}")
+                error_details.append(f"試行{attempt + 1}: {error_msg}")
                 last_error = e
+                
                 # temperature未対応モデルのフォールバック（temperatureを外して再試行）
                 try:
                     if resp is not None and resp.status_code == 400 and 'temperature' in resp.text:
+                        print(f"    temperature未対応のため再試行")
                         payload.pop('temperature', None)
                         resp2 = requests.post(url, headers=headers, json=payload, timeout=LLM_TIMEOUT)
                         resp2.raise_for_status()
                         data2 = resp2.json()
-                        content2 = sanitize_to_english(data2["choices"][0]["message"]["content"].strip())
+                        print(f"    フォールバックレスポンス構造: {data2.keys()}")
+                        if "choices" in data2 and len(data2["choices"]) > 0:
+                            print(f"    フォールバックchoices[0]構造: {data2['choices'][0].keys()}")
+                        raw_content2 = data2["choices"][0]["message"]["content"].strip()
+                        finish_reason2 = data2["choices"][0].get("finish_reason", "unknown")
+                        print(f"    フォールバック生レスポンス: '{raw_content2}'")
+                        print(f"    フォールバック終了理由: {finish_reason2}")
+                        
+                        if finish_reason2 == "length":
+                            usage_info2 = data2.get("usage", {})
+                            prompt_tokens2 = usage_info2.get("prompt_tokens", 0)
+                            completion_tokens2 = usage_info2.get("completion_tokens", 0)
+                            total_tokens2 = usage_info2.get("total_tokens", 0)
+                            print(f"    警告: フォールバックでトークン制限に達しました。")
+                            print(f"      フォールバックプロンプトトークン: {prompt_tokens2}")
+                            print(f"      フォールバック完了トークン: {completion_tokens2}")
+                            print(f"      フォールバック総トークン: {total_tokens2}")
+                            print(f"      制限: {LLM_MAX_COMPLETION_TOKENS}")
+                            error_details.append(f"試行{attempt + 1}: フォールバックでトークン制限に達しました (prompt:{prompt_tokens2}, completion:{completion_tokens2}, limit:{LLM_MAX_COMPLETION_TOKENS})")
+                            continue
+                            
+                        if not raw_content2:
+                            print(f"    警告: フォールバックレスポンスが空です")
+                            print(f"    完全なフォールバックレスポンス: {data2}")
+                            error_details.append(f"試行{attempt + 1}: フォールバックレスポンスが空です")
+                            continue
+                            
+                        content2 = sanitize_to_english(raw_content2)
                         if content2.strip() == text.strip():
+                            print(f"    同一内容のため再試行")
+                            error_details.append(f"試行{attempt + 1}: 同一内容が返されました")
                             continue
                         return content2
-                except Exception:
-                    pass
+                except Exception as fallback_error:
+                    fallback_msg = f"フォールバック失敗: {fallback_error}"
+                    print(f"    {fallback_msg}")
+                    error_details.append(f"試行{attempt + 1}: {fallback_msg}")
+                    
+            except requests.exceptions.Timeout as e:
+                error_msg = f"タイムアウト: {e}"
+                print(f"    {error_msg}")
+                error_details.append(f"試行{attempt + 1}: {error_msg}")
+                last_error = e
+                
+            except requests.exceptions.ConnectionError as e:
+                error_msg = f"接続エラー: {e}"
+                print(f"    {error_msg}")
+                error_details.append(f"試行{attempt + 1}: {error_msg}")
+                last_error = e
+                
             except Exception as e:
+                error_msg = f"予期しないエラー: {e}"
+                print(f"    {error_msg}")
+                error_details.append(f"試行{attempt + 1}: {error_msg}")
                 last_error = e
                 continue
 
         # ここまで到達したらエラー表示
+        print(f"  全試行失敗")
+        print(f"  収集したエラー詳細: {error_details}")
+        
         if last_error is not None:
             try:
-                messagebox.showerror("エラー", f"LLMアレンジが繰り返し失敗しました:\n{str(last_error)}")
-            except Exception:
-                messagebox.showerror("エラー", f"LLMアレンジが繰り返し失敗しました。")
+                error_summary = f"LLMアレンジが繰り返し失敗しました:\n\nプリセット: {preset}\n強度: {strength}\n\nエラー詳細:\n" + "\n".join(error_details)
+                print(f"LLMアレンジエラー詳細:\n{error_summary}")
+                # エラー詳細をインスタンス変数に保存（呼び出し元で取得するため）
+                self._last_error_details = error_details
+                print(f"  エラー詳細を保存: {self._last_error_details}")
+            except Exception as e:
+                print(f"LLMアレンジエラー（詳細不明）: {str(e)}")
+                self._last_error_details = [f"エラー詳細の取得に失敗: {str(e)}"]
+                print(f"  エラー詳細保存失敗: {self._last_error_details}")
+        else:
+            self._last_error_details = ["エラーの詳細が不明です"]
+            print(f"  エラー詳細不明: {self._last_error_details}")
+        
+        print(f"  最終的なエラー詳細: {self._last_error_details}")
         return None
 
     def update_exclusion_words(self):
@@ -873,6 +1363,248 @@ class TextGeneratorApp:
             # プルダウンメニューを更新
             updated_words = load_exclusion_words()
             self.combo_exclusion_words['values'] = updated_words
+
+    def show_arrange_comparison_dialog(self, original_text, arranged_text, preset_label, strength):
+        """アレンジ前後のプロンプトを比較表示するダイアログ"""
+        dialog = tk.Toplevel(self.master)
+        dialog.title("アレンジ完了 - プロンプト比較")
+        
+        # メインウィンドウの位置を取得してダイアログを配置
+        master_x = self.master.winfo_x()
+        master_y = self.master.winfo_y()
+        dialog.geometry(f"800x600+{master_x + 50}+{master_y + 50}")
+        
+        # ダイアログをモーダルにする
+        dialog.transient(self.master)
+        dialog.grab_set()
+        
+        # ヘッダー情報
+        header_frame = tk.Frame(dialog)
+        header_frame.pack(fill='x', padx=10, pady=5)
+        
+        tk.Label(header_frame, text="アレンジ設定:", font=('Arial', 10, 'bold')).pack(anchor='w')
+        tk.Label(header_frame, text=f"プリセット: {preset_label} | 強度: {strength} | 文字数調整: {self.length_adjust_var.get()}").pack(anchor='w')
+        
+        # 比較表示エリア
+        comparison_frame = tk.Frame(dialog)
+        comparison_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # 左側：アレンジ前
+        left_frame = tk.Frame(comparison_frame)
+        left_frame.pack(side='left', fill='both', expand=True, padx=(0, 5))
+        
+        tk.Label(left_frame, text=f"アレンジ前: ({len(original_text)}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
+        original_text_widget = tk.scrolledtext.ScrolledText(
+            left_frame, 
+            wrap=tk.WORD, 
+            width=40, 
+            height=15,
+            font=('Consolas', 9)
+        )
+        original_text_widget.pack(fill='both', expand=True)
+        original_text_widget.insert('1.0', original_text)
+        original_text_widget.config(state='disabled')
+        
+        # 右側：アレンジ後
+        right_frame = tk.Frame(comparison_frame)
+        right_frame.pack(side='right', fill='both', expand=True, padx=(5, 0))
+        
+        tk.Label(right_frame, text=f"アレンジ後: ({len(arranged_text)}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
+        arranged_text_widget = tk.scrolledtext.ScrolledText(
+            right_frame, 
+            wrap=tk.WORD, 
+            width=40, 
+            height=15,
+            font=('Consolas', 9)
+        )
+        arranged_text_widget.pack(fill='both', expand=True)
+        arranged_text_widget.insert('1.0', arranged_text)
+        arranged_text_widget.config(state='disabled')
+        
+        # ボタンエリア
+        button_frame = tk.Frame(dialog)
+        button_frame.pack(fill='x', padx=10, pady=10)
+        
+        # アレンジ後をコピーするボタン
+        copy_button = tk.Button(
+            button_frame, 
+            text="アレンジ後をクリップボードにコピー", 
+            command=lambda: self.copy_text_to_clipboard(arranged_text, dialog)
+        )
+        copy_button.pack(side='left', padx=(0, 10))
+        
+        # 閉じるボタン
+        close_button = tk.Button(
+            button_frame, 
+            text="閉じる", 
+            command=dialog.destroy
+        )
+        close_button.pack(side='right')
+        
+        # 完了通知
+        messagebox.showinfo("アレンジ完了", f"プロンプトのアレンジが完了しました。\nプリセット: {preset_label}\n強度: {strength}\n文字数調整: {self.length_adjust_var.get()}\n文字数: {len(original_text)} → {len(arranged_text)}")
+
+    def copy_text_to_clipboard(self, text, dialog):
+        """テキストをクリップボードにコピー"""
+        self.master.clipboard_clear()
+        self.master.clipboard_append(text)
+        messagebox.showinfo("コピー完了", "アレンジ後のプロンプトをクリップボードにコピーしました。")
+
+    def show_detailed_error_dialog(self, title, error_message, preset_label, strength):
+        """詳細なエラー情報を表示するダイアログ"""
+        dialog = tk.Toplevel(self.master)
+        dialog.title(title)
+        
+        # メインウィンドウの位置を取得してダイアログを配置
+        master_x = self.master.winfo_x()
+        master_y = self.master.winfo_y()
+        dialog.geometry(f"600x500+{master_x + 50}+{master_y + 50}")
+        
+        # ダイアログをモーダルにする
+        dialog.transient(self.master)
+        dialog.grab_set()
+        
+        # メインフレーム
+        main_frame = tk.Frame(dialog)
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # タイトル
+        title_label = tk.Label(main_frame, text=title, font=('Arial', 12, 'bold'))
+        title_label.pack(anchor='w', pady=(0, 10))
+        
+        # エラーメッセージ（スクロール可能）
+        error_frame = tk.Frame(main_frame)
+        error_frame.pack(fill='both', expand=True, pady=(0, 10))
+        
+        error_label = tk.Label(error_frame, text="エラー詳細:", font=('Arial', 10, 'bold'))
+        error_label.pack(anchor='w')
+        
+        error_text = tk.scrolledtext.ScrolledText(
+            error_frame,
+            wrap=tk.WORD,
+            width=70,
+            height=15,
+            font=('Consolas', 9)
+        )
+        error_text.pack(fill='both', expand=True)
+        error_text.insert('1.0', error_message)
+        error_text.config(state='disabled')
+        
+        # 設定情報
+        info_frame = tk.Frame(main_frame)
+        info_frame.pack(fill='x', pady=(0, 10))
+        
+        tk.Label(info_frame, text="現在の設定:", font=('Arial', 10, 'bold')).pack(anchor='w')
+        tk.Label(info_frame, text=f"• プリセット: {preset_label}").pack(anchor='w')
+        tk.Label(info_frame, text=f"• 強度: {strength}").pack(anchor='w')
+        tk.Label(info_frame, text=f"• モデル: {LLM_MODEL}").pack(anchor='w')
+        tk.Label(info_frame, text=f"• タイムアウト: {LLM_TIMEOUT}秒").pack(anchor='w')
+        
+        # ボタンエリア
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(fill='x')
+        
+        # エラー詳細をコピーするボタン
+        copy_button = tk.Button(
+            button_frame,
+            text="エラー詳細をコピー",
+            command=lambda: self.copy_error_to_clipboard(error_message, dialog)
+        )
+        copy_button.pack(side='left', padx=(0, 10))
+        
+        # 閉じるボタン
+        close_button = tk.Button(
+            button_frame,
+            text="閉じる",
+            command=dialog.destroy
+        )
+        close_button.pack(side='right')
+
+    def copy_error_to_clipboard(self, error_message, dialog):
+        """エラーメッセージをクリップボードにコピー"""
+        self.master.clipboard_clear()
+        self.master.clipboard_append(error_message)
+        messagebox.showinfo("コピー完了", "エラー詳細をクリップボードにコピーしました。")
+
+    def show_length_adjust_comparison_dialog(self, original_text, adjusted_text, length_adjust):
+        """文字数調整前後のプロンプトを比較表示するダイアログ"""
+        dialog = tk.Toplevel(self.master)
+        dialog.title("文字数調整完了 - プロンプト比較")
+        
+        # メインウィンドウの位置を取得してダイアログを配置
+        master_x = self.master.winfo_x()
+        master_y = self.master.winfo_y()
+        dialog.geometry(f"800x600+{master_x + 50}+{master_y + 50}")
+        
+        # ダイアログをモーダルにする
+        dialog.transient(self.master)
+        dialog.grab_set()
+        
+        # ヘッダー情報
+        header_frame = tk.Frame(dialog)
+        header_frame.pack(fill='x', padx=10, pady=5)
+        
+        tk.Label(header_frame, text="文字数調整設定:", font=('Arial', 10, 'bold')).pack(anchor='w')
+        tk.Label(header_frame, text=f"調整設定: {length_adjust} | 文字数: {len(original_text)} → {len(adjusted_text)}").pack(anchor='w')
+        
+        # 比較表示エリア
+        comparison_frame = tk.Frame(dialog)
+        comparison_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # 左側：調整前
+        left_frame = tk.Frame(comparison_frame)
+        left_frame.pack(side='left', fill='both', expand=True, padx=(0, 5))
+        
+        tk.Label(left_frame, text=f"調整前: ({len(original_text)}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
+        original_text_widget = tk.scrolledtext.ScrolledText(
+            left_frame, 
+            wrap=tk.WORD, 
+            width=40, 
+            height=15,
+            font=('Consolas', 9)
+        )
+        original_text_widget.pack(fill='both', expand=True)
+        original_text_widget.insert('1.0', original_text)
+        original_text_widget.config(state='disabled')
+        
+        # 右側：調整後
+        right_frame = tk.Frame(comparison_frame)
+        right_frame.pack(side='right', fill='both', expand=True, padx=(5, 0))
+        
+        tk.Label(right_frame, text=f"調整後: ({len(adjusted_text)}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
+        adjusted_text_widget = tk.scrolledtext.ScrolledText(
+            right_frame, 
+            wrap=tk.WORD, 
+            width=40, 
+            height=15,
+            font=('Consolas', 9)
+        )
+        adjusted_text_widget.pack(fill='both', expand=True)
+        adjusted_text_widget.insert('1.0', adjusted_text)
+        adjusted_text_widget.config(state='disabled')
+        
+        # ボタンエリア
+        button_frame = tk.Frame(dialog)
+        button_frame.pack(fill='x', padx=10, pady=10)
+        
+        # 調整後をコピーするボタン
+        copy_button = tk.Button(
+            button_frame, 
+            text="調整後をクリップボードにコピー", 
+            command=lambda: self.copy_text_to_clipboard(adjusted_text, dialog)
+        )
+        copy_button.pack(side='left', padx=(0, 10))
+        
+        # 閉じるボタン
+        close_button = tk.Button(
+            button_frame, 
+            text="閉じる", 
+            command=dialog.destroy
+        )
+        close_button.pack(side='right')
+        
+        # 完了通知
+        messagebox.showinfo("文字数調整完了", f"プロンプトの文字数調整が完了しました。\n調整設定: {length_adjust}\n文字数: {len(original_text)} → {len(adjusted_text)}")
 
 def load_exclusion_words():
     try:
@@ -920,6 +1652,8 @@ def sanitize_to_english(text: str) -> str:
         out = out.replace(k, v)
     return out
 
+
+
 # YAML設定ファイルパス
 yaml_settings_path = 'desktop_gui_settings.yaml'
 settings = load_yaml_settings(yaml_settings_path)
@@ -931,7 +1665,7 @@ EXCLUSION_CSV = settings["app_image_prompt_creator"]["EXCLUSION_CSV"]
 LLM_ENABLED       = settings["app_image_prompt_creator"].get("LLM_ENABLED", False)
 LLM_MODEL         = settings["app_image_prompt_creator"].get("LLM_MODEL", "gpt-5-mini")
 LLM_TEMPERATURE   = settings["app_image_prompt_creator"].get("LLM_TEMPERATURE", 0.7)
-LLM_MAX_COMPLETION_TOKENS = settings["app_image_prompt_creator"].get("LLM_MAX_COMPLETION_TOKENS", 800)
+LLM_MAX_COMPLETION_TOKENS = settings["app_image_prompt_creator"].get("LLM_MAX_COMPLETION_TOKENS", 4500)
 LLM_TIMEOUT       = settings["app_image_prompt_creator"].get("LLM_TIMEOUT", 30)
 OPENAI_API_KEY_ENV= settings["app_image_prompt_creator"].get("OPENAI_API_KEY_ENV", "OPENAI_API_KEY")
 ARRANGE_PRESETS_YAML = settings["app_image_prompt_creator"].get("ARRANGE_PRESETS_YAML", "app_image_prompt_creator/arrange_presets.yaml")
