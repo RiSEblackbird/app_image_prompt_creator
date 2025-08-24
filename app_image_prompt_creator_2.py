@@ -438,7 +438,7 @@ class TextGeneratorApp:
             state="readonly"
         )
         self.combo_length_adjust.pack(side='left', padx=5)
-        self.combo_length_adjust.bind("<<ComboboxSelected>>", self.auto_update)
+        
         
         # 固定文字数（優先）
         self.label_fixed_length = tk.Label(self.length_adjust_frame, text="固定:")
@@ -452,7 +452,7 @@ class TextGeneratorApp:
             state="readonly"
         )
         self.combo_fixed_length.pack(side='left', padx=5)
-        self.combo_fixed_length.bind("<<ComboboxSelected>>", self.auto_update)
+        
 
         # アレンジプリセット（YAMLから読み込み）
         self.arrange_presets = load_arrange_presets(ARRANGE_PRESETS_YAML)
@@ -808,6 +808,8 @@ class TextGeneratorApp:
             arranged = self.arrange_with_llm(src, preset, strength, guidance, prev_output=self.last_arranged_output)
             
             if arranged:
+                # 念のため最終出力にも継承サニタイズを適用
+                arranged = self._inherit_options_if_present(src, arranged)
                 # アレンジ前後の比較表示ダイアログを表示
                 self.show_arrange_comparison_dialog(src, arranged, preset_label, strength)
                 self.text_output.delete('1.0', tk.END)
@@ -882,6 +884,8 @@ class TextGeneratorApp:
             adjusted_text = self.adjust_text_length_only(src, target_length)
             
             if adjusted_text:
+                # 念のため最終出力にも継承サニタイズを適用
+                adjusted_text = self._inherit_options_if_present(src, adjusted_text)
                 # 調整前後の比較表示ダイアログを表示
                 self.show_length_adjust_comparison_dialog(src, adjusted_text, length_adjust_display)
                 self.text_output.delete('1.0', tk.END)
@@ -951,9 +955,9 @@ class TextGeneratorApp:
                 f"{'AGGRESSIVELY adjust the length by:' if is_reduction else 'Only adjust the length by:'}\n"
                 "- Adding or removing descriptive words\n"
                 "- Expanding or condensing phrases\n"
-                "- Maintaining all technical parameters (--ar, --s, --chaos, etc.)\n"
-                "- Keeping the same subject and composition\n"
-                "- Preserving any --options at the end\n\n"
+                "- Maintain all technical parameters if they exist (--ar, --s, --chaos, --q, --weird). Do NOT add any new parameters if not present.\n"
+                "- Keep the same subject and composition\n"
+                "- IMPORTANT: If and only if the original ends with --options, preserve them exactly; otherwise do NOT add any --options.\n\n"
                 f"{reduction_emphasis}"
                 "CRITICAL: The output must be approximately the target length. "
                 f"Target: {target_length} characters (original: {len(text)}). "
@@ -1029,8 +1033,9 @@ class TextGeneratorApp:
                 if content.strip() == text.strip():
                     print(f"    同一内容のため調整失敗")
                     return None
-                    
-                return content
+                
+                # 元にオプションがなければ付与しない。ある場合のみ継承
+                return self._inherit_options_if_present(text, content)
             else:
                 print(f"    レスポンスにchoicesが含まれていません")
                 return None
@@ -1160,7 +1165,7 @@ class TextGeneratorApp:
                 f"- KEEP: Cultural styles (zen, art deco, cyberpunk, traditional)\n"
                 f"CRITICAL LENGTH REQUIREMENT: The output must be {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original. "
                 f"Target: approximately {target_length} characters (original: {original_length}). "
-                f"Preserve any --options at the end. Output only the transformed prompt."
+                f"IMPORTANT: If and only if the original ends with --options, preserve them exactly; otherwise do NOT add any --options. Output only the transformed prompt."
             )
         else:
             # 強度に応じてガイダンスの適用度を調整
@@ -1175,7 +1180,7 @@ class TextGeneratorApp:
             system_prompt = (
                 f"Rewrite Midjourney prompts with {strength_instruction}. "
                 f"{guidance_system_instruction} "
-                f"Keep core content and --options. "
+                f"Keep core content. IMPORTANT: If and only if the original ends with --options, preserve them exactly; otherwise do NOT add any --options. "
                 f"STYLE BLENDING RULES:\n"
                 f"- Blend guidance via lighting, palette, materials, VFX, and subtle accessories\n"
                 f"- Do not replace the identities of original subjects; avoid new subjects unless present\n"
@@ -1253,7 +1258,7 @@ class TextGeneratorApp:
                     f"Nonce: {nonce}\n"
                     + (f"Guidance: {guidance}\n" if guidance else "") +
                     f"Guidance instruction: {guidance_instruction}\n"
-                    f"Rules: Keep core content, enhance style per strength level, preserve --options\n"
+                    f"Rules: Keep core content, enhance style per strength level. If and only if the original ends with --options, preserve them exactly; otherwise do NOT add any --options\n"
                     f"Strength rules: {'; '.join(current_rules)}\n"
                     f"Blend weight target: ~{blend_weight}% guidance / ~{100 - blend_weight}% original\n"
                     + (f"Anchor terms (verbatim): {', '.join(anchor_terms)}\n" if anchor_terms else "") +
@@ -1333,7 +1338,8 @@ class TextGeneratorApp:
                     print(f"    同一内容のため再試行")
                     error_details.append(f"試行{attempt + 1}: 同一内容が返されました")
                     continue
-                return content
+                # 元にオプションがなければ付与しない。ある場合のみ継承
+                return self._inherit_options_if_present(text, content)
                 
             except requests.HTTPError as e:
                 error_msg = f"HTTPエラー: {e}"
@@ -1381,7 +1387,8 @@ class TextGeneratorApp:
                             print(f"    同一内容のため再試行")
                             error_details.append(f"試行{attempt + 1}: 同一内容が返されました")
                             continue
-                        return content2
+                        # 元にオプションがなければ付与しない。ある場合のみ継承（フォールバック経路）
+                        return self._inherit_options_if_present(text, content2)
                 except Exception as fallback_error:
                     fallback_msg = f"フォールバック失敗: {fallback_error}"
                     print(f"    {fallback_msg}")
@@ -1442,6 +1449,82 @@ class TextGeneratorApp:
             # プルダウンメニューを更新
             updated_words = load_exclusion_words()
             self.combo_exclusion_words['values'] = updated_words
+
+    def _split_prompt_and_options(self, text: str):
+        """末尾の Midjourney オプション群（--ar/--s/--chaos/--q/--weird）を検出して主文と分離する。
+        戻り値: (main_text, options_tail, has_options)
+        - 末尾が許可された --key とその値（最大1トークン）だけの連続ならそれを尾部とみなす。
+        - それ以外は尾部なしとして扱う。
+        """
+        try:
+            tokens = (text or "").strip().split()
+            if not tokens:
+                return "", "", False
+            allowed = {"--ar", "--s", "--chaos", "--q", "--weird"}
+            # 末尾側からスキャンして最初の許可オプション位置を見つける
+            start_idx = None
+            i = len(tokens) - 1
+            while i >= 0:
+                if tokens[i] in allowed:
+                    start_idx = i
+                    # 値を1トークン許容
+                    i -= 1
+                    if i >= 0 and tokens[i] not in allowed and not tokens[i].startswith("--"):
+                        # 値だったのでさらにもう一つ戻る
+                        i -= 1
+                    # 続くオプション塊の先頭まで戻る
+                    while i >= 0:
+                        if tokens[i] in allowed:
+                            i -= 1
+                            if i >= 0 and tokens[i] not in allowed and not tokens[i].startswith("--"):
+                                i -= 1
+                        else:
+                            break
+                    # i は主文末の位置なので、オプション開始は i+1
+                    start_idx = i + 1
+                    break
+                else:
+                    i -= 1
+            if start_idx is not None and 0 <= start_idx < len(tokens):
+                # 妥当性チェック：start_idx 以降が allowed 群のみで構成されるか
+                j = start_idx
+                ok = True
+                while j < len(tokens):
+                    if tokens[j] in allowed:
+                        j += 1
+                        if j < len(tokens) and not tokens[j].startswith("--"):
+                            j += 1
+                    else:
+                        ok = False
+                        break
+                if ok:
+                    main_text = " ".join(tokens[:start_idx]).rstrip()
+                    options_tail = (" " + " ".join(tokens[start_idx:])) if start_idx < len(tokens) else ""
+                    return main_text, options_tail, True
+            return (text or "").strip(), "", False
+        except Exception:
+            return (text or "").strip(), "", False
+
+    def _inherit_options_if_present(self, original_text: str, new_text: str) -> str:
+        orig_main, orig_opts, has_opts = self._split_prompt_and_options(original_text)
+        if has_opts:
+            # 出力側は新規オプションを許さず、元の尾部のみ厳密継承
+            new_main, _, _ = self._split_prompt_and_options(new_text)
+            return (new_main + orig_opts)
+        else:
+            # 元に無い場合は、文中・末尾のどこにあってもオプション断片を全削除
+            return self._strip_all_options(new_text)
+
+    def _strip_all_options(self, text: str) -> str:
+        try:
+            # --ar / --s / --chaos / --q / --weird と、直後の値(1トークン)を削除。繰り返し対応
+            pattern = r"(?:(?<=\s)|^)--(?:ar|s|chaos|q|weird)(?:\s+(?!-)[^\s]+)?"
+            cleaned = re.sub(pattern, "", text)
+            # 余分な空白を整理
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            return cleaned
+        except Exception:
+            return (text or "").strip()
 
     def _extract_anchor_terms(self, text: str, max_terms: int = 8):
         """原文から保持すべきアンカー語句（名詞・象徴語）を抽出する簡易ロジック。
