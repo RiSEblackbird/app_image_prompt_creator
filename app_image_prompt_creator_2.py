@@ -11,6 +11,7 @@ import tkinter.scrolledtext
 from tkinter import filedialog, messagebox, ttk
 from tkinter import font as tkfont
 import random
+import json
 import csv
 import socket
 import sqlite3
@@ -625,6 +626,17 @@ class TextGeneratorApp:
         )
         self.button_length_adjust_and_copy.pack(pady=5, fill='none')
 
+        # 動画用プロンプト整形ボタン
+        self.button_format_for_movie = tk.Button(
+            self.sub_buttons_frame,
+            text="動画用に整形(JSON)",
+            padx=5,
+            width=30,
+            font=self.sub_buttons_font,
+            command=self.handle_format_for_movie_prompt,
+        )
+        self.button_format_for_movie.pack(pady=5, fill='none')
+
         # 変数初期化
         self.file_lines = []
         self.main_prompt = ""
@@ -1053,6 +1065,61 @@ class TextGeneratorApp:
         """文字数調整してコピーする機能"""
         if self.handle_length_adjust_only():
             self.copy_all_to_clipboard()
+
+    def handle_format_for_movie_prompt(self):
+        """Sora2向けに、メインテキストを世界観JSONとして整形する。
+
+        - 既存テキスト出力から、映画用JSONとMidjourneyオプションを分離する。
+        - メインテキスト部分をworld_description JSONに格納する。
+        - 映画用JSONとオプションはそのまま連結して保持する。
+        LLMは使わず、単純なフォーマット変換のみを行う。
+        """
+        try:
+            src = self.text_output.get("1.0", tk.END).strip()
+            if not src:
+                messagebox.showwarning("注意", "まずプロンプトを生成してください。")
+                return
+
+            # メインテキスト / 映画用JSON / MJオプションを分離
+            core_without_movie, movie_tail = self._detach_movie_tail_for_llm(src)
+            main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
+
+            if not main_text:
+                messagebox.showwarning("注意", "メインテキストが見つかりません。")
+                return
+
+            # 文ごとの断片も保持しておく（Sora2が世界観の細部を理解しやすくするため）
+            # 既存仕様では「脈絡のない短文の羅列」なので、それぞれをdetailsとして配列に入れる。
+            sentence_candidates = re.split(r"[。\.]\s*", main_text)
+            details = [s.strip(" .　") for s in sentence_candidates if s.strip(" .　")]
+
+            world_payload = {
+                "world_description": {
+                    "scope": "single_continuous_world",
+                    "summary": main_text.strip(),
+                    "details": details,
+                }
+            }
+            world_json = json.dumps(world_payload, ensure_ascii=False)
+
+            parts = [world_json]
+            # 映画用スタイルJSON（video_style）はそのまま後ろに維持
+            if movie_tail:
+                parts.append(movie_tail.strip())
+            # Midjourneyオプション(--ar等)もそのまま維持
+            if options_tail:
+                parts.append(options_tail.strip())
+
+            result = " ".join(p for p in parts if p)
+
+            self.text_output.delete("1.0", tk.END)
+            self.text_output.insert(tk.END, result)
+            # 内部状態も新しい全文に同期させる（次の処理との一貫性確保）
+            self._update_internal_prompt_from_text(result)
+
+            messagebox.showinfo("整形完了", "動画用のJSONプロンプトに整形しました。\nSora2が世界観として解釈しやすい構造になっています。")
+        except Exception:
+            messagebox.showerror("エラー", f"動画用プロンプト整形中にエラーが発生しました:\n{get_exception_trace()}")
 
     def adjust_text_length_only(self, text, target_length):
         """意味を本質的に変えずに文字数のみを調整する"""
