@@ -141,7 +141,7 @@ python app_image_prompt_creator/app_image_prompt_creator_2.py
   - `EXCLUSION_CSV`: 除外語句CSV
   - `ARRANGE_PRESETS_YAML`: アレンジプリセットYAMLのパス
   - `LLM_ENABLED`: LLM機能の有効/無効
-  - `LLM_MODEL`: 例 `gpt-5-mini`
+- `LLM_MODEL`: 例 `gpt-5-mini`
   - `LLM_MAX_COMPLETION_TOKENS`: 応答最大トークン（アレンジ/文字数調整共通）
   - `LLM_TIMEOUT`: タイムアウト秒
   - `OPENAI_API_KEY_ENV`: APIキーの環境変数名（例 `OPENAI_API_KEY`）
@@ -162,6 +162,24 @@ app_image_prompt_creator:
   OPENAI_API_KEY_ENV: "OPENAI_API_KEY"
   LLM_INCLUDE_TEMPERATURE: false
   LLM_TEMPERATURE: 0.7
+```
+
+### LLMモデル指定時の注意
+- **gpt-5.1 対応**: `LLM_MODEL` に `gpt-5.1` / `gpt-5.1-mini` など gpt-5系を指定すると、自動的に OpenAI Responses API へ切り替え、`max_output_tokens` を使用します。gpt-4.1 / gpt-4o など従来モデルはChat Completions APIを継続利用し、`max_completion_tokens` を送信します。
+- **temperature の取り扱い**: `LLM_INCLUDE_TEMPERATURE: false` のときはpayloadからtemperatureを除外できます。Responses APIで400が返り `temperature` が未対応と示された場合でも、ツールが自動で温度なしリトライを行います。
+- **環境変数**: gpt-5系も同じ環境変数（例: `OPENAI_API_KEY`）からキーを読み込みます。個別のKey/Orgは不要です。
+
+#### 設定例
+正例（Responses API対応モデルを明示したケース）:
+```yaml
+LLM_MODEL: "gpt-5.1-mini"
+LLM_MAX_COMPLETION_TOKENS: 4000  # gpt-5系では内部的にmax_output_tokensとして送信
+```
+
+負例（存在しないモデル名で呼び出そうとしたケース）:
+```yaml
+LLM_MODEL: "gpt5"
+# ハイフンなしの名称は有効なモデルとして解釈されず、HTTP 404/400 エラーになります。
 ```
 
 ### プリセットYAMLの仕様

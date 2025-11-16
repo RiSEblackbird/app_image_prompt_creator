@@ -55,6 +55,12 @@ WEIRD_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "25
 LABEL_EXCLUSION_WORDS = "除外語句："
 # DEFAULT_EXCLUSION_WORDS = ["", "sculpture", "ring", "rain", "sphere", "stature", "sphere, rain, people, sculpture"]
 
+# OpenAIエンドポイントの定義（gpt-5系はResponses APIを要求する）
+CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+RESPONSES_API_URL = "https://api.openai.com/v1/responses"
+RESPONSES_MODEL_PREFIXES = ("gpt-5",)
+LENGTH_LIMIT_REASONS = {"length", "max_output_tokens"}
+
 # 定数としてホスト名を取得
 HOSTNAME = socket.gethostname()
 
@@ -965,12 +971,6 @@ class TextGeneratorApp:
                 "Output only the adjusted prompt."
             )
             
-            url = "https://api.openai.com/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            }
-            
             nonce = uuid.uuid4().hex[:8]
             is_reduction = target_length < len(text)
             reduction_instruction = ""
@@ -1001,44 +1001,32 @@ class TextGeneratorApp:
             else:
                 adjusted_temperature = base_temperature
             
-            payload = {
-                "model": LLM_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "max_completion_tokens": LLM_MAX_COMPLETION_TOKENS,
-                "temperature": adjusted_temperature
-            }
+            raw_content, finish_reason, data = send_llm_request(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=adjusted_temperature,
+                max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                timeout=LLM_TIMEOUT,
+                include_temperature=True
+            )
+            print(f"    生レスポンス: '{raw_content}'")
+            print(f"    終了理由: {finish_reason}")
             
-            print(f"    APIリクエスト送信中... (モデル: {LLM_MODEL})")
-            resp = requests.post(url, headers=headers, json=payload, timeout=LLM_TIMEOUT)
-            print(f"    レスポンスステータス: {resp.status_code}")
-            
-            resp.raise_for_status()
-            data = resp.json()
-            
-            if "choices" in data and len(data["choices"]) > 0:
-                raw_content = data["choices"][0]["message"]["content"].strip()
-                print(f"    生レスポンス: '{raw_content}'")
-                
-                if not raw_content:
-                    print(f"    警告: レスポンスが空です")
-                    return None
-                    
-                content = sanitize_to_english(raw_content)
-                print(f"    文字数調整成功: {len(content)} 文字")
-                
-                # 同一チェック
-                if content.strip() == text.strip():
-                    print(f"    同一内容のため調整失敗")
-                    return None
-                
-                # 元にオプションがなければ付与しない。ある場合のみ継承
-                return self._inherit_options_if_present(text, content)
-            else:
-                print(f"    レスポンスにchoicesが含まれていません")
+            if not raw_content:
+                print(f"    警告: レスポンスが空です")
                 return None
+                    
+            content = sanitize_to_english(raw_content)
+            print(f"    文字数調整成功: {len(content)} 文字")
+            
+            # 同一チェック
+            if content.strip() == text.strip():
+                print(f"    同一内容のため調整失敗")
+                return None
+            
+            # 元にオプションがなければ付与しない。ある場合のみ継承
+            return self._inherit_options_if_present(text, content)
                 
         except requests.HTTPError as e:
             error_msg = f"HTTPエラー: {e}"
@@ -1199,12 +1187,6 @@ class TextGeneratorApp:
                 f"Target: approximately {target_length} characters (original: {original_length}). "
                 f"Output only the prompt."
             )
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
         # 最大2回まで再試行。毎回異なるノンスでバリエーションを促す
         attempts = 2
         last_error = None
@@ -1223,7 +1205,6 @@ class TextGeneratorApp:
             }
             
             current_rules = strength_rules.get(strength, strength_rules[2])
-            rules_text = "\n".join(current_rules)
             
             # プロンプトを簡潔にしてトークン使用量を削減
             if strength == 3:
@@ -1282,136 +1263,111 @@ class TextGeneratorApp:
             }
             adjusted_temperature = strength_temperature.get(strength, base_temperature)
             
-            payload = {
-                "model": LLM_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "max_completion_tokens": LLM_MAX_COMPLETION_TOKENS,
-                "temperature": adjusted_temperature
-            }
-
             try:
-                print(f"    APIリクエスト送信中... (モデル: {LLM_MODEL})")
                 print(f"    プロンプト長: {len(user_prompt)} 文字")
                 print(f"    システムプロンプト長: {len(system_prompt)} 文字")
                 print(f"    トークン制限: {LLM_MAX_COMPLETION_TOKENS}")
-                resp = requests.post(url, headers=headers, json=payload, timeout=LLM_TIMEOUT)
-                print(f"    レスポンスステータス: {resp.status_code}")
-                
-                resp.raise_for_status()
-                data = resp.json()
-                print(f"    レスポンス構造: {data.keys()}")
-                if "choices" in data and len(data["choices"]) > 0:
-                    print(f"    choices[0]構造: {data['choices'][0].keys()}")
-                raw_content = data["choices"][0]["message"]["content"].strip()
-                finish_reason = data["choices"][0].get("finish_reason", "unknown")
-                print(f"    生レスポンス: '{raw_content}'")
-                print(f"    終了理由: {finish_reason}")
-                
-                if finish_reason == "length":
-                    usage_info = data.get("usage", {})
-                    prompt_tokens = usage_info.get("prompt_tokens", 0)
-                    completion_tokens = usage_info.get("completion_tokens", 0)
-                    total_tokens = usage_info.get("total_tokens", 0)
-                    print(f"    警告: トークン制限に達しました。")
-                    print(f"      プロンプトトークン: {prompt_tokens}")
-                    print(f"      完了トークン: {completion_tokens}")
-                    print(f"      総トークン: {total_tokens}")
-                    print(f"      制限: {LLM_MAX_COMPLETION_TOKENS}")
-                    print(f"    対策: プロンプトを短縮するか、トークン制限を増やしてください。")
-                    error_details.append(f"試行{attempt + 1}: トークン制限に達しました (prompt:{prompt_tokens}, completion:{completion_tokens}, limit:{LLM_MAX_COMPLETION_TOKENS})")
-                    continue
-                
-                if not raw_content:
-                    print(f"    警告: レスポンスが空です")
-                    print(f"    完全なレスポンス: {data}")
-                    error_details.append(f"試行{attempt + 1}: レスポンスが空です")
-                    continue
-                    
-                content = sanitize_to_english(raw_content)
-                print(f"    レスポンス取得成功: {len(content)} 文字")
-                
-                # 同一チェック：完全一致ならもう一度試行
-                if content.strip() == text.strip():
-                    print(f"    同一内容のため再試行")
-                    error_details.append(f"試行{attempt + 1}: 同一内容が返されました")
-                    continue
-                # 元にオプションがなければ付与しない。ある場合のみ継承
-                return self._inherit_options_if_present(text, content)
-                
+                raw_content, finish_reason, data = send_llm_request(
+                    api_key=api_key,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=adjusted_temperature,
+                    max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                    timeout=LLM_TIMEOUT,
+                    include_temperature=True
+                )
             except requests.HTTPError as e:
                 error_msg = f"HTTPエラー: {e}"
                 print(f"    {error_msg}")
                 error_details.append(f"試行{attempt + 1}: {error_msg}")
                 last_error = e
-                
-                # temperature未対応モデルのフォールバック（temperatureを外して再試行）
-                try:
-                    if resp is not None and resp.status_code == 400 and 'temperature' in resp.text:
-                        print(f"    temperature未対応のため再試行")
-                        payload.pop('temperature', None)
-                        resp2 = requests.post(url, headers=headers, json=payload, timeout=LLM_TIMEOUT)
-                        resp2.raise_for_status()
-                        data2 = resp2.json()
-                        print(f"    フォールバックレスポンス構造: {data2.keys()}")
-                        if "choices" in data2 and len(data2["choices"]) > 0:
-                            print(f"    フォールバックchoices[0]構造: {data2['choices'][0].keys()}")
-                        raw_content2 = data2["choices"][0]["message"]["content"].strip()
-                        finish_reason2 = data2["choices"][0].get("finish_reason", "unknown")
-                        print(f"    フォールバック生レスポンス: '{raw_content2}'")
-                        print(f"    フォールバック終了理由: {finish_reason2}")
-                        
-                        if finish_reason2 == "length":
-                            usage_info2 = data2.get("usage", {})
-                            prompt_tokens2 = usage_info2.get("prompt_tokens", 0)
-                            completion_tokens2 = usage_info2.get("completion_tokens", 0)
-                            total_tokens2 = usage_info2.get("total_tokens", 0)
-                            print(f"    警告: フォールバックでトークン制限に達しました。")
-                            print(f"      フォールバックプロンプトトークン: {prompt_tokens2}")
-                            print(f"      フォールバック完了トークン: {completion_tokens2}")
-                            print(f"      フォールバック総トークン: {total_tokens2}")
-                            print(f"      制限: {LLM_MAX_COMPLETION_TOKENS}")
-                            error_details.append(f"試行{attempt + 1}: フォールバックでトークン制限に達しました (prompt:{prompt_tokens2}, completion:{completion_tokens2}, limit:{LLM_MAX_COMPLETION_TOKENS})")
-                            continue
-                            
-                        if not raw_content2:
-                            print(f"    警告: フォールバックレスポンスが空です")
-                            print(f"    完全なフォールバックレスポンス: {data2}")
-                            error_details.append(f"試行{attempt + 1}: フォールバックレスポンスが空です")
-                            continue
-                            
-                        content2 = sanitize_to_english(raw_content2)
-                        if content2.strip() == text.strip():
-                            print(f"    同一内容のため再試行")
-                            error_details.append(f"試行{attempt + 1}: 同一内容が返されました")
-                            continue
-                        # 元にオプションがなければ付与しない。ある場合のみ継承（フォールバック経路）
-                        return self._inherit_options_if_present(text, content2)
-                except Exception as fallback_error:
-                    fallback_msg = f"フォールバック失敗: {fallback_error}"
-                    print(f"    {fallback_msg}")
-                    error_details.append(f"試行{attempt + 1}: {fallback_msg}")
-                    
+                resp = getattr(e, "response", None)
+                resp_text = ""
+                if resp is not None:
+                    try:
+                        resp_text = resp.text
+                    except Exception:
+                        resp_text = ""
+                if resp is not None and resp.status_code == 400 and 'temperature' in (resp_text or ""):
+                    print(f"    temperature未対応のため再試行")
+                    try:
+                        raw_content, finish_reason, data = send_llm_request(
+                            api_key=api_key,
+                            system_prompt=system_prompt,
+                            user_prompt=user_prompt,
+                            temperature=adjusted_temperature,
+                            max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                            timeout=LLM_TIMEOUT,
+                            include_temperature=False
+                        )
+                        print(f"    temperature除去フォールバック成功")
+                    except Exception as fallback_error:
+                        fallback_msg = f"フォールバック失敗: {fallback_error}"
+                        print(f"    {fallback_msg}")
+                        error_details.append(f"試行{attempt + 1}: {fallback_msg}")
+                        last_error = fallback_error
+                        continue
+                else:
+                    continue
             except requests.exceptions.Timeout as e:
                 error_msg = f"タイムアウト: {e}"
                 print(f"    {error_msg}")
                 error_details.append(f"試行{attempt + 1}: {error_msg}")
                 last_error = e
-                
+                continue
             except requests.exceptions.ConnectionError as e:
                 error_msg = f"接続エラー: {e}"
                 print(f"    {error_msg}")
                 error_details.append(f"試行{attempt + 1}: {error_msg}")
                 last_error = e
-                
+                continue
             except Exception as e:
                 error_msg = f"予期しないエラー: {e}"
                 print(f"    {error_msg}")
                 error_details.append(f"試行{attempt + 1}: {error_msg}")
                 last_error = e
                 continue
+
+            print(f"    レスポンス構造: {data.keys()}")
+            if "choices" in data and len(data["choices"]) > 0:
+                print(f"    choices[0]構造: {data['choices'][0].keys()}")
+            elif "output" in data and len(data["output"]) > 0:
+                print(f"    output[0]構造: {data['output'][0].keys()}")
+            print(f"    生レスポンス: '{raw_content}'")
+            print(f"    終了理由: {finish_reason}")
+            
+            if finish_reason in LENGTH_LIMIT_REASONS:
+                usage_info = data.get("usage", {})
+                prompt_tokens = usage_info.get("prompt_tokens", usage_info.get("input_tokens", 0))
+                completion_tokens = usage_info.get("completion_tokens", usage_info.get("output_tokens", 0))
+                total_tokens = usage_info.get("total_tokens", prompt_tokens + completion_tokens)
+                print(f"    警告: トークン制限に達しました。")
+                print(f"      プロンプトトークン: {prompt_tokens}")
+                print(f"      完了トークン: {completion_tokens}")
+                print(f"      総トークン: {total_tokens}")
+                print(f"      制限: {LLM_MAX_COMPLETION_TOKENS}")
+                print(f"    対策: プロンプトを短縮するか、トークン制限を増やしてください。")
+                error_details.append(
+                    f"試行{attempt + 1}: トークン制限に達しました (prompt:{prompt_tokens}, completion:{completion_tokens}, limit:{LLM_MAX_COMPLETION_TOKENS})"
+                )
+                continue
+            
+            if not raw_content:
+                print(f"    警告: レスポンスが空です")
+                print(f"    完全なレスポンス: {data}")
+                error_details.append(f"試行{attempt + 1}: レスポンスが空です")
+                continue
+                    
+            content = sanitize_to_english(raw_content)
+            print(f"    レスポンス取得成功: {len(content)} 文字")
+            
+            # 同一チェック：完全一致ならもう一度試行
+            if content.strip() == text.strip():
+                print(f"    同一内容のため再試行")
+                error_details.append(f"試行{attempt + 1}: 同一内容が返されました")
+                continue
+            # 元にオプションがなければ付与しない。ある場合のみ継承
+            return self._inherit_options_if_present(text, content)
 
         # ここまで到達したらエラー表示
         print(f"  全試行失敗")
@@ -1963,6 +1919,103 @@ LLM_TIMEOUT       = settings["app_image_prompt_creator"].get("LLM_TIMEOUT", 30)
 OPENAI_API_KEY_ENV= settings["app_image_prompt_creator"].get("OPENAI_API_KEY_ENV", "OPENAI_API_KEY")
 ARRANGE_PRESETS_YAML = settings["app_image_prompt_creator"].get("ARRANGE_PRESETS_YAML", "app_image_prompt_creator/arrange_presets.yaml")
 LLM_INCLUDE_TEMPERATURE = settings["app_image_prompt_creator"].get("LLM_INCLUDE_TEMPERATURE", False)
+
+def _should_use_responses_api(model_name: str) -> bool:
+    """gpt-5系モデルかどうかを判定し、Responses APIへの切り替え要否を返却する。"""
+    if not model_name:
+        return False
+    target = model_name.strip().lower()
+    return any(target.startswith(prefix) for prefix in RESPONSES_MODEL_PREFIXES)
+
+def _build_responses_input(system_prompt: str, user_prompt: str):
+    """Responses API用のmessage表現を生成する。"""
+    def build_block(role: str, text: str):
+        return {
+            "role": role,
+            "content": [
+                {
+                    "type": "text",
+                    "text": text or ""
+                }
+            ]
+        }
+    blocks = []
+    if system_prompt is not None:
+        blocks.append(build_block("system", system_prompt))
+    blocks.append(build_block("user", user_prompt or ""))
+    return blocks
+
+def _compose_openai_payload(system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, include_temperature: bool):
+    """
+    モデル種別に応じてChat Completions/Responses APIの差異を吸収したpayloadとエンドポイントを返す。
+    """
+    model = LLM_MODEL
+    use_responses = _should_use_responses_api(model)
+    payload = {"model": model}
+    if use_responses:
+        payload["input"] = _build_responses_input(system_prompt, user_prompt)
+        if max_tokens is not None:
+            payload["max_output_tokens"] = max_tokens
+        endpoint = RESPONSES_API_URL
+        response_kind = "responses"
+    else:
+        payload["messages"] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        if max_tokens is not None:
+            payload["max_completion_tokens"] = max_tokens
+        endpoint = CHAT_COMPLETIONS_URL
+        response_kind = "chat"
+    if include_temperature and temperature is not None:
+        payload["temperature"] = temperature
+    return endpoint, payload, response_kind
+
+def _parse_openai_response(response_kind: str, data: dict):
+    """レスポンス構造の差分を吸収し、本文と終了理由を抽出する。"""
+    if response_kind == "responses":
+        output = data.get("output", [])
+        texts = []
+        finish_reason = ""
+        for item in output or []:
+            finish_reason = finish_reason or item.get("stop_reason", "")
+            if item.get("type") != "message":
+                continue
+            for content in item.get("content", []):
+                if content.get("type") == "text":
+                    texts.append(content.get("text", ""))
+        if not texts:
+            output_text = data.get("output_text")
+            if isinstance(output_text, list):
+                texts.append("".join(output_text))
+            elif isinstance(output_text, str):
+                texts.append(output_text)
+        return "".join(texts).strip(), finish_reason or data.get("status", "")
+    choices = data.get("choices", [])
+    if not choices:
+        return "", ""
+    message = choices[0].get("message", {}) or {}
+    text = (message.get("content") or "").strip()
+    finish_reason = choices[0].get("finish_reason", "")
+    return text, finish_reason
+
+def send_llm_request(api_key: str, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, timeout: int, include_temperature: bool = True):
+    """
+    OpenAI API（Chat/Responses）への共通リクエスト送信関数。
+    gpt-5以降の仕様差異を内部で吸収し、本文と終了理由を返す。
+    """
+    endpoint, payload, response_kind = _compose_openai_payload(system_prompt, user_prompt, temperature, max_tokens, include_temperature)
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    print(f"    APIリクエスト送信中... (モデル: {LLM_MODEL}, endpoint: {endpoint.rsplit('/', 1)[-1]})")
+    resp = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
+    print(f"    レスポンスステータス: {resp.status_code}")
+    resp.raise_for_status()
+    data = resp.json()
+    text, finish_reason = _parse_openai_response(response_kind, data)
+    return text, finish_reason, data
 
 DEFAULT_EXCLUSION_WORDS = load_exclusion_words()
 
