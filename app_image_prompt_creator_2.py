@@ -40,12 +40,25 @@ LABEL_TAIL_AR    = "ar オプション: "
 LABEL_TAIL_CHAOS = "chaos オプション: "
 LABEL_TAIL_Q     = "q オプション: "
 LABEL_TAIL_WEIRD = "weird オプション: "
-FREE_TEXTS = [
-    "",
-    "A high resolution photograph. Very high resolution. 8K photo",
-    "a Japanese ink painting. Zen painting",
-    "a Medieval European painting."
+LABEL_TAIL_MEDIA_TYPE = "末尾プリセット用途: "
+DEFAULT_TAIL_MEDIA_TYPE = "image"
+TAIL_PRESET_CHOICES = {
+    # 静止画向けの末尾プリセット
+    "image": [
+        "",
+        "A high resolution photograph. Very high resolution. 8K photo",
+        "a Japanese ink painting. Zen painting",
+        "a Medieval European painting."
+    ],
+    # 映像（動画）向けの末尾プリセット
+    "movie": [
+        "",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film\",\"look\":\"dramatic lighting\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage\",\"format\":\"4K HDR\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film\",\"camera\":\"deliberate movement\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage cut like a modern sci-fi trailer\",\"grade\":\"Dolby Vision\"}}"
     ]
+}
 S_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "300", "400", "500", "600", "700", "800", "900", "1000"]
 AR_OPTIONS = ["", "16:9", "9:16", "4:3", "3:4"]  # 'ar'オプションの項目
 CHAOS_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]  # 'chaos'オプションの項目
@@ -331,6 +344,22 @@ class TextGeneratorApp:
         self.checkbox_autofix.pack(side='right')
         self.label_autofix = tk.Label(self.autofix_frame, text="自動反映: ")
         self.label_autofix.pack(side='left')
+        
+        # 末尾プリセットの媒体種別を切り替えるUI
+        self.tail_media_type_frame = tk.Frame(self.main_frame)
+        self.tail_media_type_frame.pack(fill='x')
+        self.tail_media_type_var = tk.StringVar(value=DEFAULT_TAIL_MEDIA_TYPE)
+        self.label_tail_media_type = tk.Label(self.tail_media_type_frame, text=LABEL_TAIL_MEDIA_TYPE)
+        self.label_tail_media_type.pack(side='left')
+        self.combo_tail_media_type = ttk.Combobox(
+            self.tail_media_type_frame,
+            values=list(TAIL_PRESET_CHOICES.keys()),
+            textvariable=self.tail_media_type_var,
+            width=10,
+            state="readonly"
+        )
+        self.combo_tail_media_type.pack(side='right')
+        self.combo_tail_media_type.bind("<<ComboboxSelected>>", self.on_tail_media_type_change)
 
         # 末尾テキスト入力UI(固定文1)
         self.tail_free_text_frame1 = tk.Frame(self.main_frame)
@@ -338,11 +367,17 @@ class TextGeneratorApp:
         self.add_tail_free_text_var1 = tk.BooleanVar()
         self.checkbox_tail_free_text1 = tk.Checkbutton(self.tail_free_text_frame1, variable=self.add_tail_free_text_var1, font=TAIL_FREE_FONT_SIZE)
         self.checkbox_tail_free_text1.pack(side='right')
-        self.combo_tail_free_text1 = ttk.Combobox(self.tail_free_text_frame1, values=FREE_TEXTS, width=25, font=TAIL_FREE_FONT_SIZE)
+        self.combo_tail_free_text1 = ttk.Combobox(
+            self.tail_free_text_frame1,
+            values=TAIL_PRESET_CHOICES[DEFAULT_TAIL_MEDIA_TYPE],
+            width=25,
+            font=TAIL_FREE_FONT_SIZE
+        )
         self.combo_tail_free_text1.pack(side='right')
         self.combo_tail_free_text1.bind("<<ComboboxSelected>>", self.auto_update)
         self.label_tail_free_text1 = tk.Label(self.tail_free_text_frame1, text=LABEL_TAIL_FREE1)
         self.label_tail_free_text1.pack(side='left')
+        self.update_tail_free_text_choices(reset_selection=True)
 
         # 末尾テキスト入力UI(--ar)
         self.tail_ar_text_frame = tk.Frame(self.main_frame)
@@ -817,6 +852,24 @@ class TextGeneratorApp:
         tail_free_text1    = " " + self.combo_tail_free_text1.get() if self.combo_tail_free_text1.get() and self.add_tail_free_text_var1.get() else ''
         self.tail_free_texts = tail_free_text1
 
+    def _get_tail_preset_choices(self, media_type=None):
+        """image/movieなど媒体種別ごとに適切な末尾プリセットを返す。"""
+        media_type = (media_type or self.tail_media_type_var.get() or DEFAULT_TAIL_MEDIA_TYPE).strip()
+        return TAIL_PRESET_CHOICES.get(media_type, TAIL_PRESET_CHOICES[DEFAULT_TAIL_MEDIA_TYPE])
+
+    def update_tail_free_text_choices(self, reset_selection=False):
+        """媒体種別切替時にコンボボックスの候補と選択値を整合させる。"""
+        presets = self._get_tail_preset_choices()
+        current_value = self.combo_tail_free_text1.get()
+        self.combo_tail_free_text1['values'] = presets
+        if reset_selection or current_value not in presets:
+            self.combo_tail_free_text1.set(presets[0])
+
+    def on_tail_media_type_change(self, event=None):
+        """image/movie選択の変更を受けて候補を刷新し、自動反映中は即時で出力を更新。"""
+        self.update_tail_free_text_choices(reset_selection=True)
+        self.auto_update(event=None)
+
     def update_option(self):
         try:
             # オプションのみ更新
@@ -881,13 +934,19 @@ class TextGeneratorApp:
             if not src:
                 messagebox.showwarning("注意", "まずプロンプトを生成してください。")
                 return False
+            llm_src, movie_tail = self._detach_movie_tail_for_llm(src)
+            if self.last_arranged_output:
+                prev_output_clean, _ = self._detach_movie_tail_for_llm(self.last_arranged_output)
+            else:
+                prev_output_clean = None
             
             # アレンジ処理の実行
-            arranged = self.arrange_with_llm(src, preset, strength, guidance, prev_output=self.last_arranged_output)
+            arranged = self.arrange_with_llm(llm_src, preset, strength, guidance, prev_output=prev_output_clean)
             
             if arranged:
-                # 念のため最終出力にも継承サニタイズを適用
-                arranged = self._inherit_options_if_present(src, arranged)
+                # 念のため最終出力にも継承サニタイズを適用し、movie JSON を復元
+                arranged = self._inherit_options_if_present(llm_src, arranged)
+                arranged = self._restore_movie_tail_after_llm(arranged, movie_tail)
                 # アレンジ前後の比較表示ダイアログを表示
                 self.show_arrange_comparison_dialog(src, arranged, preset_label, strength)
                 self.text_output.delete('1.0', tk.END)
@@ -931,10 +990,11 @@ class TextGeneratorApp:
             if not src:
                 messagebox.showwarning("注意", "まずプロンプトを生成してください。")
                 return False
+            llm_src, movie_tail = self._detach_movie_tail_for_llm(src)
             
             # 文字数調整の設定を取得
             length_adjust = self.length_adjust_var.get()
-            original_length = len(src)
+            original_length = len(llm_src)
             
             # 固定文字数が選択されていれば優先
             fixed_value = (self.fixed_length_var.get() or "").strip()
@@ -960,11 +1020,12 @@ class TextGeneratorApp:
             print(f"  目標文字数: {target_length}")
             
             # 文字数調整のみのプロンプトを生成
-            adjusted_text = self.adjust_text_length_only(src, target_length)
+            adjusted_text = self.adjust_text_length_only(llm_src, target_length)
             
             if adjusted_text:
-                # 念のため最終出力にも継承サニタイズを適用
-                adjusted_text = self._inherit_options_if_present(src, adjusted_text)
+                # 念のため最終出力にも継承サニタイズを適用し、movie JSON を復元
+                adjusted_text = self._inherit_options_if_present(llm_src, adjusted_text)
+                adjusted_text = self._restore_movie_tail_after_llm(adjusted_text, movie_tail)
                 # 調整前後の比較表示ダイアログを表示
                 self.show_length_adjust_comparison_dialog(src, adjusted_text, length_adjust_display)
                 self.text_output.delete('1.0', tk.END)
@@ -1574,6 +1635,59 @@ class TextGeneratorApp:
         except Exception:
             return (text or "").strip()
 
+    def _current_movie_tail_value(self) -> str:
+        """現在のUI設定に基づき、movie用途で有効化されているJSON文字列を返す。"""
+        try:
+            if getattr(self, 'tail_media_type_var', None) is None:
+                return ""
+            if self.tail_media_type_var.get() != "movie":
+                return ""
+            if not getattr(self, 'add_tail_free_text_var1', None):
+                return ""
+            if not self.add_tail_free_text_var1.get():
+                return ""
+            value = (self.combo_tail_free_text1.get() or "").strip()
+            return value
+        except Exception:
+            return ""
+
+    def _detach_movie_tail_for_llm(self, text: str):
+        """映画用JSONをLLM処理から除外するために主文から取り除く。"""
+        text = (text or "").strip()
+        tail_value = self._current_movie_tail_value()
+        if not tail_value:
+            return text, ""
+
+        main_text, options_tail, _ = self._split_prompt_and_options(text)
+        main_text = (main_text or "").rstrip()
+        if main_text.endswith(tail_value):
+            truncated = main_text[:-len(tail_value)].rstrip()
+            if not truncated:
+                # すべてがJSONだった場合は除去を見送り、変換前の全文を返す
+                return text, ""
+            rebuilt = (truncated + options_tail).strip()
+            return rebuilt, tail_value
+        return text, ""
+
+    def _restore_movie_tail_after_llm(self, text: str, tail_value: str):
+        """LLM処理後に映画用JSONを元の位置（オプションより前）へ戻す。"""
+        text = (text or "").strip()
+        if not tail_value:
+            return text
+
+        main_text, options_tail, _ = self._split_prompt_and_options(text)
+        main_text = (main_text or "").rstrip()
+        if main_text:
+            restored_main = f"{main_text} {tail_value}".strip()
+        else:
+            restored_main = tail_value
+        return (restored_main + options_tail).strip()
+
+    def _visible_length_without_movie_tail(self, text: str) -> int:
+        """UI上で提示する文字数（movie JSONを除外した長さ）を返す。"""
+        cleaned, _ = self._detach_movie_tail_for_llm(text)
+        return len(cleaned or "")
+
     def _extract_anchor_terms(self, text: str, max_terms: int = 8):
         """原文から保持すべきアンカー語句（名詞・象徴語）を抽出する簡易ロジック。
         - 英単語のうち、文化・自然・建築・和要素などを優先
@@ -1724,7 +1838,8 @@ class TextGeneratorApp:
         left_frame = tk.Frame(comparison_frame)
         left_frame.pack(side='left', fill='both', expand=True, padx=(0, 5))
         
-        tk.Label(left_frame, text=f"アレンジ前: ({len(original_text)}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
+        original_visible_length = self._visible_length_without_movie_tail(original_text)
+        tk.Label(left_frame, text=f"アレンジ前: ({original_visible_length}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
         original_text_widget = tk.scrolledtext.ScrolledText(
             left_frame, 
             wrap=tk.WORD, 
@@ -1740,7 +1855,8 @@ class TextGeneratorApp:
         right_frame = tk.Frame(comparison_frame)
         right_frame.pack(side='right', fill='both', expand=True, padx=(5, 0))
         
-        tk.Label(right_frame, text=f"アレンジ後: ({len(arranged_text)}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
+        arranged_visible_length = self._visible_length_without_movie_tail(arranged_text)
+        tk.Label(right_frame, text=f"アレンジ後: ({arranged_visible_length}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
         arranged_text_widget = tk.scrolledtext.ScrolledText(
             right_frame, 
             wrap=tk.WORD, 
@@ -1773,7 +1889,9 @@ class TextGeneratorApp:
         close_button.pack(side='right')
         
         # # 完了通知
-        # messagebox.showinfo("アレンジ完了", f"プロンプトのアレンジが完了しました。\nプリセット: {preset_label}\n強度: {strength}\n文字数調整: {self.length_adjust_var.get()}\n文字数: {len(original_text)} → {len(arranged_text)}")
+        # before_len = self._visible_length_without_movie_tail(original_text)
+        # after_len = self._visible_length_without_movie_tail(arranged_text)
+        # messagebox.showinfo("アレンジ完了", f"プロンプトのアレンジが完了しました。\nプリセット: {preset_label}\n強度: {strength}\n文字数調整: {self.length_adjust_var.get()}\n文字数: {before_len} → {after_len}")
 
     def copy_text_to_clipboard(self, text, dialog):
         """テキストをクリップボードにコピー"""
@@ -1876,7 +1994,9 @@ class TextGeneratorApp:
         header_frame.pack(fill='x', padx=10, pady=5)
         
         tk.Label(header_frame, text="文字数調整設定:", font=('Arial', 10, 'bold')).pack(anchor='w')
-        tk.Label(header_frame, text=f"調整設定: {length_adjust} | 文字数: {len(original_text)} → {len(adjusted_text)}").pack(anchor='w')
+        before_visible = self._visible_length_without_movie_tail(original_text)
+        after_visible = self._visible_length_without_movie_tail(adjusted_text)
+        tk.Label(header_frame, text=f"調整設定: {length_adjust} | 文字数: {before_visible} → {after_visible}").pack(anchor='w')
         
         # 比較表示エリア
         comparison_frame = tk.Frame(dialog)
@@ -1886,7 +2006,7 @@ class TextGeneratorApp:
         left_frame = tk.Frame(comparison_frame)
         left_frame.pack(side='left', fill='both', expand=True, padx=(0, 5))
         
-        tk.Label(left_frame, text=f"調整前: ({len(original_text)}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
+        tk.Label(left_frame, text=f"調整前: ({before_visible}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
         original_text_widget = tk.scrolledtext.ScrolledText(
             left_frame, 
             wrap=tk.WORD, 
@@ -1902,7 +2022,7 @@ class TextGeneratorApp:
         right_frame = tk.Frame(comparison_frame)
         right_frame.pack(side='right', fill='both', expand=True, padx=(5, 0))
         
-        tk.Label(right_frame, text=f"調整後: ({len(adjusted_text)}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
+        tk.Label(right_frame, text=f"調整後: ({after_visible}文字)", font=('Arial', 10, 'bold')).pack(anchor='w')
         adjusted_text_widget = tk.scrolledtext.ScrolledText(
             right_frame, 
             wrap=tk.WORD, 
@@ -1935,7 +2055,9 @@ class TextGeneratorApp:
         close_button.pack(side='right')
         
         # # 完了通知
-        # messagebox.showinfo("文字数調整完了", f"プロンプトの文字数調整が完了しました。\n調整設定: {length_adjust}\n文字数: {len(original_text)} → {len(adjusted_text)}")
+        # before_len = self._visible_length_without_movie_tail(original_text)
+        # after_len = self._visible_length_without_movie_tail(adjusted_text)
+        # messagebox.showinfo("文字数調整完了", f"プロンプトの文字数調整が完了しました。\n調整設定: {length_adjust}\n文字数: {before_len} → {after_len}")
 
 def load_exclusion_words():
     try:
