@@ -953,6 +953,7 @@ class TextGeneratorApp:
                 self.show_arrange_comparison_dialog(src, arranged, preset_label, strength)
                 self.text_output.delete('1.0', tk.END)
                 self.text_output.insert(tk.END, arranged)
+                self._update_internal_prompt_from_text(arranged)
                 self.last_arranged_output = arranged
                 try:
                     self.master.update_idletasks()
@@ -1032,6 +1033,7 @@ class TextGeneratorApp:
                 self.show_length_adjust_comparison_dialog(src, adjusted_text, length_adjust_display)
                 self.text_output.delete('1.0', tk.END)
                 self.text_output.insert(tk.END, adjusted_text)
+                self._update_internal_prompt_from_text(adjusted_text)
                 return True
             else:
                 messagebox.showerror("エラー", "文字数調整に失敗しました。")
@@ -1636,6 +1638,23 @@ class TextGeneratorApp:
             return cleaned
         except Exception:
             return (text or "").strip()
+
+    def _update_internal_prompt_from_text(self, full_text: str):
+        """LLM処理後の全文から内部状態（main_promptなど）を同期させる。"""
+        normalized = (full_text or "").strip()
+        if not normalized:
+            return
+        main_text, _, _ = self._split_prompt_and_options(normalized)
+        self.make_free_texts()
+        tail_segment = self.tail_free_texts or ""
+        core = main_text.rstrip()
+        if tail_segment:
+            stripped_tail = tail_segment.rstrip()
+            if stripped_tail and core.endswith(stripped_tail):
+                core = core[: -len(stripped_tail)].rstrip()
+            elif core.endswith(tail_segment):
+                core = core[: -len(tail_segment)].rstrip()
+        self.main_prompt = core
 
     def _current_movie_tail_value(self) -> str:
         """現在のUI設定に基づき、movie用途で有効化されているJSON文字列を返す。"""
