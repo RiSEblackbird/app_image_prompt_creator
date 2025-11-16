@@ -57,11 +57,11 @@ TAIL_PRESET_CHOICES = {
         "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage\",\"format\":\"4K HDR\"}}",
         "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film\",\"camera\":\"deliberate movement\"}}",
         "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage cut like a modern movie trailer\",\"grade\":\"Dolby Vision\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic loop with controlled, fluid camera motion\",\"format\":\"4K\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic shot with controlled, fluid camera motion\",\"format\":\"4K\"}}",
         "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"atmospheric sequence graded like a 1960s film print\",\"grade\":\"film emulation\"}}",
         "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"crisp studio-lit shot with high contrast and clean composition\",\"look\":\"studio lighting\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"continuous handheld take with subtle motion blur and natural grain\",\"camera\":\"handheld\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"loopable shot mastered in 8K with smooth editing rhythm\",\"format\":\"8K\"}}"
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"handheld cinematic shot with subtle motion blur and natural grain\",\"camera\":\"handheld\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic shot mastered in 8K with smooth editing rhythm\",\"format\":\"8K\"}}"
     ]
 }
 S_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "300", "400", "500", "600", "700", "800", "900", "1000"]
