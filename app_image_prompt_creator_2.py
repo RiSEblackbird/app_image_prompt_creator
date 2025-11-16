@@ -370,13 +370,15 @@ class TextGeneratorApp:
         self.combo_tail_free_text1 = ttk.Combobox(
             self.tail_free_text_frame1,
             values=TAIL_PRESET_CHOICES[DEFAULT_TAIL_MEDIA_TYPE],
-            width=25,
+            width=50,
             font=TAIL_FREE_FONT_SIZE
         )
         self.combo_tail_free_text1.pack(side='right')
         self.combo_tail_free_text1.bind("<<ComboboxSelected>>", self.auto_update)
         self.label_tail_free_text1 = tk.Label(self.tail_free_text_frame1, text=LABEL_TAIL_FREE1)
         self.label_tail_free_text1.pack(side='left')
+        # 末尾1プルダウンにツールチップを追加（0.3秒遅延）
+        DelayedTooltip(self.combo_tail_free_text1, lambda: self.combo_tail_free_text1.get() or "(未選択)", delay=300)
         self.update_tail_free_text_choices(reset_selection=True)
 
         # 末尾テキスト入力UI(--ar)
