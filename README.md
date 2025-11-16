@@ -28,6 +28,7 @@ Midjourney 向けの画像生成プロンプトを、SQLite の属性データ�
 - **自動反映モード**: UI 変更を随時反映できるため、試行錯誤が高速
 - **詳細なエラーダイアログ**: LLM 実行時の失敗要因をまとめて表示・コピー可能
 - **Windows/Mac/Linux 対応のCSVオープン**: 除外語句CSVをOS標準エディタで開けます
+- **LLMモデルセレクタ**: 画面右側の上部に `gpt-4o-mini / gpt-4o / gpt-5.1` からモデルを即時切替でき、現在の選択がUIとコンソールの両方に表示されます
 
 ## 前提／セットアップ
 - **Python**: 3.10+ 推奨
@@ -165,14 +166,16 @@ app_image_prompt_creator:
 ```
 
 ### LLMモデル指定時の注意
-- **gpt-5.1 対応**: `LLM_MODEL` に `gpt-5.1` / `gpt-5.1-mini` など gpt-5系を指定すると、自動的に OpenAI Responses API へ切り替え、`max_output_tokens` を使用します。gpt-4.1 / gpt-4o など従来モデルはChat Completions APIを継続利用し、`max_completion_tokens` を送信します。
+- **gpt-5.1 対応**: `LLM_MODEL` に `gpt-5.1` など gpt-5系を指定すると、自動的に OpenAI Responses API へ切り替え、`max_output_tokens` を使用します。gpt-4.1 / gpt-4o など従来モデルはChat Completions APIを継続利用し、`max_completion_tokens` を送信します。
+- **UIからの即時切替**: GUI起動後は画面右上のドロップダウンでモデルを切り替えられます。コンソールにも「[LLM] 現在のモデル: ...」が即時に出力され、運用ログから追跡可能です。
+- **gpt-5系のtemperature代替**: gpt-5以降ではAPIパラメータ`temperature`を送信せず、代わりに `[Legacy temperature emulation]` ブロックをシステムプロンプトへ自動追記し、旧モデル相当の強弱指示（低温=決定論的 / 高温=大胆）が文章で伝達されます。
 - **temperature の取り扱い**: `LLM_INCLUDE_TEMPERATURE: false` のときはpayloadからtemperatureを除外できます。Responses APIで400が返り `temperature` が未対応と示された場合でも、ツールが自動で温度なしリトライを行います。
 - **環境変数**: gpt-5系も同じ環境変数（例: `OPENAI_API_KEY`）からキーを読み込みます。個別のKey/Orgは不要です。
 
 #### 設定例
 正例（Responses API対応モデルを明示したケース）:
 ```yaml
-LLM_MODEL: "gpt-5.1-mini"
+LLM_MODEL: "gpt-5.1"
 LLM_MAX_COMPLETION_TOKENS: 4000  # gpt-5系では内部的にmax_output_tokensとして送信
 ```
 
@@ -180,6 +183,27 @@ LLM_MAX_COMPLETION_TOKENS: 4000  # gpt-5系では内部的にmax_output_tokens�
 ```yaml
 LLM_MODEL: "gpt5"
 # ハイフンなしの名称は有効なモデルとして解釈されず、HTTP 404/400 エラーになります。
+```
+
+正例（UIでモデル変更するケース）:
+- 起動直後に右上のプルダウンから `gpt-5.1` を選び、アレンジ実行 → コンソールに `[LLM] 現在のモデル: gpt-5.1` が出力され、アレンジ結果には `[Legacy temperature emulation]` 指示が自動挿入されます。
+
+負例（変更をGUI外で試みたケース）:
+- 端末上で `export LLM_MODEL=gpt-4o` のように環境変数を書き換えても、本アプリは `desktop_gui_settings.yaml` とGUI選択の組み合わせのみを参照するため、起動中のモデルは切り替わりません。
+
+#### Responses API 呼び出し詳細（2025-11更新）
+- gpt-5系モデルを選択した場合、OpenAI Responses APIへ `input` ブロックを送信します。2025-11の最新仕様ではシステム／ユーザーともに `{"type": "input_text"}` を使用する必要があり、旧来の `{"type": "text"}` では `code=invalid_value` の400が返ります。
+- 送信時ログには `kind: responses` とブロック構成、受信時には HTTP 400 エラー時の `message / code / type / request_id` が出力され、調査が高速化されます。
+
+正例（400発生時に詳細が取得できるケース）:
+```text
+HTTPエラー詳細: message='Parameter max_output_tokens must be <=4096' (request_id=req_abc123)
+```
+
+負例（旧バージョンのまま詳細が残らないケース）:
+```text
+HTTPエラー: 400 Client Error: Bad Request for url: https://api.openai.com/v1/responses
+# ← request_idやOpenAI側の error.message が表示されない
 ```
 
 ### プリセットYAMLの仕様
@@ -226,6 +250,7 @@ YAML が読めない場合はコード内のフォールバックプリセット
 - タイムアウトが出る場合は `LLM_TIMEOUT` を延ばす、ネットワーク状態を確認
 - `finish_reason: length` が発生する場合は `LLM_MAX_COMPLETION_TOKENS` を増やすか、入力プロンプトを短縮
 - APIキー未設定時はGUIに警告が出ます。環境変数名が設定と一致しているか確認
+- HTTP 400 で失敗した場合はコンソールに `HTTPエラー詳細: message='...' (request_id=...)` が出るので、そのままエラーメッセージと request_id を報告すると原因特定が早まります。
 
 ## データベース前提（参考）
 本ツールは以下のテーブルを前提に動作します（名称は固定）。

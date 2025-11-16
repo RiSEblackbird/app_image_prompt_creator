@@ -52,6 +52,29 @@ CHAOS_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", 
 Q_OPTIONS = ["", "1", "2"]
 WEIRD_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "500", "750", "1000", "1250", "1500", "1750", "2000", "2250", "2500", "2750", "3000"]  # 'weird'オプションの項目
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+def _resolve_path(path_value, base_dir=SCRIPT_DIR):
+    """
+    受け取ったパスをスクリプト配置ディレクトリ基準で解決する。
+    絶対パスが渡された場合はそのまま返す。
+    """
+    if path_value is None:
+        return base_dir
+    if isinstance(path_value, Path):
+        path = path_value
+    else:
+        path = Path(str(path_value))
+    if path.is_absolute():
+        return path
+    return base_dir / path
+
+AVAILABLE_LLM_MODELS = [
+    "gpt-5.1",
+    "gpt-4o-mini",
+    "gpt-4o"
+]
+
 LABEL_EXCLUSION_WORDS = "除外語句："
 # DEFAULT_EXCLUSION_WORDS = ["", "sculpture", "ring", "rain", "sphere", "stature", "sphere, rain, people, sculpture"]
 
@@ -69,7 +92,8 @@ def load_yaml_settings(file_path):
     """
     指定されたパスのYAMLファイルを読み込んで、設定を辞書として返す。
     """
-    with open(file_path, 'r', encoding="utf-8") as file:
+    resolved_path = _resolve_path(file_path)
+    with open(resolved_path, 'r', encoding="utf-8") as file:
         # yamlモジュールを使用して設定ファイルを読み込む
         settings = yaml.safe_load(file)
     return settings
@@ -257,6 +281,8 @@ class TextGeneratorApp:
         self.attribute_type_frames = {}
         self.attribute_detail_combos = {}
         self.attribute_count_combos = {}
+        self.llm_model_var = tk.StringVar(value=LLM_MODEL)
+        self.available_model_choices = list(dict.fromkeys([self.llm_model_var.get(), *AVAILABLE_LLM_MODELS]))
         self.load_attribute_data()
 
         # デフォルトフォントの設定
@@ -274,6 +300,8 @@ class TextGeneratorApp:
         
         self.sub_frame = tk.Frame(master)
         self.sub_frame.pack(padx=10, pady=10, side='left')
+
+        self.create_llm_model_selector_ui()
         
         # CSV投入ボタン（「行数」の上に移動）
         self.button_csv_import = tk.Button(self.main_frame, text="CSVをDBに投入", command=self.open_csv_import_window)
@@ -563,6 +591,8 @@ class TextGeneratorApp:
         self.last_arranged_output = None
         self._last_error_details = []  # エラー詳細を保存する変数
 
+        self._log_current_model("initial")
+
     def load_attribute_data(self):
         conn = sqlite3.connect(DEFAULT_DB_PATH)
         cursor = conn.cursor()
@@ -584,6 +614,48 @@ class TextGeneratorApp:
         ]
 
         conn.close()
+
+    def create_llm_model_selector_ui(self):
+        """LLMモデルの選択UIを構築する。
+        環境変数（YAML設定）で指定されたモデルを起動時にプルダウンで選択済みにする。
+        """
+        frame = tk.Frame(self.main_frame)
+        frame.pack(fill='x')
+        tk.Label(frame, text="LLMモデル:").pack(side='left')
+        self.combo_llm_model = ttk.Combobox(
+            frame,
+            values=self.available_model_choices,
+            textvariable=self.llm_model_var,
+            width=15,
+            state="readonly"
+        )
+        self.combo_llm_model.pack(side='left', padx=5)
+        
+        # 環境変数（YAML設定）のモデルをプルダウンで選択済みにする
+        current_model = self.llm_model_var.get()
+        if current_model in self.available_model_choices:
+            self.combo_llm_model.current(self.available_model_choices.index(current_model))
+        
+        self.combo_llm_model.bind("<<ComboboxSelected>>", self.on_model_change)
+        self.label_current_model = tk.Label(frame, text=f"選択中: {self.llm_model_var.get()}")
+        self.label_current_model.pack(side='left', padx=5)
+
+    def on_model_change(self, event=None):
+        model = self.get_selected_model()
+        self.label_current_model.configure(text=f"選択中: {model}")
+        self._log_current_model("changed via UI")
+
+    def _log_current_model(self, note: str = ""):
+        model = self.get_selected_model()
+        suffix = f" ({note})" if note else ""
+        print(f"[LLM] 現在のモデル: {model}{suffix}")
+
+    def get_selected_model(self) -> str:
+        value = (self.llm_model_var.get() or "").strip()
+        return value or LLM_MODEL
+
+    def _append_temperature_hint_for_model(self, prompt_text: str, temperature_value: float) -> str:
+        return _append_temperature_hint(prompt_text, self.get_selected_model(), temperature_value)
 
     def open_csv_import_window(self):
         CSVImportWindow(self.master, self.update_attribute_details)
@@ -837,13 +909,14 @@ class TextGeneratorApp:
                 else:
                     error_details_text = "• エラー詳細が取得できませんでした"
                 
-                error_message = f"アレンジ処理が失敗しました。\n\nプリセット: {preset_label}\n強度: {strength}\n\nエラー詳細:\n{error_details_text}\n\n考えられる原因:\n• APIキーが正しく設定されていない\n• ネットワーク接続の問題\n• OpenAI APIの一時的な障害\n• プリセット '{preset_label}' が無効\n• モデル '{LLM_MODEL}' が利用できない"
+                current_model = self.get_selected_model()
+                error_message = f"アレンジ処理が失敗しました。\n\nプリセット: {preset_label}\n強度: {strength}\n\nエラー詳細:\n{error_details_text}\n\n考えられる原因:\n• APIキーが正しく設定されていない\n• ネットワーク接続の問題\n• OpenAI APIの一時的な障害\n• プリセット '{preset_label}' が無効\n• モデル '{current_model}' が利用できない"
                 
                 # 詳細なエラーダイアログを表示
                 self.show_detailed_error_dialog("アレンジ失敗", error_message, preset_label, strength)
                 return False
         except Exception as e:
-            error_message = f"LLMアレンジ処理中にエラーが発生しました:\n\nプリセット: {self.combo_arrange.get()}\n強度: {int(round(self.scale_arrange.get()))}\n\nエラー詳細:\n{get_exception_trace()}"
+            error_message = f"LLMアレンジ処理中にエラーが発生しました:\n\nプリセット: {self.combo_arrange.get()}\n強度: {int(round(self.scale_arrange.get()))}\nモデル: {self.get_selected_model()}\n\nエラー詳細:\n{get_exception_trace()}"
             messagebox.showerror("エラー", error_message)
             return False
 
@@ -929,6 +1002,8 @@ class TextGeneratorApp:
                 return None
             
             print(f"  APIキー確認: {'設定済み' if api_key else '未設定'}")
+            selected_model = self.get_selected_model()
+            print(f"  使用モデル: {selected_model}")
             
             # 文字数調整専用のシステムプロンプト
             is_reduction = target_length < len(text)
@@ -1001,6 +1076,8 @@ class TextGeneratorApp:
             else:
                 adjusted_temperature = base_temperature
             
+            system_prompt = self._append_temperature_hint_for_model(system_prompt, adjusted_temperature)
+            
             raw_content, finish_reason, data = send_llm_request(
                 api_key=api_key,
                 system_prompt=system_prompt,
@@ -1008,7 +1085,8 @@ class TextGeneratorApp:
                 temperature=adjusted_temperature,
                 max_tokens=LLM_MAX_COMPLETION_TOKENS,
                 timeout=LLM_TIMEOUT,
-                include_temperature=True
+                model_name=selected_model,
+                include_temperature=not _should_use_responses_api(selected_model)
             )
             print(f"    生レスポンス: '{raw_content}'")
             print(f"    終了理由: {finish_reason}")
@@ -1088,6 +1166,8 @@ class TextGeneratorApp:
             target_length = int(original_length * target_length_multiplier)
         
         print(f"  文字数調整: {length_adjust} (元: {original_length}文字 → 目標: {target_length}文字)")
+        selected_model = self.get_selected_model()
+        print(f"  使用モデル: {selected_model}")
 
         import os, uuid
         api_key = os.getenv(OPENAI_API_KEY_ENV)
@@ -1187,10 +1267,12 @@ class TextGeneratorApp:
                 f"Target: approximately {target_length} characters (original: {original_length}). "
                 f"Output only the prompt."
             )
+        base_system_prompt = system_prompt
         # 最大2回まで再試行。毎回異なるノンスでバリエーションを促す
         attempts = 2
         last_error = None
         error_details = []
+        allow_temperature = not _should_use_responses_api(selected_model)
         
         for attempt in range(attempts):
             print(f"  試行 {attempt + 1}/{attempts}")
@@ -1253,6 +1335,7 @@ class TextGeneratorApp:
                     f"Prompt: {text}"
                 )
 
+            system_prompt = base_system_prompt
             # 強度に応じてtemperatureを調整（より創造的な変化を促す）
             base_temperature = LLM_TEMPERATURE if LLM_INCLUDE_TEMPERATURE and LLM_TEMPERATURE is not None else 0.7
             strength_temperature = {
@@ -1262,6 +1345,7 @@ class TextGeneratorApp:
                 3: min(base_temperature * 1.5, 1.0)   # 最大の創造性
             }
             adjusted_temperature = strength_temperature.get(strength, base_temperature)
+            system_prompt = self._append_temperature_hint_for_model(system_prompt, adjusted_temperature)
             
             try:
                 print(f"    プロンプト長: {len(user_prompt)} 文字")
@@ -1274,13 +1358,10 @@ class TextGeneratorApp:
                     temperature=adjusted_temperature,
                     max_tokens=LLM_MAX_COMPLETION_TOKENS,
                     timeout=LLM_TIMEOUT,
-                    include_temperature=True
+                    model_name=selected_model,
+                    include_temperature=allow_temperature
                 )
             except requests.HTTPError as e:
-                error_msg = f"HTTPエラー: {e}"
-                print(f"    {error_msg}")
-                error_details.append(f"試行{attempt + 1}: {error_msg}")
-                last_error = e
                 resp = getattr(e, "response", None)
                 resp_text = ""
                 if resp is not None:
@@ -1288,6 +1369,16 @@ class TextGeneratorApp:
                         resp_text = resp.text
                     except Exception:
                         resp_text = ""
+                error_msg = f"HTTPエラー: {e}"
+                error_hint = _summarize_http_error_response(resp)
+                print(f"    {error_msg}")
+                if error_hint:
+                    print(f"    HTTPエラー詳細: {error_hint}")
+                detail_entry = f"試行{attempt + 1}: {error_msg}"
+                if error_hint:
+                    detail_entry = f"{detail_entry} | {error_hint}"
+                error_details.append(detail_entry)
+                last_error = e
                 if resp is not None and resp.status_code == 400 and 'temperature' in (resp_text or ""):
                     print(f"    temperature未対応のため再試行")
                     try:
@@ -1298,6 +1389,7 @@ class TextGeneratorApp:
                             temperature=adjusted_temperature,
                             max_tokens=LLM_MAX_COMPLETION_TOKENS,
                             timeout=LLM_TIMEOUT,
+                            model_name=selected_model,
                             include_temperature=False
                         )
                         print(f"    temperature除去フォールバック成功")
@@ -1736,7 +1828,7 @@ class TextGeneratorApp:
         tk.Label(info_frame, text="現在の設定:", font=('Arial', 10, 'bold')).pack(anchor='w')
         tk.Label(info_frame, text=f"• プリセット: {preset_label}").pack(anchor='w')
         tk.Label(info_frame, text=f"• 強度: {strength}").pack(anchor='w')
-        tk.Label(info_frame, text=f"• モデル: {LLM_MODEL}").pack(anchor='w')
+        tk.Label(info_frame, text=f"• モデル: {self.get_selected_model()}").pack(anchor='w')
         tk.Label(info_frame, text=f"• タイムアウト: {LLM_TIMEOUT}秒").pack(anchor='w')
         
         # ボタンエリア
@@ -1904,7 +1996,7 @@ def sanitize_to_english(text: str) -> str:
 
 
 # YAML設定ファイルパス
-yaml_settings_path = 'desktop_gui_settings.yaml'
+yaml_settings_path = _resolve_path('desktop_gui_settings.yaml')
 settings = load_yaml_settings(yaml_settings_path)
 BASE_FOLDER = settings["app_image_prompt_creator"]["BASE_FOLDER"]
 DEFAULT_TXT_PATH = settings["app_image_prompt_creator"]["DEFAULT_TXT_PATH"]
@@ -1917,8 +2009,10 @@ LLM_TEMPERATURE   = settings["app_image_prompt_creator"].get("LLM_TEMPERATURE", 
 LLM_MAX_COMPLETION_TOKENS = settings["app_image_prompt_creator"].get("LLM_MAX_COMPLETION_TOKENS", 4500)
 LLM_TIMEOUT       = settings["app_image_prompt_creator"].get("LLM_TIMEOUT", 30)
 OPENAI_API_KEY_ENV= settings["app_image_prompt_creator"].get("OPENAI_API_KEY_ENV", "OPENAI_API_KEY")
-ARRANGE_PRESETS_YAML = settings["app_image_prompt_creator"].get("ARRANGE_PRESETS_YAML", "app_image_prompt_creator/arrange_presets.yaml")
+ARRANGE_PRESETS_YAML = str(_resolve_path(settings["app_image_prompt_creator"].get("ARRANGE_PRESETS_YAML", "app_image_prompt_creator/arrange_presets.yaml")))
 LLM_INCLUDE_TEMPERATURE = settings["app_image_prompt_creator"].get("LLM_INCLUDE_TEMPERATURE", False)
+
+print(f"[LLM] 設定ファイルの既定モデル: {LLM_MODEL}")
 
 def _should_use_responses_api(model_name: str) -> bool:
     """gpt-5系モデルかどうかを判定し、Responses APIへの切り替え要否を返却する。"""
@@ -1928,13 +2022,16 @@ def _should_use_responses_api(model_name: str) -> bool:
     return any(target.startswith(prefix) for prefix in RESPONSES_MODEL_PREFIXES)
 
 def _build_responses_input(system_prompt: str, user_prompt: str):
-    """Responses API用のmessage表現を生成する。"""
+    """Responses API用のmessage表現を生成する。
+    2025-11時点の仕様ではユーザー／システムともに `input_text` を使用する。
+    """
     def build_block(role: str, text: str):
+        content_type = "input_text"
         return {
             "role": role,
             "content": [
                 {
-                    "type": "text",
+                    "type": content_type,
                     "text": text or ""
                 }
             ]
@@ -1945,11 +2042,36 @@ def _build_responses_input(system_prompt: str, user_prompt: str):
     blocks.append(build_block("user", user_prompt or ""))
     return blocks
 
-def _compose_openai_payload(system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, include_temperature: bool):
+def _temperature_hint_for_responses(model_name: str, temperature: float) -> str:
+    """gpt-5系向けに、旧temperature設定を文章で補助指示化する。"""
+    if temperature is None:
+        return ""
+    if not _should_use_responses_api(model_name):
+        return ""
+    level = "balanced"
+    if temperature <= 0.35:
+        level = "precision / low randomness"
+    elif temperature >= 0.75:
+        level = "bold / high creativity"
+    hint = (
+        "\n\n[Legacy temperature emulation]\n"
+        f"- Treat creativity strength as {level} (legacy temperature {temperature:.2f}).\n"
+        "- Mirror the randomness level implied above even though the API ignores `temperature`.\n"
+        "- Lower values mean deterministic phrasing; higher values allow freer rewording and bolder stylistic exploration."
+    )
+    return hint
+
+def _append_temperature_hint(prompt_text: str, model_name: str, temperature: float) -> str:
+    hint = _temperature_hint_for_responses(model_name, temperature)
+    if hint:
+        return f"{prompt_text}{hint}"
+    return prompt_text
+
+def _compose_openai_payload(system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, include_temperature: bool, model_name: str):
     """
     モデル種別に応じてChat Completions/Responses APIの差異を吸収したpayloadとエンドポイントを返す。
     """
-    model = LLM_MODEL
+    model = model_name or LLM_MODEL
     use_responses = _should_use_responses_api(model)
     payload = {"model": model}
     if use_responses:
@@ -1967,9 +2089,42 @@ def _compose_openai_payload(system_prompt: str, user_prompt: str, temperature: f
             payload["max_completion_tokens"] = max_tokens
         endpoint = CHAT_COMPLETIONS_URL
         response_kind = "chat"
-    if include_temperature and temperature is not None:
+    send_temperature = include_temperature and (temperature is not None) and not use_responses
+    if send_temperature:
         payload["temperature"] = temperature
     return endpoint, payload, response_kind
+
+def _summarize_http_error_response(resp: requests.Response) -> str:
+    """OpenAI HTTPエラー内容を抜粋し、調査向けに要約する。"""
+    if resp is None:
+        return ""
+    request_id = resp.headers.get("x-request-id") or resp.headers.get("x-requestid")
+    summary = ""
+    try:
+        data = resp.json()
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        err = data.get("error") or data
+        if isinstance(err, dict):
+            parts = []
+            if err.get("message"):
+                parts.append(f"message='{err['message']}'")
+            if err.get("code"):
+                parts.append(f"code={err['code']}")
+            if err.get("type"):
+                parts.append(f"type={err['type']}")
+            summary = ", ".join(parts) or str(err)
+        else:
+            summary = str(err)
+    else:
+        raw_text = (resp.text or "").strip()
+        if len(raw_text) > 600:
+            raw_text = raw_text[:600] + "...(truncated)"
+        summary = raw_text
+    if request_id:
+        return f"{summary} (request_id={request_id})"
+    return summary
 
 def _parse_openai_response(response_kind: str, data: dict):
     """レスポンス構造の差分を吸収し、本文と終了理由を抽出する。"""
@@ -1982,7 +2137,11 @@ def _parse_openai_response(response_kind: str, data: dict):
             if item.get("type") != "message":
                 continue
             for content in item.get("content", []):
-                if content.get("type") == "text":
+                # 2025-11時点のResponses APIでは `type: "output_text"` で返ってくるケースがある
+                # 既存の `type: "text"` と両対応させる
+                ctype = content.get("type")
+                if ctype in ("text", "output_text"):
+                    # 現行仕様ではフィールド名は常に "text"
                     texts.append(content.get("text", ""))
         if not texts:
             output_text = data.get("output_text")
@@ -1999,17 +2158,31 @@ def _parse_openai_response(response_kind: str, data: dict):
     finish_reason = choices[0].get("finish_reason", "")
     return text, finish_reason
 
-def send_llm_request(api_key: str, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, timeout: int, include_temperature: bool = True):
+def send_llm_request(api_key: str, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, timeout: int, model_name: str, include_temperature: bool = True):
     """
     OpenAI API（Chat/Responses）への共通リクエスト送信関数。
     gpt-5以降の仕様差異を内部で吸収し、本文と終了理由を返す。
     """
-    endpoint, payload, response_kind = _compose_openai_payload(system_prompt, user_prompt, temperature, max_tokens, include_temperature)
+    endpoint, payload, response_kind = _compose_openai_payload(system_prompt, user_prompt, temperature, max_tokens, include_temperature, model_name)
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    print(f"    APIリクエスト送信中... (モデル: {LLM_MODEL}, endpoint: {endpoint.rsplit('/', 1)[-1]})")
+    kind_label = "responses" if response_kind == "responses" else "chat"
+    print(f"    APIリクエスト送信中... (モデル: {model_name or LLM_MODEL}, endpoint: {endpoint.rsplit('/', 1)[-1]}, kind: {kind_label})")
+    if response_kind == "responses":
+        block_summaries = []
+        for block in payload.get("input", []):
+            role = block.get("role", "?")
+            content_types = [
+                item.get("type", "?")
+                for item in (block.get("content") or [])
+            ]
+            joined_types = "/".join([t for t in content_types if t]) or "?"
+            block_summaries.append(f"{role}:{joined_types}")
+        print(f"    payload概要: blocks={block_summaries}, max_output_tokens={payload.get('max_output_tokens')}")
+    else:
+        print(f"    payload概要: messages={len(payload.get('messages', []))}, max_completion_tokens={payload.get('max_completion_tokens')}")
     resp = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
     print(f"    レスポンスステータス: {resp.status_code}")
     resp.raise_for_status()
