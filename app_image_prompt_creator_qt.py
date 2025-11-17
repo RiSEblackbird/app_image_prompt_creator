@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 import time
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Set, Tuple
 
 import requests
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -88,6 +88,7 @@ DEFAULT_APP_SETTINGS = {
     "DEFAULT_DB_PATH": "./app_image_prompt_creator/image_prompt_parts.db",
     "EXCLUSION_CSV": "./app_image_prompt_creator/exclusion_targets.csv",
     "ARRANGE_PRESETS_YAML": "./app_image_prompt_creator/arrange_presets.yaml",
+    "DEDUPLICATE_PROMPTS": True,
     "LLM_ENABLED": False,
     "LLM_MODEL": DEFAULT_LLM_MODEL,
     "LLM_MAX_COMPLETION_TOKENS": 4500,
@@ -267,6 +268,7 @@ DEFAULT_TXT_PATH = DEFAULT_APP_SETTINGS["DEFAULT_TXT_PATH"]
 DEFAULT_DB_PATH = DEFAULT_APP_SETTINGS["DEFAULT_DB_PATH"]
 POSITION_FILE = DEFAULT_APP_SETTINGS["POSITION_FILE"]
 EXCLUSION_CSV = DEFAULT_APP_SETTINGS["EXCLUSION_CSV"]
+DEDUPLICATE_PROMPTS = DEFAULT_APP_SETTINGS["DEDUPLICATE_PROMPTS"]
 LLM_ENABLED = DEFAULT_APP_SETTINGS["LLM_ENABLED"]
 LLM_MODEL = DEFAULT_APP_SETTINGS["LLM_MODEL"]
 LLM_TEMPERATURE = DEFAULT_APP_SETTINGS["LLM_TEMPERATURE"]
@@ -311,7 +313,7 @@ def _normalize_llm_model(model_name: Optional[str]) -> str:
 def _apply_app_settings(app_settings: dict):
     """マージ済み設定をグローバル変数へ適用する。"""
 
-    global BASE_FOLDER, DEFAULT_TXT_PATH, DEFAULT_DB_PATH, POSITION_FILE, EXCLUSION_CSV
+    global BASE_FOLDER, DEFAULT_TXT_PATH, DEFAULT_DB_PATH, POSITION_FILE, EXCLUSION_CSV, DEDUPLICATE_PROMPTS
     global LLM_ENABLED, LLM_MODEL, LLM_TEMPERATURE, LLM_MAX_COMPLETION_TOKENS
     global LLM_TIMEOUT, OPENAI_API_KEY_ENV, ARRANGE_PRESETS_YAML, LLM_INCLUDE_TEMPERATURE, settings
 
@@ -321,6 +323,7 @@ def _apply_app_settings(app_settings: dict):
     DEFAULT_DB_PATH = app_settings.get("DEFAULT_DB_PATH", DEFAULT_APP_SETTINGS["DEFAULT_DB_PATH"])
     POSITION_FILE = app_settings.get("POSITION_FILE", DEFAULT_APP_SETTINGS["POSITION_FILE"])
     EXCLUSION_CSV = app_settings.get("EXCLUSION_CSV", DEFAULT_APP_SETTINGS["EXCLUSION_CSV"])
+    DEDUPLICATE_PROMPTS = app_settings.get("DEDUPLICATE_PROMPTS", DEFAULT_APP_SETTINGS["DEDUPLICATE_PROMPTS"])
     LLM_ENABLED = app_settings.get("LLM_ENABLED", DEFAULT_APP_SETTINGS["LLM_ENABLED"])
     LLM_MODEL = _normalize_llm_model(app_settings.get("LLM_MODEL", DEFAULT_APP_SETTINGS["LLM_MODEL"]))
     LLM_TEMPERATURE = app_settings.get("LLM_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_TEMPERATURE"])
@@ -887,6 +890,15 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.combo_exclusion.setEditable(True)
         exclusion_layout.addWidget(self.combo_exclusion)
         self.combo_exclusion.addItems(load_exclusion_words())
+
+        dedup_layout = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(dedup_layout)
+        dedup_layout.addWidget(QtWidgets.QLabel("重複除外:"))
+        self.check_dedup = QtWidgets.QCheckBox()
+        self.check_dedup.setChecked(bool(DEDUPLICATE_PROMPTS))
+        dedup_layout.addWidget(self.check_dedup)
+        self.check_dedup.stateChanged.connect(self.auto_update)
+
         open_exclusion_btn = QtWidgets.QPushButton("除外語句CSVを開く")
         open_exclusion_btn.clicked.connect(self._open_exclusion_csv)
         left_layout.addWidget(open_exclusion_btn)
@@ -1397,7 +1409,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 total_lines = int(self.spin_row_num.value())
                 exclusion_words = [w.strip() for w in self.combo_exclusion.currentText().split(',') if w.strip()]
                 attribute_conditions: List[dict] = []
-                selected_lines = []
+                selected_lines: List[Tuple[int, str]] = []
+                selected_ids: Set[int] = set()
+                dedup_removed = 0  # 重複排除で除外された件数を記録し、行数不足の診断に使う
                 if self.check_exclusion.isChecked() and exclusion_words:
                     self._update_exclusion_words(exclusion_words)
 
@@ -1435,7 +1449,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                     }
 
                     base_query = (
-                        "SELECT p.content FROM prompts p "
+                        "SELECT p.id, p.content FROM prompts p "
                         "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
                         "WHERE pad.attribute_detail_id = ?"
                     )
@@ -1453,19 +1467,47 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                     matching = cursor.fetchall()
                     attr_condition["matched_candidates"] = len(matching)
                     attribute_conditions.append(attr_condition)
-                    selected_lines.extend(random.sample(matching, min(count_int, len(matching))))
+                    sampled = random.sample(matching, min(count_int, len(matching)))
+                    for record in sampled:
+                        prompt_id = record[0]
+                        if self.check_dedup.isChecked() and prompt_id in selected_ids:
+                            dedup_removed += 1
+                            continue
+                        selected_lines.append(record)
+                        selected_ids.add(prompt_id)
 
                 remaining = total_lines - len(selected_lines)
                 if remaining > 0:
                     if self.check_exclusion.isChecked() and exclusion_words:
                         exclusion_condition = " AND " + " AND ".join("content NOT LIKE ?" for _ in exclusion_words)
-                        query = f"SELECT content FROM prompts WHERE 1=1 {exclusion_condition}"
+                        query = f"SELECT id, content FROM prompts WHERE 1=1 {exclusion_condition}"
                         cursor.execute(query, [f"%{w}%" for w in exclusion_words])
                     else:
-                        cursor.execute("SELECT content FROM prompts")
+                        cursor.execute("SELECT id, content FROM prompts")
                     all_prompts = cursor.fetchall()
-                    remaining_pool = [line for line in all_prompts if line not in selected_lines]
-                    selected_lines.extend(random.sample(remaining_pool, min(len(remaining_pool), remaining)))
+                    if self.check_dedup.isChecked():
+                        remaining_pool = [line for line in all_prompts if line[0] not in selected_ids]
+                        dedup_removed += len(all_prompts) - len(remaining_pool)
+                    else:
+                        remaining_pool = all_prompts
+                    sampled_remaining = random.sample(remaining_pool, min(len(remaining_pool), remaining))
+                    selected_lines.extend(sampled_remaining)
+                    if self.check_dedup.isChecked():
+                        selected_ids.update(line[0] for line in sampled_remaining)
+
+                if len(selected_lines) < total_lines:
+                    log_structured(
+                        logging.WARNING,
+                        "prompt_generation_shortage",
+                        {
+                            "requested_total_lines": total_lines,
+                            "selected_lines": len(selected_lines),
+                            "deduplication_enabled": bool(self.check_dedup.isChecked()),
+                            "deduplicated_rows": dedup_removed,
+                            "exclusion_words": exclusion_words,
+                            "attribute_conditions": attribute_conditions,
+                        },
+                    )
 
                 if not selected_lines:
                     self.main_prompt = ""
@@ -1475,6 +1517,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                         total_lines,
                         len(selected_lines),
                         0,
+                        dedup_removed,
                     )
                     self.update_option()
                     return
@@ -1482,7 +1525,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 random.shuffle(selected_lines)
                 processed_lines = []
                 for line in selected_lines:
-                    text = line[0].strip()
+                    text = line[1].strip()
                     if text.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
                         text = text[:-1] + "."
                     elif not text.endswith("."):
@@ -1497,6 +1540,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                         total_lines,
                         len(selected_lines),
                         len(processed_lines),
+                        dedup_removed,
                     )
                     self.update_option()
                     return
@@ -1520,6 +1564,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         total_lines: int,
         selected_count: int,
         processed_count: int,
+        dedup_removed: int,
     ) -> None:
         """抽出結果が空だった場合に、条件ログと再入力のヒントを提示する。"""
 
@@ -1540,6 +1585,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 "requested_total_lines": total_lines,
                 "selected_lines": selected_count,
                 "processed_lines": processed_count,
+                "deduplication_enabled": bool(self.check_dedup.isChecked()),
+                "deduplicated_rows": dedup_removed,
                 "exclusion_words": exclusion_words,
                 "attribute_conditions": attribute_conditions,
             },

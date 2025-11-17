@@ -564,6 +564,15 @@ class TextGeneratorApp:
         self.label_exclusion_words = tk.Label(self.exclusion_words_frame, text=LABEL_EXCLUSION_WORDS)
         self.label_exclusion_words.pack(side='left')
 
+        # 重複除外設定（同一IDの再利用を防ぐかどうかを制御）
+        self.dedup_frame = tk.Frame(self.main_frame)
+        self.dedup_frame.pack(fill='x')
+        self.deduplicate_var = tk.BooleanVar(value=DEDUPLICATE_PROMPTS)
+        self.checkbox_deduplicate = tk.Checkbutton(self.dedup_frame, variable=self.deduplicate_var)
+        self.checkbox_deduplicate.pack(side='right')
+        self.label_deduplicate = tk.Label(self.dedup_frame, text="重複除外: ")
+        self.label_deduplicate.pack(side='left')
+
         # 生成ボタン
         self.button_generate = tk.Button(self.main_frame, text=BUTTON_GENERATE, command=self.generate_text)
         self.button_generate.pack(pady=5, fill='x')
@@ -938,6 +947,8 @@ class TextGeneratorApp:
 
                 total_lines = int(self.entry_row_num.get())
                 selected_lines = []
+                selected_ids = set()
+                dedup_removed_count = 0  # 重複排除でスキップした件数を把握する
 
                 exclusion_words = [word.strip() for word in self.combo_exclusion_words.get().split(',') if word.strip()]
                 if self.add_exclusion_words_var.get() and exclusion_words:
@@ -980,7 +991,7 @@ class TextGeneratorApp:
                     if self.add_exclusion_words_var.get() and exclusion_words:
                         exclusion_condition = ' AND ' + ' AND '.join(f"p.content NOT LIKE ?" for _ in exclusion_words)
                         query = f'''
-                            SELECT p.content
+                            SELECT p.id, p.content
                             FROM prompts p
                             JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
                             WHERE pad.attribute_detail_id = ? {exclusion_condition}
@@ -989,32 +1000,59 @@ class TextGeneratorApp:
                         cursor.execute(query, params)
                     else:
                         cursor.execute('''
-                            SELECT p.content
+                            SELECT p.id, p.content
                             FROM prompts p
                             JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
                             WHERE pad.attribute_detail_id = ?
                         ''', (detail_id,))
 
                     matching_lines = cursor.fetchall()
-                    selected_lines.extend(random.sample(matching_lines, min(count, len(matching_lines))))
+                    sampled = random.sample(matching_lines, min(count, len(matching_lines)))
+                    for record in sampled:
+                        prompt_id = record[0]
+                        if self.deduplicate_var.get() and prompt_id in selected_ids:
+                            dedup_removed_count += 1
+                            continue
+                        selected_lines.append(record)
+                        selected_ids.add(prompt_id)
 
                 remaining_lines = total_lines - len(selected_lines)
                 if remaining_lines > 0:
                     if self.add_exclusion_words_var.get() and exclusion_words:
                         exclusion_condition = ' AND ' + ' AND '.join(f"content NOT LIKE ?" for _ in exclusion_words)
-                        query = f'SELECT content FROM prompts WHERE 1=1 {exclusion_condition}'
+                        query = f'SELECT id, content FROM prompts WHERE 1=1 {exclusion_condition}'
                         cursor.execute(query, [f"%{word}%" for word in exclusion_words])
                     else:
-                        cursor.execute('SELECT content FROM prompts')
+                        cursor.execute('SELECT id, content FROM prompts')
                     all_prompts = cursor.fetchall()
-                    remaining_pool = [line for line in all_prompts if line not in selected_lines]
-                    selected_lines.extend(random.sample(remaining_pool, remaining_lines))
+                    if self.deduplicate_var.get():
+                        remaining_pool = [line for line in all_prompts if line[0] not in selected_ids]
+                        dedup_removed_count += len(all_prompts) - len(remaining_pool)
+                    else:
+                        remaining_pool = all_prompts
+                    sampled_remaining = random.sample(remaining_pool, min(len(remaining_pool), remaining_lines))
+                    selected_lines.extend(sampled_remaining)
+                    if self.deduplicate_var.get():
+                        selected_ids.update(line[0] for line in sampled_remaining)
+
+                if len(selected_lines) < total_lines:
+                    log_structured(
+                        logging.WARNING,
+                        "prompt_generation_shortage",
+                        {
+                            "requested_total_lines": total_lines,
+                            "selected_lines": len(selected_lines),
+                            "deduplication_enabled": bool(self.deduplicate_var.get()),
+                            "deduplicated_rows": dedup_removed_count,
+                            "exclusion_words": exclusion_words,
+                        },
+                    )
 
                 random.shuffle(selected_lines)
 
                 processed_lines = []
                 for line in selected_lines:
-                    line = line[0].strip()  # タプルから文字列を取り出し、余分な空白を削除
+                    line = line[1].strip()  # タプルから文字列を取り出し、余分な空白を削除
                     if line.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
                         line = line[:-1] + "."
                     elif not line.endswith("."):
@@ -2488,6 +2526,7 @@ DEFAULT_TXT_PATH = settings["app_image_prompt_creator"]["DEFAULT_TXT_PATH"]
 DEFAULT_DB_PATH = settings["app_image_prompt_creator"]["DEFAULT_DB_PATH"]
 POSITION_FILE = settings["app_image_prompt_creator"]["POSITION_FILE"]
 EXCLUSION_CSV = settings["app_image_prompt_creator"]["EXCLUSION_CSV"]
+DEDUPLICATE_PROMPTS = settings["app_image_prompt_creator"].get("DEDUPLICATE_PROMPTS", True)
 LLM_ENABLED       = settings["app_image_prompt_creator"].get("LLM_ENABLED", False)
 LLM_MODEL         = settings["app_image_prompt_creator"].get("LLM_MODEL", "gpt-5-mini")
 LLM_TEMPERATURE   = settings["app_image_prompt_creator"].get("LLM_TEMPERATURE", 0.7)
