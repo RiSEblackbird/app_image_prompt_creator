@@ -20,7 +20,7 @@ app_image_prompt_creator:
   # Enable/disable LLM-based arrange
   LLM_ENABLED: true
   # Model name (must be available in your environment)
-  LLM_MODEL: gpt-5-mini
+  LLM_MODEL: gpt-4o-mini
   # Completion tokens limit for the arrange call
   LLM_MAX_COMPLETION_TOKENS: 800
   # HTTP timeout seconds for the arrange call

@@ -41,10 +41,11 @@ WINDOW_TITLE = "画像プロンプトランダム生成ツール (PySide6)"
 DEFAULT_ROW_NUM = 10
 DEFAULT_TAIL_MEDIA_TYPE = "image"
 AVAILABLE_LLM_MODELS = [
-    "gpt-5.1",
     "gpt-4o-mini",
     "gpt-4o",
+    "gpt-5.1",
 ]
+DEFAULT_LLM_MODEL = AVAILABLE_LLM_MODELS[0]
 TAIL_PRESET_CHOICES = {
     "image": [
         "",
@@ -89,7 +90,7 @@ DEFAULT_APP_SETTINGS = {
     "EXCLUSION_CSV": "./app_image_prompt_creator/exclusion_targets.csv",
     "ARRANGE_PRESETS_YAML": "./app_image_prompt_creator/arrange_presets.yaml",
     "LLM_ENABLED": False,
-    "LLM_MODEL": "gpt-5-mini",
+    "LLM_MODEL": DEFAULT_LLM_MODEL,
     "LLM_MAX_COMPLETION_TOKENS": 4500,
     "LLM_TIMEOUT": 30,
     "OPENAI_API_KEY_ENV": "OPENAI_API_KEY",
@@ -249,6 +250,27 @@ def _merge_app_settings(raw_settings: dict) -> dict:
     return merged
 
 
+def _normalize_llm_model(model_name: Optional[str]) -> str:
+    """設定値のモデル名を検証し、無効なら最初の有効モデルへフォールバックする。"""
+
+    if model_name in AVAILABLE_LLM_MODELS:
+        return model_name
+
+    fallback_model = AVAILABLE_LLM_MODELS[0]
+    SETTINGS_LOAD_NOTES.append(
+        f"無効なLLMモデル '{model_name}' を検出したため '{fallback_model}' へフォールバックしました。"
+    )
+    log_structured(
+        logging.WARNING,
+        "llm_model_invalid_fallback",
+        {
+            "invalid_model": model_name,
+            "fallback_model": fallback_model,
+        },
+    )
+    return fallback_model
+
+
 def _apply_app_settings(app_settings: dict):
     """マージ済み設定をグローバル変数へ適用する。"""
 
@@ -263,7 +285,7 @@ def _apply_app_settings(app_settings: dict):
     POSITION_FILE = app_settings.get("POSITION_FILE", DEFAULT_APP_SETTINGS["POSITION_FILE"])
     EXCLUSION_CSV = app_settings.get("EXCLUSION_CSV", DEFAULT_APP_SETTINGS["EXCLUSION_CSV"])
     LLM_ENABLED = app_settings.get("LLM_ENABLED", DEFAULT_APP_SETTINGS["LLM_ENABLED"])
-    LLM_MODEL = app_settings.get("LLM_MODEL", DEFAULT_APP_SETTINGS["LLM_MODEL"])
+    LLM_MODEL = _normalize_llm_model(app_settings.get("LLM_MODEL", DEFAULT_APP_SETTINGS["LLM_MODEL"]))
     LLM_TEMPERATURE = app_settings.get("LLM_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_TEMPERATURE"])
     LLM_MAX_COMPLETION_TOKENS = app_settings.get(
         "LLM_MAX_COMPLETION_TOKENS", DEFAULT_APP_SETTINGS["LLM_MAX_COMPLETION_TOKENS"]
@@ -276,6 +298,7 @@ def _apply_app_settings(app_settings: dict):
     LLM_INCLUDE_TEMPERATURE = app_settings.get(
         "LLM_INCLUDE_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
     )
+    settings["app_image_prompt_creator"]["LLM_MODEL"] = LLM_MODEL
 
 
 def initialize_settings(parent: Optional[QtWidgets.QWidget] = None):
@@ -679,7 +702,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.main_prompt: str = ""
         self.tail_free_texts: str = ""
         self.option_prompt: str = ""
-        self.available_model_choices = list(dict.fromkeys([LLM_MODEL, *AVAILABLE_LLM_MODELS]))
+        self.available_model_choices = list(AVAILABLE_LLM_MODELS)
         self._thread: Optional[QtCore.QThread] = None
         self._movie_llm_context: Optional[dict] = None
         self.font_scale_level = 0
@@ -690,6 +713,34 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.load_attribute_data()
         self.update_attribute_ui_choices()
         self._update_tail_free_text_choices(reset_selection=True)
+
+    def _ensure_model_choice_alignment(self) -> None:
+        """設定値とコンボボックスの候補がズレた場合に警告し、UIを有効モデルへ合わせる。"""
+
+        global LLM_MODEL
+        if not self.available_model_choices:
+            return
+
+        if LLM_MODEL not in self.available_model_choices:
+            fallback_model = self.available_model_choices[0]
+            SETTINGS_LOAD_NOTES.append(
+                f"UI候補に存在しないLLMモデル '{LLM_MODEL}' を検出したため '{fallback_model}' に切り替えました。"
+            )
+            log_structured(
+                logging.WARNING,
+                "llm_model_ui_mismatch",
+                {"configured_model": LLM_MODEL, "fallback_model": fallback_model},
+            )
+            target_model = fallback_model
+        else:
+            target_model = LLM_MODEL
+
+        index = self.combo_llm_model.findText(target_model)
+        if index < 0:
+            index = 0
+        self.combo_llm_model.setCurrentIndex(index)
+        LLM_MODEL = self.combo_llm_model.currentText()
+        self.label_current_model.setText(f"選択中: {LLM_MODEL}")
 
     # =============================
     # UI 構築
@@ -716,10 +767,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         model_layout.addWidget(QtWidgets.QLabel("LLMモデル:"))
         self.combo_llm_model = QtWidgets.QComboBox()
         self.combo_llm_model.addItems(self.available_model_choices)
-        self.combo_llm_model.setCurrentIndex(0)
         model_layout.addWidget(self.combo_llm_model)
         self.label_current_model = QtWidgets.QLabel(f"選択中: {self.combo_llm_model.currentText()}")
         model_layout.addWidget(self.label_current_model)
+        self._ensure_model_choice_alignment()
         self.combo_llm_model.currentTextChanged.connect(self._on_model_change)
 
         self.button_font_scale = QtWidgets.QPushButton("フォント: 標準")
