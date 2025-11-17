@@ -1046,13 +1046,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.attribute_combo_map = {}
         self.attribute_count_map = {}
         for attr in self.attribute_types:
-            detail_values = ["-"] + [
-                f"{detail.description} ({detail.content_count})"
-                for detail in self.attribute_details
-                if detail.attribute_type_id == attr.id and detail.content_count > 0
-            ]
             detail_combo = QtWidgets.QComboBox()
-            detail_combo.addItems(detail_values)
+            detail_combo.addItem("-", userData=None)
+            for detail in self.attribute_details:
+                if detail.attribute_type_id != attr.id or detail.content_count <= 0:
+                    continue
+                # 同一説明文があっても attribute_detail.id で一意に識別できるよう、ID を userData に格納する。
+                display_text = f"{detail.description} ({detail.content_count})"
+                detail_combo.addItem(display_text, userData=detail.id)
             detail_combo.setCurrentIndex(0)
             detail_combo.currentTextChanged.connect(self.auto_update)
 
@@ -1403,43 +1404,56 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 for attr in self.attribute_types:
                     detail_combo = self.attribute_combo_map[attr.id]
                     count_combo = self.attribute_count_map[attr.id]
-                    detail = detail_combo.currentText()
+                    selected_detail_id = detail_combo.currentData()
                     count = count_combo.currentText()
-                    if detail != "-" and count != "-":
-                        count_int = int(count)
-                        if count_int > 0:
-                            detail_description = detail.split(" (")[0]
-                            detail_value = next((d.value for d in self.attribute_details if d.description == detail_description), None)
-                            if detail_value:
-                                attr_condition = {
-                                    "attribute_id": attr.id,
-                                    "attribute_name": attr.attribute_name,
-                                    "detail": detail_description,
-                                    "requested_count": count_int,
-                                }
-                                if self.check_exclusion.isChecked() and exclusion_words:
-                                    exclusion_condition = " AND " + " AND ".join("p.content NOT LIKE ?" for _ in exclusion_words)
-                                    query = (
-                                        "SELECT p.content FROM prompts p "
-                                        "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
-                                        "JOIN attribute_details ad ON pad.attribute_detail_id = ad.id "
-                                        "WHERE ad.value = ? "
-                                        f"{exclusion_condition}"
-                                    )
-                                    params = [detail_value] + [f"%{word}%" for word in exclusion_words]
-                                    cursor.execute(query, params)
-                                else:
-                                    cursor.execute(
-                                        "SELECT p.content FROM prompts p "
-                                        "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
-                                        "JOIN attribute_details ad ON pad.attribute_detail_id = ad.id "
-                                        "WHERE ad.value = ?",
-                                        (detail_value,),
-                                    )
-                                matching = cursor.fetchall()
-                                attr_condition["matched_candidates"] = len(matching)
-                                attribute_conditions.append(attr_condition)
-                                selected_lines.extend(random.sample(matching, min(count_int, len(matching))))
+                    if selected_detail_id is None or count == "-":
+                        continue
+
+                    count_int = int(count)
+                    if count_int <= 0:
+                        continue
+
+                    detail_obj = next((d for d in self.attribute_details if d.id == selected_detail_id), None)
+                    if not detail_obj:
+                        log_structured(
+                            logging.WARNING,
+                            "attribute_detail_missing_in_state",
+                            {
+                                "attribute_id": attr.id,
+                                "selected_detail_id": selected_detail_id,
+                                "caller": "generate_text",
+                            },
+                        )
+                        continue
+
+                    attr_condition = {
+                        "attribute_id": attr.id,
+                        "attribute_name": attr.attribute_name,
+                        "detail": detail_obj.description,
+                        "detail_id": selected_detail_id,
+                        "requested_count": count_int,
+                    }
+
+                    base_query = (
+                        "SELECT p.content FROM prompts p "
+                        "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
+                        "WHERE pad.attribute_detail_id = ?"
+                    )
+
+                    if self.check_exclusion.isChecked() and exclusion_words:
+                        exclusion_condition = " AND " + " AND ".join(
+                            "p.content NOT LIKE ?" for _ in exclusion_words
+                        )
+                        query = f"{base_query}{exclusion_condition}"
+                        params = [selected_detail_id] + [f"%{word}%" for word in exclusion_words]
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute(base_query, (selected_detail_id,))
+
+                    matching = cursor.fetchall()
+                    attr_condition["matched_candidates"] = len(matching)
+                    attribute_conditions.append(attr_condition)
+                    selected_lines.extend(random.sample(matching, min(count_int, len(matching))))
 
                 remaining = total_lines - len(selected_lines)
                 if remaining > 0:

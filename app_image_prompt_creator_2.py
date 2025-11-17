@@ -874,17 +874,23 @@ class TextGeneratorApp:
         except Exception as e:
             messagebox.showerror("エラー", f"CSVファイルを開けませんでした: {str(e)}")
 
+    def _build_detail_items(self, attribute_type_id: int):
+        """重複説明でもIDで選択できるよう、表示テキストとIDをペアで返す。"""
+
+        items = [("-", None)]
+        for detail in self.attribute_details:
+            if detail['attribute_type_id'] == attribute_type_id and detail['content_count'] > 0:
+                items.append((f"{detail['description']} ({detail['content_count']})", detail['id']))
+        return items
+
     def update_attribute_details(self):
         self.load_attribute_data()
         for attribute_type in self.attribute_types:
             detail_combo = self.attribute_detail_combos[attribute_type['id']]
-            detail_values = ['-'] + [
-                f"{detail['description']} ({detail['content_count']})"
-                for detail in self.attribute_details
-                if detail['attribute_type_id'] == attribute_type['id'] and detail['content_count'] > 0
-            ]
-            detail_combo['values'] = detail_values
-            detail_combo.set('-')
+            detail_items = self._build_detail_items(attribute_type['id'])
+            detail_combo._items = detail_items
+            detail_combo['values'] = [text for text, _ in detail_items]
+            detail_combo.current(0)
 
     def select_file(self):
         file_path = tkinter.filedialog.askopenfilename()
@@ -902,14 +908,11 @@ class TextGeneratorApp:
             label = tk.Label(frame, text=attribute_type['description'], width=15, anchor='w')
             label.pack(side='left')
             
-            detail_values = ['-'] + [
-                f"{detail['description']} ({detail['content_count']})"
-                for detail in self.attribute_details
-                if detail['attribute_type_id'] == attribute_type['id'] and detail['content_count'] > 0
-            ]
-            detail_combo = ttk.Combobox(frame, values=detail_values, width=67, style="TCombobox", font=12, state="readonly")
+            detail_items = self._build_detail_items(attribute_type['id'])
+            detail_combo = ttk.Combobox(frame, values=[text for text, _ in detail_items], width=67, style="TCombobox", font=12, state="readonly")
             detail_combo.pack(side='left')
-            detail_combo.set('-')
+            detail_combo._items = detail_items
+            detail_combo.current(0)
             
             count_combo = ttk.Combobox(frame, values=['-'] + list(range(11)), width=5, style="TCombobox", font=18)
             count_combo.pack(side='left')
@@ -943,36 +946,57 @@ class TextGeneratorApp:
                     detail_combo = self.attribute_detail_combos[attribute_type['id']]
                     count_combo = self.attribute_count_combos[attribute_type['id']]
 
-                    detail = detail_combo.get()
+                    selected_index = detail_combo.current()
                     count = count_combo.get()
 
-                    if detail != '-' and count != '-':
-                        count = int(count)
-                        if count > 0:
-                            detail_description = detail.split(' (')[0]  # Remove the content count
-                            detail_value = next((d['value'] for d in self.attribute_details if d['description'] == detail_description), None)
-                            if detail_value:
-                                if self.add_exclusion_words_var.get() and exclusion_words:
-                                    exclusion_condition = ' AND ' + ' AND '.join(f"p.content NOT LIKE ?" for _ in exclusion_words)
-                                    query = f'''
-                                        SELECT p.content
-                                        FROM prompts p
-                                        JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
-                                        JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
-                                        WHERE ad.value = ? {exclusion_condition}
-                                    '''
-                                    params = [detail_value] + [f'%{word}%' for word in exclusion_words]
-                                    cursor.execute(query, params)
-                                else:
-                                    cursor.execute('''
-                                        SELECT p.content
-                                        FROM prompts p
-                                        JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
-                                        JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
-                                        WHERE ad.value = ?
-                                    ''', (detail_value,))
-                                matching_lines = cursor.fetchall()
-                                selected_lines.extend(random.sample(matching_lines, min(count, len(matching_lines))))
+                    if selected_index is None or selected_index < 0 or count == '-':
+                        continue
+
+                    try:
+                        _, detail_id = detail_combo._items[selected_index]
+                    except (AttributeError, IndexError):
+                        detail_id = None
+
+                    if detail_id is None:
+                        continue
+
+                    count = int(count)
+                    if count <= 0:
+                        continue
+
+                    detail_record = next((d for d in self.attribute_details if d['id'] == detail_id), None)
+                    if detail_record is None:
+                        log_structured(
+                            logging.WARNING,
+                            "attribute_detail_missing_in_state",
+                            {
+                                "attribute_id": attribute_type['id'],
+                                "selected_detail_id": detail_id,
+                                "caller": "generate_text_tk",
+                            },
+                        )
+                        continue
+
+                    if self.add_exclusion_words_var.get() and exclusion_words:
+                        exclusion_condition = ' AND ' + ' AND '.join(f"p.content NOT LIKE ?" for _ in exclusion_words)
+                        query = f'''
+                            SELECT p.content
+                            FROM prompts p
+                            JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
+                            WHERE pad.attribute_detail_id = ? {exclusion_condition}
+                        '''
+                        params = [detail_id] + [f'%{word}%' for word in exclusion_words]
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute('''
+                            SELECT p.content
+                            FROM prompts p
+                            JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
+                            WHERE pad.attribute_detail_id = ?
+                        ''', (detail_id,))
+
+                    matching_lines = cursor.fetchall()
+                    selected_lines.extend(random.sample(matching_lines, min(count, len(matching_lines))))
 
                 remaining_lines = total_lines - len(selected_lines)
                 if remaining_lines > 0:
