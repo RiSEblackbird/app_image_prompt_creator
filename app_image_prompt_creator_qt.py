@@ -26,6 +26,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import time
 from typing import Iterable, List, Optional, Tuple
 
 import requests
@@ -421,17 +422,107 @@ def _parse_openai_response(response_kind: str, data: dict):
     return text, finish_reason
 
 
+def _summarize_http_error_response(resp: requests.Response) -> str:
+    """OpenAI HTTPエラーの概要を抽出し、リトライ判定やUI表示に使いやすい形にまとめる。"""
+    if resp is None:
+        return ""
+    try:
+        data = resp.json()
+    except ValueError:
+        data = None
+    request_id = resp.headers.get("x-request-id") or resp.headers.get("x-requestid")
+    summary = ""
+    if isinstance(data, dict):
+        err = data.get("error") or data
+        if isinstance(err, dict):
+            parts = []
+            if err.get("message"):
+                parts.append(f"message='{err['message']}'")
+            if err.get("code"):
+                parts.append(f"code={err['code']}")
+            if err.get("type"):
+                parts.append(f"type={err['type']}")
+            summary = ", ".join(parts) or str(err)
+        else:
+            summary = str(err)
+    else:
+        raw_text = (resp.text or "").strip()
+        if len(raw_text) > 600:
+            raw_text = raw_text[:600] + "...(truncated)"
+        summary = raw_text
+    if request_id:
+        return f"{summary} (request_id={request_id})"
+    return summary
+
+
+def _build_user_error_message(status_code, summary: str) -> str:
+    """ユーザー通知用のLLMエラーメッセージを生成する。"""
+    base = f"LLMリクエストに失敗しました (ステータス: {status_code})"
+    if summary:
+        return f"{base}: {summary}"
+    return base
+
+
+def _log_llm_failure(model_name: str, endpoint: str, status, message: str, retry_count: int):
+    """サポート調査しやすいよう、構造化したエントリで失敗ログを残す。"""
+    logging.error(
+        "event=llm_request_failed model=%s endpoint=%s status=%s retries=%s message=\"%s\"",
+        model_name or LLM_MODEL,
+        endpoint,
+        status,
+        retry_count,
+        message,
+    )
+
+
 def send_llm_request(api_key: str, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, timeout: int, model_name: str, include_temperature: bool = True):
+    """OpenAI呼び出しを共通化し、限定的リトライとUI向けのエラー情報を併せて返す。"""
     endpoint, payload, response_kind = _compose_openai_payload(system_prompt, user_prompt, temperature, max_tokens, include_temperature, model_name)
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    resp = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.json()
-    text, finish_reason = _parse_openai_response(response_kind, data)
-    return text, finish_reason, data
+    retry_count = 0
+    backoff = 1.0
+    max_retries = 2
+    while True:
+        try:
+            resp = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
+            status = resp.status_code
+            if (status == 429 or status >= 500) and retry_count < max_retries:
+                summary = _summarize_http_error_response(resp)
+                user_message = _build_user_error_message(status, summary)
+                _log_llm_failure(model_name, endpoint, status, user_message, retry_count)
+                retry_count += 1
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            text, finish_reason = _parse_openai_response(response_kind, data)
+            return text, finish_reason, data, retry_count, "", status
+        except requests.exceptions.HTTPError as http_err:
+            resp = getattr(http_err, "response", None)
+            status = resp.status_code if resp is not None else "unknown"
+            summary = _summarize_http_error_response(resp)
+            user_message = _build_user_error_message(status, summary)
+            _log_llm_failure(model_name, endpoint, status, user_message, retry_count)
+            if isinstance(status, int) and (status == 429 or status >= 500) and retry_count < max_retries:
+                retry_count += 1
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            return "", "", None, retry_count, user_message, status
+        except requests.exceptions.RequestException as req_err:
+            status = getattr(getattr(req_err, "response", None), "status_code", "network_error")
+            user_message = _build_user_error_message(status, str(req_err))
+            _log_llm_failure(model_name, endpoint, status, user_message, retry_count)
+            if retry_count < max_retries:
+                retry_count += 1
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            return "", "", None, retry_count, user_message, status
 
 
 @dataclass
@@ -479,7 +570,7 @@ class LLMWorker(QtCore.QObject):
                 self.model,
                 LLM_TEMPERATURE,
             )
-            content, finish_reason, _ = send_llm_request(
+            content, finish_reason, _, retry_count, error_message, status_code = send_llm_request(
                 api_key=api_key,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -489,6 +580,11 @@ class LLMWorker(QtCore.QObject):
                 model_name=self.model,
                 include_temperature=LLM_INCLUDE_TEMPERATURE,
             )
+            if error_message:
+                self.failed.emit(f"{error_message} (リトライ回数: {retry_count}, ステータス: {status_code})")
+                return
+            if retry_count:
+                logging.info("LLM length adjustment succeeded after retries=%s", retry_count)
             if finish_reason in LENGTH_LIMIT_REASONS:
                 self.failed.emit("LLM応答がトークン制限に達しました。短くして再試行してください。")
                 return
@@ -518,7 +614,7 @@ class MovieLLMWorker(QtCore.QObject):
                 self.failed.emit(f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
                 return
             system_prompt, user_prompt = self._build_prompts()
-            content, finish_reason, _ = send_llm_request(
+            content, finish_reason, _, retry_count, error_message, status_code = send_llm_request(
                 api_key=api_key,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -528,6 +624,11 @@ class MovieLLMWorker(QtCore.QObject):
                 model_name=self.model,
                 include_temperature=LLM_INCLUDE_TEMPERATURE,
             )
+            if error_message:
+                self.failed.emit(f"{error_message} (リトライ回数: {retry_count}, ステータス: {status_code})")
+                return
+            if retry_count:
+                logging.info("Movie prompt transformation succeeded after retries=%s", retry_count)
             if finish_reason in LENGTH_LIMIT_REASONS:
                 self.failed.emit("LLM応答がトークン制限に達しました。短くして再試行してください。")
                 return

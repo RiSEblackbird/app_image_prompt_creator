@@ -20,6 +20,7 @@ from contextlib import closing
 import yaml
 import requests
 from pathlib import Path
+import time
 from export_prompts_to_csv import MJImage
 import re
 from typing import Optional
@@ -1309,7 +1310,7 @@ class TextGeneratorApp:
             
             system_prompt = self._append_temperature_hint_for_model(system_prompt, adjusted_temperature)
             
-            raw_content, finish_reason, data = send_llm_request(
+            raw_content, finish_reason, data, retry_count, error_message, status_code = send_llm_request(
                 api_key=api_key,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -1319,6 +1320,14 @@ class TextGeneratorApp:
                 model_name=selected_model,
                 include_temperature=not _should_use_responses_api(selected_model)
             )
+            if error_message:
+                messagebox.showerror(
+                    "エラー",
+                    f"文字数調整中にAPI呼び出しが失敗しました。\n{error_message}\nリトライ回数: {retry_count}",
+                )
+                return None
+            if retry_count:
+                print(f"    リトライ後に成功: {retry_count} 回の再試行")
             print(f"    生レスポンス: '{raw_content}'")
             print(f"    終了理由: {finish_reason}")
             
@@ -1337,24 +1346,6 @@ class TextGeneratorApp:
             # 元にオプションがなければ付与しない。ある場合のみ継承
             return self._inherit_options_if_present(text, content)
                 
-        except requests.HTTPError as e:
-            error_msg = f"HTTPエラー: {e}"
-            print(f"    {error_msg}")
-            messagebox.showerror("エラー", f"文字数調整中にHTTPエラーが発生しました: {error_msg}")
-            return None
-            
-        except requests.exceptions.Timeout as e:
-            error_msg = f"タイムアウト: {e}"
-            print(f"    {error_msg}")
-            messagebox.showerror("エラー", f"文字数調整中にタイムアウトが発生しました: {error_msg}")
-            return None
-            
-        except requests.exceptions.ConnectionError as e:
-            error_msg = f"接続エラー: {e}"
-            print(f"    {error_msg}")
-            messagebox.showerror("エラー", f"文字数調整中に接続エラーが発生しました: {error_msg}")
-            return None
-            
         except Exception as e:
             error_msg = f"予期しないエラー: {e}"
             print(f"    {error_msg}")
@@ -1582,7 +1573,7 @@ class TextGeneratorApp:
                 print(f"    プロンプト長: {len(user_prompt)} 文字")
                 print(f"    システムプロンプト長: {len(system_prompt)} 文字")
                 print(f"    トークン制限: {LLM_MAX_COMPLETION_TOKENS}")
-                raw_content, finish_reason, data = send_llm_request(
+                raw_content, finish_reason, data, retry_count, error_message, status_code = send_llm_request(
                     api_key=api_key,
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
@@ -1592,28 +1583,19 @@ class TextGeneratorApp:
                     model_name=selected_model,
                     include_temperature=allow_temperature
                 )
-            except requests.HTTPError as e:
-                resp = getattr(e, "response", None)
-                resp_text = ""
-                if resp is not None:
-                    try:
-                        resp_text = resp.text
-                    except Exception:
-                        resp_text = ""
-                error_msg = f"HTTPエラー: {e}"
-                error_hint = _summarize_http_error_response(resp)
-                print(f"    {error_msg}")
-                if error_hint:
-                    print(f"    HTTPエラー詳細: {error_hint}")
-                detail_entry = f"試行{attempt + 1}: {error_msg}"
-                if error_hint:
-                    detail_entry = f"{detail_entry} | {error_hint}"
-                error_details.append(detail_entry)
-                last_error = e
-                if resp is not None and resp.status_code == 400 and 'temperature' in (resp_text or ""):
-                    print(f"    temperature未対応のため再試行")
-                    try:
-                        raw_content, finish_reason, data = send_llm_request(
+                if error_message:
+                    detail_entry = f"試行{attempt + 1}: {error_message} | リトライ回数={retry_count}"
+                    error_details.append(detail_entry)
+                    last_error = Exception(error_message)
+                    error_text = (error_message or "").lower()
+                    if (
+                        isinstance(status_code, int)
+                        and status_code == 400
+                        and "temperature" in error_text
+                        and allow_temperature
+                    ):
+                        print(f"    temperature未対応のため再試行")
+                        raw_content, finish_reason, data, retry_count, error_message, status_code = send_llm_request(
                             api_key=api_key,
                             system_prompt=system_prompt,
                             user_prompt=user_prompt,
@@ -1623,27 +1605,17 @@ class TextGeneratorApp:
                             model_name=selected_model,
                             include_temperature=False
                         )
+                        if error_message:
+                            fallback_msg = f"フォールバック失敗: {error_message}"
+                            print(f"    {fallback_msg}")
+                            error_details.append(f"試行{attempt + 1}: {fallback_msg}")
+                            last_error = Exception(error_message)
+                            continue
                         print(f"    temperature除去フォールバック成功")
-                    except Exception as fallback_error:
-                        fallback_msg = f"フォールバック失敗: {fallback_error}"
-                        print(f"    {fallback_msg}")
-                        error_details.append(f"試行{attempt + 1}: {fallback_msg}")
-                        last_error = fallback_error
+                    else:
                         continue
-                else:
-                    continue
-            except requests.exceptions.Timeout as e:
-                error_msg = f"タイムアウト: {e}"
-                print(f"    {error_msg}")
-                error_details.append(f"試行{attempt + 1}: {error_msg}")
-                last_error = e
-                continue
-            except requests.exceptions.ConnectionError as e:
-                error_msg = f"接続エラー: {e}"
-                print(f"    {error_msg}")
-                error_details.append(f"試行{attempt + 1}: {error_msg}")
-                last_error = e
-                continue
+                if retry_count:
+                    print(f"    リトライ後に成功: {retry_count} 回の再試行")
             except Exception as e:
                 error_msg = f"予期しないエラー: {e}"
                 print(f"    {error_msg}")
@@ -1754,7 +1726,7 @@ class TextGeneratorApp:
         system_prompt = self._append_temperature_hint_for_model(system_prompt, LLM_TEMPERATURE)
 
         try:
-            raw_content, finish_reason, data = send_llm_request(
+            raw_content, finish_reason, data, retry_count, error_message, status_code = send_llm_request(
                 api_key=api_key,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -1764,6 +1736,14 @@ class TextGeneratorApp:
                 model_name=selected_model,
                 include_temperature=not _should_use_responses_api(selected_model),
             )
+            if error_message:
+                messagebox.showerror(
+                    "エラー",
+                    f"{label}のLLM呼び出しが失敗しました。\n{error_message}\nリトライ回数: {retry_count}",
+                )
+                return None
+            if retry_count:
+                print(f"    {label}処理はリトライ後に成功 (再試行回数: {retry_count})")
             if finish_reason in LENGTH_LIMIT_REASONS:
                 messagebox.showwarning("注意", f"{label}のLLM応答がトークン制限に達しました。プロンプトを短縮して再実行してください。")
                 return None
@@ -1771,12 +1751,6 @@ class TextGeneratorApp:
                 messagebox.showwarning("注意", f"{label}で空のレスポンスが返されました。")
                 return None
             return sanitize_to_english(raw_content).strip()
-        except requests.exceptions.Timeout as e:
-            messagebox.showerror("エラー", f"{label}実行中にタイムアウトしました: {e}")
-            return None
-        except requests.exceptions.ConnectionError as e:
-            messagebox.showerror("エラー", f"{label}実行中に接続エラーが発生しました: {e}")
-            return None
         except Exception:
             messagebox.showerror("エラー", f"{label}実行中にエラーが発生しました:\n{get_exception_trace()}")
             return None
@@ -2567,6 +2541,26 @@ def _summarize_http_error_response(resp: requests.Response) -> str:
         return f"{summary} (request_id={request_id})"
     return summary
 
+
+def _build_user_error_message(status_code, summary: str) -> str:
+    """UIに表示する際のステータス付きメッセージを統一生成する。"""
+    base = f"LLMリクエストに失敗しました (ステータス: {status_code})"
+    if summary:
+        return f"{base}: {summary}"
+    return base
+
+
+def _log_llm_failure(model_name: str, endpoint: str, status, message: str, retry_count: int):
+    """調査時に必要な要素を揃えた構造化ログを出力する。"""
+    logging.error(
+        "event=llm_request_failed model=%s endpoint=%s status=%s retries=%s message=\"%s\"",
+        model_name or LLM_MODEL,
+        endpoint,
+        status,
+        retry_count,
+        message,
+    )
+
 def _parse_openai_response(response_kind: str, data: dict):
     """レスポンス構造の差分を吸収し、本文と終了理由を抽出する。"""
     if response_kind == "responses":
@@ -2603,6 +2597,7 @@ def send_llm_request(api_key: str, system_prompt: str, user_prompt: str, tempera
     """
     OpenAI API（Chat/Responses）への共通リクエスト送信関数。
     gpt-5以降の仕様差異を内部で吸収し、本文と終了理由を返す。
+    429/5xx は指数バックオフで少数回リトライし、失敗時はユーザー向けエラー文と言及可能なリトライ回数を返却する。
     """
     endpoint, payload, response_kind = _compose_openai_payload(system_prompt, user_prompt, temperature, max_tokens, include_temperature, model_name)
     headers = {
@@ -2624,12 +2619,52 @@ def send_llm_request(api_key: str, system_prompt: str, user_prompt: str, tempera
         print(f"    payload概要: blocks={block_summaries}, max_output_tokens={payload.get('max_output_tokens')}")
     else:
         print(f"    payload概要: messages={len(payload.get('messages', []))}, max_completion_tokens={payload.get('max_completion_tokens')}")
-    resp = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
-    print(f"    レスポンスステータス: {resp.status_code}")
-    resp.raise_for_status()
-    data = resp.json()
-    text, finish_reason = _parse_openai_response(response_kind, data)
-    return text, finish_reason, data
+
+    retry_count = 0
+    backoff = 1.0
+    max_retries = 2
+    while True:
+        try:
+            resp = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
+            status = resp.status_code
+            print(f"    レスポンスステータス: {status}")
+            if (status == 429 or status >= 500) and retry_count < max_retries:
+                error_hint = _summarize_http_error_response(resp)
+                user_message = _build_user_error_message(status, error_hint)
+                _log_llm_failure(model_name, endpoint, status, user_message, retry_count)
+                retry_count += 1
+                print(f"    リトライ実施 ({retry_count}/{max_retries})。待機 {backoff} 秒")
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            text, finish_reason = _parse_openai_response(response_kind, data)
+            return text, finish_reason, data, retry_count, "", status
+        except requests.exceptions.HTTPError as http_err:
+            resp = getattr(http_err, "response", None)
+            status = resp.status_code if resp is not None else "unknown"
+            error_hint = _summarize_http_error_response(resp)
+            user_message = _build_user_error_message(status, error_hint)
+            _log_llm_failure(model_name, endpoint, status, user_message, retry_count)
+            if isinstance(status, int) and (status == 429 or status >= 500) and retry_count < max_retries:
+                retry_count += 1
+                print(f"    HTTPエラーでリトライ ({retry_count}/{max_retries})。待機 {backoff} 秒")
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            return "", "", None, retry_count, user_message, status
+        except requests.exceptions.RequestException as req_err:
+            status = getattr(getattr(req_err, "response", None), "status_code", "network_error")
+            user_message = _build_user_error_message(status, str(req_err))
+            _log_llm_failure(model_name, endpoint, status, user_message, retry_count)
+            if retry_count < max_retries:
+                retry_count += 1
+                print(f"    接続系エラーでリトライ ({retry_count}/{max_retries})。待機 {backoff} 秒")
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            return "", "", None, retry_count, user_message, status
 
 DEFAULT_EXCLUSION_WORDS = load_exclusion_words()
 
