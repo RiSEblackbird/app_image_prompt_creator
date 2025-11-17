@@ -12,14 +12,17 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter import font as tkfont
 import random
 import json
+import logging
 import csv
 import socket
 import sqlite3
+from contextlib import closing
 import yaml
 import requests
 from pathlib import Path
 from export_prompts_to_csv import MJImage
 import re
+from typing import Optional
 
 # 定数の定義
 WINDOW_TITLE = "画像プロンプトランダム生成ツール"
@@ -75,6 +78,43 @@ Q_OPTIONS = ["", "1", "2"]
 WEIRD_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "500", "750", "1000", "1250", "1500", "1750", "2000", "2250", "2500", "2750", "3000"]  # 'weird'オプションの項目
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+HOSTNAME = socket.gethostname()
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s\t%(message)s")
+
+
+def log_structured(level: int, event: str, context: Optional[dict] = None) -> None:
+    """ホスト名とパス情報を含めた構造化ログを出力し、環境差分の切り分けを容易にする。"""
+
+    payload = {"event": event, "hostname": HOSTNAME}
+    if context:
+        payload.update(context)
+    logging.log(level, json.dumps(payload, ensure_ascii=False))
+
+
+def build_db_missing_message(db_path: Path) -> str:
+    """DB欠損時に具体的な復旧手順をまとめた案内文を返す。"""
+
+    return (
+        "データベースファイルが見つかりませんでした。\n"
+        f"想定パス: {db_path}\n\n"
+        "セットアップ例:\n"
+        "1) `python export_prompts_to_csv.py` を実行して初期DBを生成する\n"
+        "2) アプリの『CSVをDBに投入』でCSVを登録する\n"
+        "3) ファイルを配置後にアプリを再起動する"
+    )
+
+
+def ensure_db_path(default_db_path: str) -> Optional[Path]:
+    """DBパスを検証し、欠損時はセットアップ手順を提示する。"""
+
+    db_path = Path(default_db_path)
+    log_structured(logging.INFO, "db_path_check", {"db_path": str(db_path)})
+    if db_path.exists():
+        return db_path
+    log_structured(logging.ERROR, "db_missing", {"db_path": str(db_path)})
+    messagebox.showerror("DB未検出", build_db_missing_message(db_path))
+    return None
 
 def _resolve_path(path_value, base_dir=SCRIPT_DIR):
     """
@@ -253,48 +293,63 @@ class CSVImportWindow:
             messagebox.showerror("エラー", f"CSVの処理中にエラーが発生しました: {get_exception_trace()}")
 
     def process_csv(self, csv_content):
-        conn = sqlite3.connect(DEFAULT_DB_PATH)
-        cursor = conn.cursor()
+        db_path = ensure_db_path(DEFAULT_DB_PATH)
+        if not db_path:
+            raise Exception("DB未検出のためCSV投入を中断しました")
 
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS prompts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT
-        )
-        ''')
+        try:
+            with closing(sqlite3.connect(db_path)) as conn:
+                cursor = conn.cursor()
 
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS prompt_attribute_details (
-            prompt_id INTEGER,
-            attribute_detail_id INTEGER,
-            FOREIGN KEY (prompt_id) REFERENCES prompts (id),
-            FOREIGN KEY (attribute_detail_id) REFERENCES attribute_details (id)
-        )
-        ''')
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS prompts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content TEXT
+                )
+                ''')
 
-        for line in csv_content.splitlines():
-            try:
-                if "citation[oaicite" in line or '```' in line: continue # ``` &#8203;:citation[oaicite:0]{index=0}&#8203;
-                if line.strip() and len(line) > 10 and [line[0], line[-1]] == ['"', '"']:  # 空行をスキップ
-                    # 最初と最後の引用符を削除し、中央のカンマで分割                
-                    line = line.replace('"""', '"')
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS prompt_attribute_details (
+                    prompt_id INTEGER,
+                    attribute_detail_id INTEGER,
+                    FOREIGN KEY (prompt_id) REFERENCES prompts (id),
+                    FOREIGN KEY (attribute_detail_id) REFERENCES attribute_details (id)
+                )
+                ''')
+
+                for line in csv_content.splitlines():
                     try:
-                        content, attribute_detail_ids = line.strip('"').split('","')
-                    except:
-                        content, attribute_detail_ids = line.strip('"').split('", "')
+                        if "citation[oaicite" in line or '```' in line:
+                            continue  # ``` &#8203;:citation[oaicite:0]{index=0}&#8203;
+                        if line.strip() and len(line) > 10 and [line[0], line[-1]] == ['"', '"']:  # 空行をスキップ
+                            # 最初と最後の引用符を削除し、中央のカンマで分割
+                            line = line.replace('"""', '"')
+                            try:
+                                content, attribute_detail_ids = line.strip('"').split('","')
+                            except Exception:
+                                content, attribute_detail_ids = line.strip('"').split('", "')
 
-                    cursor.execute('INSERT INTO prompts (content) VALUES (?)', (content,))
-                    prompt_id = cursor.lastrowid
-                    
-                    for attribute_detail_id in attribute_detail_ids.split(','):
-                        cursor.execute('INSERT INTO prompt_attribute_details (prompt_id, attribute_detail_id) VALUES (?, ?)',
-                                    (prompt_id, int(attribute_detail_id)))
-            except:
-                messagebox.showerror("エラー", f"CSVの処理中にエラーが発生しました: line: [{line}], {get_exception_trace()}")
-                raise Exception("投入プロセス強制終了")
+                            cursor.execute('INSERT INTO prompts (content) VALUES (?)', (content,))
+                            prompt_id = cursor.lastrowid
 
-        conn.commit()
-        conn.close()
+                            for attribute_detail_id in attribute_detail_ids.split(','):
+                                cursor.execute(
+                                    'INSERT INTO prompt_attribute_details (prompt_id, attribute_detail_id) VALUES (?, ?)',
+                                    (prompt_id, int(attribute_detail_id)),
+                                )
+                    except Exception:
+                        messagebox.showerror("エラー", f"CSVの処理中にエラーが発生しました: line: [{line}], {get_exception_trace()}")
+                        raise Exception("投入プロセス強制終了")
+
+                conn.commit()
+        except sqlite3.Error as exc:
+            log_structured(
+                logging.ERROR,
+                "db_connection_failed",
+                {"db_path": str(db_path), "error": str(exc), "caller": "CSVImportWindow.process_csv"},
+            )
+            messagebox.showerror("DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
+            raise
 
 class TextGeneratorApp:
     def __init__(self, master):
@@ -675,27 +730,45 @@ class TextGeneratorApp:
 
         self._log_current_model("initial")
 
+    def _get_db_path_or_warn(self) -> Optional[Path]:
+        """DBパスの検証を行い、欠損時は案内を出して処理を中断する。"""
+
+        return ensure_db_path(DEFAULT_DB_PATH)
+
     def load_attribute_data(self):
-        conn = sqlite3.connect(DEFAULT_DB_PATH)
-        cursor = conn.cursor()
+        db_path = self._get_db_path_or_warn()
+        if not db_path:
+            return
 
-        # attribute_types の取得
-        cursor.execute("SELECT id, attribute_name, description FROM attribute_types")
-        self.attribute_types = [{'id': row[0], 'attribute_name': row[1], 'description': row[2]} for row in cursor.fetchall()]
+        try:
+            with closing(sqlite3.connect(db_path)) as conn:
+                cursor = conn.cursor()
 
-        # attribute_details の取得（content数も含める）
-        cursor.execute("""
-            SELECT ad.id, ad.attribute_type_id, ad.description, ad.value, COUNT(DISTINCT pad.prompt_id) as content_count
-            FROM attribute_details ad
-            LEFT JOIN prompt_attribute_details pad ON ad.id = pad.attribute_detail_id
-            GROUP BY ad.id
-        """)
-        self.attribute_details = [
-            {'id': row[0], 'attribute_type_id': row[1], 'description': row[2], 'value': row[3], 'content_count': row[4]}
-            for row in cursor.fetchall()
-        ]
+                # attribute_types の取得
+                cursor.execute("SELECT id, attribute_name, description FROM attribute_types")
+                self.attribute_types = [
+                    {'id': row[0], 'attribute_name': row[1], 'description': row[2]} for row in cursor.fetchall()
+                ]
 
-        conn.close()
+                # attribute_details の取得（content数も含める）
+                cursor.execute("""
+                    SELECT ad.id, ad.attribute_type_id, ad.description, ad.value, COUNT(DISTINCT pad.prompt_id) as content_count
+                    FROM attribute_details ad
+                    LEFT JOIN prompt_attribute_details pad ON ad.id = pad.attribute_detail_id
+                    GROUP BY ad.id
+                """)
+                self.attribute_details = [
+                    {'id': row[0], 'attribute_type_id': row[1], 'description': row[2], 'value': row[3], 'content_count': row[4]}
+                    for row in cursor.fetchall()
+                ]
+        except sqlite3.Error as exc:
+            log_structured(
+                logging.ERROR,
+                "db_connection_failed",
+                {"db_path": str(db_path), "error": str(exc), "caller": "load_attribute_data"},
+            )
+            messagebox.showerror("DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
+            return
 
     def create_llm_model_selector_ui(self):
         """LLMモデルの選択UIを構築する。
@@ -805,82 +878,90 @@ class TextGeneratorApp:
             count_combo.option_add('*TCombobox*Listbox.font', self.combo_font)
 
     def generate_text(self):
+        db_path = self._get_db_path_or_warn()
+        if not db_path:
+            return
+
         try:
-            conn = sqlite3.connect(DEFAULT_DB_PATH)
-            cursor = conn.cursor()
-            
-            total_lines = int(self.entry_row_num.get())
-            selected_lines = []
-            
-            exclusion_words = [word.strip() for word in self.combo_exclusion_words.get().split(',') if word.strip()]
-            if self.add_exclusion_words_var.get() and exclusion_words:
-                self.update_exclusion_words()  # 除外語句を更新
-            for attribute_type in self.attribute_types:
-                detail_combo = self.attribute_detail_combos[attribute_type['id']]
-                count_combo = self.attribute_count_combos[attribute_type['id']]
-                
-                detail = detail_combo.get()
-                count = count_combo.get()
-                
-                if detail != '-' and count != '-':
-                    count = int(count)
-                    if count > 0:
-                        detail_description = detail.split(' (')[0]  # Remove the content count
-                        detail_value = next((d['value'] for d in self.attribute_details if d['description'] == detail_description), None)
-                        if detail_value:
-                            if self.add_exclusion_words_var.get() and exclusion_words:
-                                exclusion_condition = ' AND ' + ' AND '.join(f"p.content NOT LIKE ?" for _ in exclusion_words)
-                                query = f'''
-                                    SELECT p.content 
-                                    FROM prompts p
-                                    JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
-                                    JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
-                                    WHERE ad.value = ? {exclusion_condition}
-                                '''
-                                params = [detail_value] + [f'%{word}%' for word in exclusion_words]
-                                cursor.execute(query, params)
-                            else:
-                                cursor.execute('''
-                                    SELECT p.content 
-                                    FROM prompts p
-                                    JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
-                                    JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
-                                    WHERE ad.value = ?
-                                ''', (detail_value,))
-                            matching_lines = cursor.fetchall()
-                            selected_lines.extend(random.sample(matching_lines, min(count, len(matching_lines))))
-            
-            remaining_lines = total_lines - len(selected_lines)
-            if remaining_lines > 0:
-                # cursor.execute('SELECT content FROM prompts')
+            with closing(sqlite3.connect(db_path)) as conn:
+                cursor = conn.cursor()
+
+                total_lines = int(self.entry_row_num.get())
+                selected_lines = []
+
+                exclusion_words = [word.strip() for word in self.combo_exclusion_words.get().split(',') if word.strip()]
                 if self.add_exclusion_words_var.get() and exclusion_words:
-                    exclusion_condition = ' AND ' + ' AND '.join(f"content NOT LIKE ?" for _ in exclusion_words)
-                    query = f'SELECT content FROM prompts WHERE 1=1 {exclusion_condition}'
-                    cursor.execute(query, [f'%{word}%' for word in exclusion_words])
-                else:
-                    cursor.execute('SELECT content FROM prompts')
-                all_prompts = cursor.fetchall()
-                remaining_pool = [line for line in all_prompts if line not in selected_lines]
-                selected_lines.extend(random.sample(remaining_pool, remaining_lines))
-            
-            conn.close()
-            
-            random.shuffle(selected_lines)
-            
-            processed_lines = []
-            for line in selected_lines:
-                line = line[0].strip()  # タプルから文字列を取り出し、余分な空白を削除
-                if line.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
-                    line = line[:-1] + "."
-                elif not line.endswith("."):
-                    line += "."
-                processed_lines.append(line)
-            
-            self.main_prompt = ' '.join(processed_lines)
-            self.update_option()
+                    self.update_exclusion_words()  # 除外語句を更新
+                for attribute_type in self.attribute_types:
+                    detail_combo = self.attribute_detail_combos[attribute_type['id']]
+                    count_combo = self.attribute_count_combos[attribute_type['id']]
+
+                    detail = detail_combo.get()
+                    count = count_combo.get()
+
+                    if detail != '-' and count != '-':
+                        count = int(count)
+                        if count > 0:
+                            detail_description = detail.split(' (')[0]  # Remove the content count
+                            detail_value = next((d['value'] for d in self.attribute_details if d['description'] == detail_description), None)
+                            if detail_value:
+                                if self.add_exclusion_words_var.get() and exclusion_words:
+                                    exclusion_condition = ' AND ' + ' AND '.join(f"p.content NOT LIKE ?" for _ in exclusion_words)
+                                    query = f'''
+                                        SELECT p.content
+                                        FROM prompts p
+                                        JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
+                                        JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
+                                        WHERE ad.value = ? {exclusion_condition}
+                                    '''
+                                    params = [detail_value] + [f'%{word}%' for word in exclusion_words]
+                                    cursor.execute(query, params)
+                                else:
+                                    cursor.execute('''
+                                        SELECT p.content
+                                        FROM prompts p
+                                        JOIN prompt_attribute_details pad ON p.id = pad.prompt_id
+                                        JOIN attribute_details ad ON pad.attribute_detail_id = ad.id
+                                        WHERE ad.value = ?
+                                    ''', (detail_value,))
+                                matching_lines = cursor.fetchall()
+                                selected_lines.extend(random.sample(matching_lines, min(count, len(matching_lines))))
+
+                remaining_lines = total_lines - len(selected_lines)
+                if remaining_lines > 0:
+                    if self.add_exclusion_words_var.get() and exclusion_words:
+                        exclusion_condition = ' AND ' + ' AND '.join(f"content NOT LIKE ?" for _ in exclusion_words)
+                        query = f'SELECT content FROM prompts WHERE 1=1 {exclusion_condition}'
+                        cursor.execute(query, [f"%{word}%" for word in exclusion_words])
+                    else:
+                        cursor.execute('SELECT content FROM prompts')
+                    all_prompts = cursor.fetchall()
+                    remaining_pool = [line for line in all_prompts if line not in selected_lines]
+                    selected_lines.extend(random.sample(remaining_pool, remaining_lines))
+
+                random.shuffle(selected_lines)
+
+                processed_lines = []
+                for line in selected_lines:
+                    line = line[0].strip()  # タプルから文字列を取り出し、余分な空白を削除
+                    if line.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
+                        line = line[:-1] + "."
+                    elif not line.endswith("."):
+                        line += "."
+                    processed_lines.append(line)
+
+                self.main_prompt = ' '.join(processed_lines)
+                self.update_option()
+        except sqlite3.Error as exc:
+            log_structured(
+                logging.ERROR,
+                "db_connection_failed",
+                {"db_path": str(db_path), "error": str(exc), "caller": "generate_text"},
+            )
+            messagebox.showerror("DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
         except ValueError:
             messagebox.showerror("エラー", "行数は整数で入力してください。")
-        except Exception as e:
+        except Exception:
             messagebox.showerror("エラー", f"エラーが発生しました: {get_exception_trace()}")
 
     def make_option_prompt(self):
