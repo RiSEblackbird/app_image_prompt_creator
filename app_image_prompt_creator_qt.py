@@ -1042,11 +1042,19 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         tokens = (text or "").strip().split()
         if not tokens:
             return "", ""
+
         movie_tail = ""
-        if tokens and tokens[-1].startswith("{") and "video_style" in tokens[-1]:
-            movie_tail = tokens[-1]
-            tokens = tokens[:-1]
-        return " ".join(tokens), movie_tail
+        movie_idx = None
+        for i in range(len(tokens) - 1, -1, -1):
+            if tokens[i].startswith("{") and "video_style" in tokens[i]:
+                movie_idx = i
+                break
+
+        if movie_idx is not None:
+            movie_tail = tokens[movie_idx]
+            tokens = tokens[:movie_idx] + tokens[movie_idx + 1 :]
+
+        return " ".join(tokens).strip(), movie_tail
 
     def _split_prompt_and_options(self, text: str):
         try:
