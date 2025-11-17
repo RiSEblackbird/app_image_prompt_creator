@@ -66,6 +66,13 @@ LENGTH_LIMIT_REASONS = {"length", "max_output_tokens"}
 HOSTNAME = socket.gethostname()
 SCRIPT_DIR = Path(__file__).resolve().parent
 
+FONT_SCALE_PRESETS = [
+    {"label": "標準", "pt": 11},
+    {"label": "大", "pt": 13},
+    {"label": "特大", "pt": 16},
+    {"label": "4K", "pt": 20},
+]
+
 
 def _resolve_path(path_value, base_dir=SCRIPT_DIR):
     if path_value is None:
@@ -389,7 +396,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.available_model_choices = list(dict.fromkeys([LLM_MODEL, *AVAILABLE_LLM_MODELS]))
         self._thread: Optional[QtCore.QThread] = None
         self._movie_llm_context: Optional[dict] = None
+        self.font_scale_level = 0
+        self._ui_font_family = self.font().family()
+        self.button_font_scale: Optional[QtWidgets.QPushButton] = None
         self._build_ui()
+        self._apply_font_scale()
         self.load_attribute_data()
         self.update_attribute_ui_choices()
         self._update_tail_free_text_choices(reset_selection=True)
@@ -424,6 +435,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.label_current_model = QtWidgets.QLabel(f"選択中: {self.combo_llm_model.currentText()}")
         model_layout.addWidget(self.label_current_model)
         self.combo_llm_model.currentTextChanged.connect(self._on_model_change)
+
+        self.button_font_scale = QtWidgets.QPushButton("フォント: 標準")
+        self.button_font_scale.setToolTip("UI全体のフォントサイズを段階的に切り替えます。")
+        self.button_font_scale.clicked.connect(self.cycle_font_scale)
+        left_layout.addWidget(self.button_font_scale)
 
         # CSV 入出力
         csv_buttons = QtWidgets.QHBoxLayout()
@@ -1125,6 +1141,34 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.main_prompt = core
         self.tail_free_texts = f" {movie_tail}" if movie_tail else ""
         self.option_prompt = options_tail
+
+    # =============================
+    # フォント制御
+    # =============================
+    def cycle_font_scale(self):
+        """UI全体のフォントプリセットを巡回させる。"""
+        if not FONT_SCALE_PRESETS:
+            return
+        self.font_scale_level = (self.font_scale_level + 1) % len(FONT_SCALE_PRESETS)
+        self._apply_font_scale()
+
+    def _apply_font_scale(self):
+        """現在のプリセットを QApplication とウィンドウ自身へ適用する。"""
+        if not FONT_SCALE_PRESETS:
+            return
+        preset = FONT_SCALE_PRESETS[self.font_scale_level]
+        base_family = self._ui_font_family or self.font().family()
+        new_font = QtGui.QFont(base_family, preset["pt"])
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.setFont(new_font)
+        self.setFont(new_font)
+        self._update_font_button_label(preset["label"])
+
+    def _update_font_button_label(self, label: str):
+        """フォント切替ボタンのラベルを最新状態に揃える。"""
+        if self.button_font_scale:
+            self.button_font_scale.setText(f"フォント: {label}")
 
 
 def main():
