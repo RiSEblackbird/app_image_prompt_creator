@@ -974,6 +974,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._show_db_missing_dialog(db_path)
         return None
 
+    def _connect_with_foreign_keys(self, db_path: Path) -> sqlite3.Connection:
+        """外部キー制約を確実に有効化した SQLite 接続を返す。"""
+
+        conn = sqlite3.connect(db_path)
+        # 参照整合性を SQLite 側で強制し、欠損 ID の混入を初期段階で防ぐ。
+        conn.execute("PRAGMA foreign_keys = ON;")
+        return conn
+
     def _build_db_missing_message(self, db_path: Path) -> str:
         """初回セットアップを明示した案内文を生成する。"""
 
@@ -1003,7 +1011,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            with closing(sqlite3.connect(db_path)) as conn:
+            with closing(self._connect_with_foreign_keys(db_path)) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT id, attribute_name, description FROM attribute_types")
                 for row in cursor.fetchall():
@@ -1149,7 +1157,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            with closing(sqlite3.connect(db_path)) as conn:
+            with closing(self._connect_with_foreign_keys(db_path)) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT id, description FROM attribute_details ORDER BY id LIMIT 5"
@@ -1225,7 +1233,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         failed_export_path: Optional[Path] = None
 
         try:
-            with closing(sqlite3.connect(db_path)) as conn:
+            with closing(self._connect_with_foreign_keys(db_path)) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -1270,6 +1278,35 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                             attribute_detail_ids = [int(token) for token in id_tokens]
                         except ValueError:
                             failed_rows.append((line_number, raw_line, "attribute_detail_id は数値で入力してください"))
+                            continue
+
+                        # attribute_detail_id がDBに存在するかを事前検証し、不整合行は即座に弾く。
+                        missing_ids: List[int] = []
+                        for attribute_detail_id in attribute_detail_ids:
+                            cursor.execute(
+                                "SELECT 1 FROM attribute_details WHERE id = ?", (attribute_detail_id,)
+                            )
+                            if cursor.fetchone() is None:
+                                missing_ids.append(attribute_detail_id)
+
+                        if missing_ids:
+                            missing_summary = ", ".join(str(id_) for id_ in missing_ids)
+                            log_structured(
+                                logging.WARNING,
+                                "csv_row_missing_attribute_detail",
+                                {
+                                    "line_number": line_number,
+                                    "missing_attribute_detail_ids": missing_ids,
+                                    "caller": "_process_csv",
+                                },
+                            )
+                            failed_rows.append(
+                                (
+                                    line_number,
+                                    raw_line,
+                                    f"存在しない attribute_detail_id: {missing_summary}",
+                                )
+                            )
                             continue
 
                         cursor.execute('INSERT INTO prompts (content) VALUES (?)', (content,))
@@ -1354,7 +1391,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            with closing(sqlite3.connect(db_path)) as conn:
+            with closing(self._connect_with_foreign_keys(db_path)) as conn:
                 cursor = conn.cursor()
                 total_lines = int(self.spin_row_num.value())
                 exclusion_words = [w.strip() for w in self.combo_exclusion.currentText().split(',') if w.strip()]
