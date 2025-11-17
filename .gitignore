@@ -1,4 +1,12 @@
 desktop_gui_settings.yaml
 export_prompts_to_csv.py
 window_position_app_image_prompt_creator.txt
-\__pycache__
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+*.sqlite3
