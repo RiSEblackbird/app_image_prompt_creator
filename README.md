@@ -57,6 +57,16 @@ setx OPENAI_API_KEY "sk-xxxxx"
   export OPENAI_API_KEY="sk-xxxxx"
   ```
 
+## 必須ファイルの確認（CI/ローカル共通）
+- 依存ファイルが揃っているかを起動前に検証したい場合は、以下を実行してください。
+  ```bash
+  python scripts/check_required_files.py
+  ```
+- `export_prompts_to_csv.py` が欠損している場合は、
+  - `git checkout -- export_prompts_to_csv.py` でリポジトリから復旧する
+  - もしくは README 記載の手順や pip で提供される配布物から取得し、リポジトリ直下に配置してください
+  
+
 ## 起動方法
 - Tkinter 版（従来UI）
   ```bash
