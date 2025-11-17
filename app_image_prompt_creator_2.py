@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # アプリ名: 9. 画像プロンプトランダム生成ツール
 
+import importlib
 import sys
 import os
 import traceback
@@ -21,7 +22,6 @@ import yaml
 import requests
 from pathlib import Path
 import time
-from export_prompts_to_csv import MJImage
 import re
 from typing import Optional
 
@@ -91,6 +91,44 @@ def log_structured(level: int, event: str, context: Optional[dict] = None) -> No
     if context:
         payload.update(context)
     logging.log(level, json.dumps(payload, ensure_ascii=False))
+
+
+def _show_missing_export_module_dialog() -> None:
+    """CSVエクスポートモジュール欠損時に、復旧手順を明示したダイアログを出す。"""
+
+    instruction = (
+        "CSVエクスポート用モジュール export_prompts_to_csv.py が見つかりません。\n\n"
+        "復旧手順:\n"
+        "1) リポジトリ直下に export_prompts_to_csv.py を配置する\n"
+        "2) `git checkout -- export_prompts_to_csv.py` で最新を取得する\n"
+        "3) 別リポジトリにある場合は README のリンクまたは pip パッケージから取得する"
+    )
+    try:
+        messagebox.showerror("CSVエクスポートモジュール未検出", instruction)
+    except Exception:
+        logging.error("export_prompts_to_csv.py が見つかりません: %s", instruction)
+
+
+def _load_export_module():
+    """起動時に MJImage 実装の有無を確認し、欠損時はダミークラスで動作を継続する。"""
+
+    try:
+        module = importlib.import_module("export_prompts_to_csv")
+        return module.MJImage
+    except Exception as exc:  # ModuleNotFoundError のみならず破損にも対応
+        log_structured(logging.ERROR, "export_module_missing", {"error": str(exc)})
+        _show_missing_export_module_dialog()
+
+        class _MissingMJImage:
+            """モジュール欠損時でもボタン押下に案内を表示する代替実装。"""
+
+            def run(self):
+                _show_missing_export_module_dialog()
+
+        return _MissingMJImage
+
+
+MJImage = _load_export_module()
 
 
 def build_db_missing_message(db_path: Path) -> str:

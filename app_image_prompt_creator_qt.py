@@ -11,6 +11,7 @@ Tkinter 実装から移行し、QMainWindow/QWidget ベースのUIへ再設計�
 from __future__ import annotations
 
 import csv
+import importlib
 import json
 import logging
 import os
@@ -31,8 +32,6 @@ from typing import Iterable, List, Optional, Tuple
 
 import requests
 from PySide6 import QtCore, QtGui, QtWidgets
-
-from export_prompts_to_csv import MJImage
 
 # =============================
 # 設定・定数
@@ -109,6 +108,44 @@ def log_structured(level: int, event: str, context: Optional[dict] = None) -> No
     if context:
         payload.update(context)
     logging.log(level, json.dumps(payload, ensure_ascii=False))
+
+
+def _show_missing_export_module_dialog() -> None:
+    """CSVエクスポートモジュール欠損時の案内をダイアログで提示する。"""
+
+    instruction = (
+        "CSVエクスポート用モジュール export_prompts_to_csv.py が見つかりません。\n\n"
+        "復旧手順:\n"
+        "1) リポジトリ直下に export_prompts_to_csv.py を配置する\n"
+        "2) `git checkout -- export_prompts_to_csv.py` を実行して取得する\n"
+        "3) 別リポジトリで管理している場合は README の案内や pip インストール手順を参照する"
+    )
+    try:
+        QtWidgets.QMessageBox.critical(None, "CSVエクスポートモジュール未検出", instruction)
+    except Exception:
+        logging.error("export_prompts_to_csv.py が見つかりません: %s", instruction)
+
+
+def _load_export_module():
+    """MJImage の実体を起動時にロードし、欠損時は代替を返す。"""
+
+    try:
+        module = importlib.import_module("export_prompts_to_csv")
+        return module.MJImage
+    except Exception as exc:
+        log_structured(logging.ERROR, "export_module_missing", {"error": str(exc)})
+        _show_missing_export_module_dialog()
+
+        class _MissingMJImage:
+            """欠損時でもボタン押下で案内を出せるプレースホルダー。"""
+
+            def run(self):
+                _show_missing_export_module_dialog()
+
+        return _MissingMJImage
+
+
+MJImage = _load_export_module()
 
 
 def _resolve_path(path_value, base_dir=SCRIPT_DIR):
