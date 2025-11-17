@@ -189,12 +189,19 @@ setx OPENAI_API_KEY "sk-xxxxx"
   - `EXCLUSION_CSV`: 除外語句CSV
   - `ARRANGE_PRESETS_YAML`: アレンジプリセットYAMLのパス
   - `LLM_ENABLED`: LLM機能の有効/無効
-- `LLM_MODEL`: 例 `gpt-5-mini`
+- `LLM_MODEL`: 例 `gpt-4o-mini`（不正値の場合は自動で有効な候補へ切替）
   - `LLM_MAX_COMPLETION_TOKENS`: 応答最大トークン（アレンジ/文字数調整共通）
   - `LLM_TIMEOUT`: タイムアウト秒
   - `OPENAI_API_KEY_ENV`: APIキーの環境変数名（例 `OPENAI_API_KEY`）
   - `LLM_INCLUDE_TEMPERATURE`: temperature を送るか（未対応モデルもあるため既定は false 推奨）
   - `LLM_TEMPERATURE`: 送る場合の値
+
+### サポートしているLLMモデル
+- `gpt-4o-mini`（デフォルト）
+- `gpt-4o`
+- `gpt-5.1`
+
+`desktop_gui_settings.yaml` に異なるモデル名を記述した場合でも、アプリ起動時に上記いずれかへ自動でフォールバックし、UIにも警告を表示します。
 
 例（抜粋）:
 ```yaml
@@ -204,7 +211,7 @@ app_image_prompt_creator:
   EXCLUSION_CSV: "app_image_prompt_creator/exclusions.csv"
   ARRANGE_PRESETS_YAML: "app_image_prompt_creator/arrange_presets.yaml"
   LLM_ENABLED: true
-  LLM_MODEL: "gpt-5-mini"
+  LLM_MODEL: "gpt-4o-mini"
   LLM_MAX_COMPLETION_TOKENS: 4500
   LLM_TIMEOUT: 30
   OPENAI_API_KEY_ENV: "OPENAI_API_KEY"

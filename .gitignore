@@ -16,5 +16,9 @@ failed_csv_rows_*.csv
 *.db
 *.db-journal
 *.log
+*.crt
 *.pem
 *.key
+*.p12
+*.pfx
+*.cer
