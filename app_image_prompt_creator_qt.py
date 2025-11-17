@@ -1007,8 +1007,15 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         layout.addWidget(QtWidgets.QLabel("CSV データを貼り付けてください"))
         text_edit = QtWidgets.QTextEdit()
         layout.addWidget(text_edit)
+        button_row = QtWidgets.QHBoxLayout()
+        layout.addLayout(button_row)
+
+        sample_button = QtWidgets.QPushButton("サンプル行を貼り付け")
+        sample_button.setToolTip("attribute_details テーブルから拾った ID を用いて、投入例となるCSV行を自動生成します。")
+        button_row.addWidget(sample_button)
+
         button = QtWidgets.QPushButton("投入")
-        layout.addWidget(button)
+        button_row.addWidget(button)
 
         def handle_import():
             content = text_edit.toPlainText().strip()
@@ -1043,7 +1050,67 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.critical(self, "エラー", f"CSVの処理中にエラーが発生しました: {get_exception_trace()}")
 
         button.clicked.connect(handle_import)
+        sample_button.clicked.connect(lambda: self._populate_sample_csv_rows(text_edit))
         dialog.exec()
+
+    def _populate_sample_csv_rows(self, text_edit: QtWidgets.QTextEdit) -> None:
+        """attribute_details から取得した ID を使って、投入用のサンプル行を挿入する。"""
+
+        db_path = self._get_db_path_or_warn()
+        if not db_path:
+            return
+
+        try:
+            with closing(sqlite3.connect(db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, description FROM attribute_details ORDER BY id LIMIT 5"
+                )
+                samples = cursor.fetchall()
+        except sqlite3.Error as exc:
+            log_structured(
+                logging.ERROR,
+                "sample_csv_fetch_failed",
+                {"db_path": str(db_path), "error": str(exc)},
+            )
+            QtWidgets.QMessageBox.warning(
+                self, "サンプル取得失敗", f"attribute_details の読み込みに失敗しました。\n{exc}"
+            )
+            return
+
+        if not samples:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "サンプル取得失敗",
+                "attribute_details が空です。CSVを投入してから再試行してください。",
+            )
+            return
+
+        attribute_ids = [str(row[0]) for row in samples]
+        attribute_labels = [row[1].replace("\"", "'") if row[1] else "attribute" for row in samples]
+        sample_lines = [
+            f'"{attribute_labels[0]} / vivid detail","{attribute_ids[0]}"'
+        ]
+        if len(attribute_ids) >= 2:
+            sample_lines.append(
+                f'"Layered mix: {attribute_labels[0]} + {attribute_labels[1]}","{attribute_ids[0]},{attribute_ids[1]}"'
+            )
+        if len(attribute_ids) >= 3:
+            sample_lines.append(
+                f'"Cinematic trio featuring {attribute_labels[0]} / {attribute_labels[1]} / {attribute_labels[2]}","{attribute_ids[0]},{attribute_ids[1]},{attribute_ids[2]}"'
+            )
+
+        text_edit.setPlainText("\n".join(sample_lines))
+        log_structured(
+            logging.INFO,
+            "sample_csv_inserted",
+            {"attribute_ids": attribute_ids[:3], "caller": "_open_csv_import_dialog"},
+        )
+        QtWidgets.QMessageBox.information(
+            self,
+            "サンプルを挿入しました",
+            "attribute_details のIDを使ったサンプル行を入力欄に貼り付けました。必要に応じて編集してから投入してください。",
+        )
 
     def _process_csv(self, csv_content: str) -> Tuple[int, List[Tuple[int, str, str]], Optional[Path]]:
         """CSV文字列をパースし、DBへ投入する。失敗行はユーザーに見せるため返却・エクスポートする。"""
@@ -1203,6 +1270,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 cursor = conn.cursor()
                 total_lines = int(self.spin_row_num.value())
                 exclusion_words = [w.strip() for w in self.combo_exclusion.currentText().split(',') if w.strip()]
+                attribute_conditions: List[dict] = []
                 selected_lines = []
                 if self.check_exclusion.isChecked() and exclusion_words:
                     self._update_exclusion_words(exclusion_words)
@@ -1218,6 +1286,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                             detail_description = detail.split(" (")[0]
                             detail_value = next((d.value for d in self.attribute_details if d.description == detail_description), None)
                             if detail_value:
+                                attr_condition = {
+                                    "attribute_id": attr.id,
+                                    "attribute_name": attr.attribute_name,
+                                    "detail": detail_description,
+                                    "requested_count": count_int,
+                                }
                                 if self.check_exclusion.isChecked() and exclusion_words:
                                     exclusion_condition = " AND " + " AND ".join("p.content NOT LIKE ?" for _ in exclusion_words)
                                     query = (
@@ -1238,6 +1312,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                                         (detail_value,),
                                     )
                                 matching = cursor.fetchall()
+                                attr_condition["matched_candidates"] = len(matching)
+                                attribute_conditions.append(attr_condition)
                                 selected_lines.extend(random.sample(matching, min(count_int, len(matching))))
 
                 remaining = total_lines - len(selected_lines)
@@ -1252,6 +1328,18 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                     remaining_pool = [line for line in all_prompts if line not in selected_lines]
                     selected_lines.extend(random.sample(remaining_pool, min(len(remaining_pool), remaining)))
 
+                if not selected_lines:
+                    self.main_prompt = ""
+                    self._show_no_result_warning(
+                        attribute_conditions,
+                        exclusion_words,
+                        total_lines,
+                        len(selected_lines),
+                        0,
+                    )
+                    self.update_option()
+                    return
+
                 random.shuffle(selected_lines)
                 processed_lines = []
                 for line in selected_lines:
@@ -1261,6 +1349,19 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                     elif not text.endswith("."):
                         text += "."
                     processed_lines.append(text)
+
+                if not processed_lines:
+                    self.main_prompt = ""
+                    self._show_no_result_warning(
+                        attribute_conditions,
+                        exclusion_words,
+                        total_lines,
+                        len(selected_lines),
+                        len(processed_lines),
+                    )
+                    self.update_option()
+                    return
+
                 self.main_prompt = " ".join(processed_lines)
                 self.update_option()
         except sqlite3.Error as exc:
@@ -1272,6 +1373,47 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
         except Exception:
             QtWidgets.QMessageBox.critical(self, "エラー", f"エラーが発生しました: {get_exception_trace()}")
+
+    def _show_no_result_warning(
+        self,
+        attribute_conditions: List[dict],
+        exclusion_words: List[str],
+        total_lines: int,
+        selected_count: int,
+        processed_count: int,
+    ) -> None:
+        """抽出結果が空だった場合に、条件ログと再入力のヒントを提示する。"""
+
+        exclusion_summary = ", ".join(exclusion_words) if exclusion_words else "なし"
+        attribute_summary = (
+            "、".join(
+                f"{c.get('attribute_name', 'attr')} / {c.get('detail', '-')} x{c.get('requested_count', 0)}"
+                f" (候補 {c.get('matched_candidates', 0)} 件)" for c in attribute_conditions
+            )
+            if attribute_conditions
+            else "なし"
+        )
+
+        log_structured(
+            logging.WARNING,
+            "prompt_generation_no_results",
+            {
+                "requested_total_lines": total_lines,
+                "selected_lines": selected_count,
+                "processed_lines": processed_count,
+                "exclusion_words": exclusion_words,
+                "attribute_conditions": attribute_conditions,
+            },
+        )
+
+        message = (
+            "指定条件に一致する行が見つかりませんでした。\n"
+            "CSVをDBに投入するか、除外語句や行数の指定を緩和して再試行してください。\n\n"
+            f"行数指定: {total_lines}\n"
+            f"除外語句: {exclusion_summary}\n"
+            f"属性条件: {attribute_summary}"
+        )
+        QtWidgets.QMessageBox.warning(self, "データ不足", message)
 
     def update_option(self):
         self.option_prompt = self._make_option_prompt()
