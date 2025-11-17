@@ -24,6 +24,7 @@ import traceback
 from contextlib import closing
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
@@ -914,8 +915,26 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.critical(self, "エラー", "CSVデータを入力してください。")
                 return
             try:
-                self._process_csv(content)
-                QtWidgets.QMessageBox.information(self, "成功", "CSVデータが正常に処理されました。")
+                inserted, failed_rows, export_path = self._process_csv(content)
+                if failed_rows:
+                    failure_lines = "\n".join(
+                        f"{row_number}: {reason} | {raw}" for row_number, raw, reason in failed_rows
+                    )
+                    detail_message = (
+                        f"有効行: {inserted} 件、失敗: {len(failed_rows)} 件\n"
+                        f"詳細:\n{failure_lines}"
+                    )
+                    if export_path:
+                        detail_message += f"\n失敗行を書き出しました: {export_path}"
+                    QtWidgets.QMessageBox.warning(
+                        self,
+                        "一部パースに失敗しました",
+                        detail_message,
+                    )
+                else:
+                    QtWidgets.QMessageBox.information(
+                        self, "成功", f"CSVデータを処理しました（{inserted} 件）。"
+                    )
                 self.load_attribute_data()
                 self.update_attribute_ui_choices()
                 dialog.accept()
@@ -925,10 +944,29 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         button.clicked.connect(handle_import)
         dialog.exec()
 
-    def _process_csv(self, csv_content: str):
+    def _process_csv(self, csv_content: str) -> Tuple[int, List[Tuple[int, str, str]], Optional[Path]]:
+        """CSV文字列をパースし、DBへ投入する。失敗行はユーザーに見せるため返却・エクスポートする。"""
+
         db_path = self._get_db_path_or_warn()
         if not db_path:
-            return
+            return 0, [], None
+
+        failed_rows: List[Tuple[int, str, str]] = []
+        cleaned_lines: List[Tuple[int, str]] = []
+
+        for line_number, raw_line in enumerate(csv_content.splitlines(), start=1):
+            if "citation[oaicite" in raw_line or "```" in raw_line:
+                continue
+            normalized = raw_line.replace('"""', '"').strip()
+            if not normalized:
+                continue
+            cleaned_lines.append((line_number, normalized))
+
+        if not cleaned_lines:
+            raise ValueError("有効なCSV行が見つかりませんでした。空行や不要な記法を除去して再試行してください。")
+
+        inserted = 0
+        failed_export_path: Optional[Path] = None
 
         try:
             with closing(sqlite3.connect(db_path)) as conn:
@@ -951,23 +989,53 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                     )
                     """
                 )
-                for line in csv_content.splitlines():
-                    if "citation[oaicite" in line or "```" in line:
-                        continue
-                    if line.strip() and len(line) > 10 and [line[0], line[-1]] == ['"', '"']:
-                        line = line.replace('"""', '"')
+
+                # with conn: により例外発生時は自動ロールバック。成功時のみコミットされる。
+                with conn:
+                    csv_rows = [row for _, row in cleaned_lines]
+                    for (line_number, raw_line), row in zip(cleaned_lines, csv.reader(csv_rows)):
+                        if len(row) != 2:
+                            failed_rows.append((line_number, raw_line, "列数が2列ではありません"))
+                            continue
+
+                        content, id_column = row
+                        content = content.strip()
+                        id_tokens = [token.strip() for token in id_column.split(",") if token.strip()]
+
+                        if not content:
+                            failed_rows.append((line_number, raw_line, "content が空です"))
+                            continue
+
+                        if not id_tokens:
+                            failed_rows.append((line_number, raw_line, "attribute_detail_id が空です"))
+                            continue
+
                         try:
-                            content, attribute_detail_ids = line.strip('"').split('","')
-                        except Exception:
-                            content, attribute_detail_ids = line.strip('"').split('", "')
+                            attribute_detail_ids = [int(token) for token in id_tokens]
+                        except ValueError:
+                            failed_rows.append((line_number, raw_line, "attribute_detail_id は数値で入力してください"))
+                            continue
+
                         cursor.execute('INSERT INTO prompts (content) VALUES (?)', (content,))
                         prompt_id = cursor.lastrowid
-                        for attribute_detail_id in attribute_detail_ids.split(','):
+                        for attribute_detail_id in attribute_detail_ids:
                             cursor.execute(
                                 'INSERT INTO prompt_attribute_details (prompt_id, attribute_detail_id) VALUES (?, ?)',
-                                (prompt_id, int(attribute_detail_id)),
+                                (prompt_id, attribute_detail_id),
                             )
-                conn.commit()
+                        inserted += 1
+
+            if failed_rows:
+                failed_export_path = self._export_failed_rows(failed_rows)
+                log_structured(
+                    logging.WARNING,
+                    "csv_rows_failed_to_parse",
+                    {
+                        "db_path": str(db_path),
+                        "failed_count": len(failed_rows),
+                        "export_path": str(failed_export_path) if failed_export_path else None,
+                    },
+                )
         except sqlite3.Error as exc:
             log_structured(
                 logging.ERROR,
@@ -975,7 +1043,21 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 {"db_path": str(db_path), "error": str(exc), "caller": "_process_csv"},
             )
             QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"CSV投入用DB処理に失敗しました。\n{exc}")
-            return
+            return 0, failed_rows, failed_export_path
+
+        return inserted, failed_rows, failed_export_path
+
+    def _export_failed_rows(self, failed_rows: List[Tuple[int, str, str]]) -> Path:
+        """パース失敗した行をCSVで書き出し、再投入しやすくする。"""
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        export_path = SCRIPT_DIR / f"failed_csv_rows_{timestamp}.csv"
+        with export_path.open("w", encoding="utf-8", newline="") as fp:
+            writer = csv.writer(fp)
+            writer.writerow(["line_number", "original", "error"])
+            for line_number, raw_line, reason in failed_rows:
+                writer.writerow([line_number, raw_line, reason])
+        return export_path
 
     def _export_csv(self):
         MJImage().run()

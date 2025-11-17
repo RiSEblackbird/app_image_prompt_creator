@@ -161,6 +161,7 @@ setx OPENAI_API_KEY "sk-xxxxx"
     "A serene zen garden with stone lantern.","12,34,56"
     ```
   - 貼付け内容から `prompts` と `prompt_attribute_details` に登録します
+  - 列数が2列でない場合や `attribute_detail_id` が数値でない場合は投入せず、原因と該当行を `failed_csv_rows_YYYYMMDD_HHMMSS.csv` に書き出して再投入の手がかりを提示します
 - **エクスポート**: 「(DB確認用CSV出力)」で現在のDB内容を確認用CSVに出力
 
 補足:
