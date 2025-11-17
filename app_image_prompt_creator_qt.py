@@ -20,6 +20,7 @@ import sqlite3
 import subprocess
 import sys
 import traceback
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
@@ -73,6 +74,26 @@ FONT_SCALE_PRESETS = [
     {"label": "4K", "pt": 20},
 ]
 
+# 設定ファイルが欠損した場合も動かせるよう、サンプル相当のデフォルト値を持っておく。
+DEFAULT_APP_SETTINGS = {
+    "POSITION_FILE": "window_position_app_image_prompt_creator.txt",
+    "BASE_FOLDER": "./app_image_prompt_creator",
+    "DEFAULT_TXT_PATH": "./app_image_prompt_creator/image_prompt_parts.txt",
+    "DEFAULT_DB_PATH": "./app_image_prompt_creator/image_prompt_parts.db",
+    "EXCLUSION_CSV": "./app_image_prompt_creator/exclusion_targets.csv",
+    "ARRANGE_PRESETS_YAML": "./app_image_prompt_creator/arrange_presets.yaml",
+    "LLM_ENABLED": False,
+    "LLM_MODEL": "gpt-5-mini",
+    "LLM_MAX_COMPLETION_TOKENS": 4500,
+    "LLM_TIMEOUT": 30,
+    "OPENAI_API_KEY_ENV": "OPENAI_API_KEY",
+    "LLM_INCLUDE_TEMPERATURE": False,
+    "LLM_TEMPERATURE": 0.7,
+}
+
+# 設定読み込み中の警告やフォールバック内容を貯めて、ウィンドウ生成後にまとめて案内する。
+SETTINGS_LOAD_NOTES: List[str] = []
+
 
 def _resolve_path(path_value, base_dir=SCRIPT_DIR):
     if path_value is None:
@@ -86,31 +107,181 @@ def _resolve_path(path_value, base_dir=SCRIPT_DIR):
     return base_dir / path
 
 
-def load_yaml_settings(file_path):
+def _prompt_settings_path(parent: Optional[QtWidgets.QWidget], resolved_path: Path) -> Optional[Path]:
+    """設定ファイル欠損時に、ユーザーへパス確認/再指定を促すダイアログを表示。"""
+
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        SETTINGS_LOAD_NOTES.append(
+            f"設定ファイルが見つからないためデフォルト設定を使用しました: {resolved_path}"
+        )
+        return None
+
+    dialog = QtWidgets.QMessageBox(parent)
+    dialog.setWindowTitle("設定ファイルが見つかりません")
+    dialog.setText("設定ファイル desktop_gui_settings.yaml が見つかりませんでした。")
+    dialog.setInformativeText(
+        "デフォルト設定で続行するか、正しいYAMLファイルを選択してください。"
+    )
+    use_default_button = dialog.addButton("デフォルト設定を使う", QtWidgets.QMessageBox.AcceptRole)
+    choose_file_button = dialog.addButton("ファイルを選択", QtWidgets.QMessageBox.ActionRole)
+    dialog.exec()
+
+    if dialog.clickedButton() == choose_file_button:
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            parent,
+            "設定ファイルを選択",
+            str(resolved_path.parent),
+            "YAML Files (*.yaml *.yml);;All Files (*)",
+        )
+        if file_path:
+            return Path(file_path)
+    elif dialog.clickedButton() != use_default_button:
+        SETTINGS_LOAD_NOTES.append(
+            "設定ファイルの選択をキャンセルしたため、デフォルト設定で続行しました。"
+        )
+    return None
+
+
+def _handle_yaml_error(parent: Optional[QtWidgets.QWidget], resolved_path: Path, error: Exception):
+    """YAML構文エラーを要約し、再試行手順を案内する。"""
+
+    error_summary = str(error)
+    location_hint = ""
+    if hasattr(error, "problem_mark") and getattr(error, "problem_mark"):
+        mark = error.problem_mark
+        location_hint = f" (行 {mark.line + 1}, 列 {mark.column + 1})"
+
+    message = (
+        f"設定ファイルの構文エラーを検出しました: {resolved_path}{location_hint}\n"
+        "ファイルを修正するか、別の設定ファイルを選択して再試行してください。"
+    )
+    SETTINGS_LOAD_NOTES.append(message)
+
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        return None
+
+    dialog = QtWidgets.QMessageBox(parent)
+    dialog.setWindowTitle("設定ファイルの読み込みに失敗")
+    dialog.setText("YAMLの構文エラーが発生しました。")
+    dialog.setInformativeText(message)
+    dialog.setDetailedText(error_summary)
+    dialog.setStandardButtons(QtWidgets.QMessageBox.Retry | QtWidgets.QMessageBox.Cancel)
+    retry_path_button = dialog.addButton("別のファイルを選ぶ", QtWidgets.QMessageBox.ActionRole)
+    dialog.exec()
+
+    if dialog.clickedButton() == retry_path_button:
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            parent,
+            "設定ファイルを選択",
+            str(resolved_path.parent),
+            "YAML Files (*.yaml *.yml);;All Files (*)",
+        )
+        if file_path:
+            return Path(file_path)
+    elif dialog.standardButton(dialog.clickedButton()) == QtWidgets.QMessageBox.Retry:
+        return resolved_path
+    return None
+
+
+def load_yaml_settings(file_path, parent: Optional[QtWidgets.QWidget] = None):
+    """YAML設定のロードを安全に行い、失敗時はフォールバックや再選択を提示する。"""
+
     resolved_path = _resolve_path(file_path)
-    with open(resolved_path, "r", encoding="utf-8") as file:
-        settings = yaml.safe_load(file)
-    return settings
+    try:
+        with open(resolved_path, "r", encoding="utf-8") as file:
+            settings = yaml.safe_load(file) or {}
+        return settings
+    except FileNotFoundError:
+        alternative = _prompt_settings_path(parent, resolved_path)
+        if alternative:
+            return load_yaml_settings(alternative, parent)
+    except yaml.YAMLError as error:
+        retry_target = _handle_yaml_error(parent, resolved_path, error)
+        if retry_target:
+            return load_yaml_settings(retry_target, parent)
+    return deepcopy({"app_image_prompt_creator": DEFAULT_APP_SETTINGS})
 
 
 # YAML設定の読込（Tk版と互換性維持）
 import yaml
 
 yaml_settings_path = _resolve_path("desktop_gui_settings.yaml")
-settings = load_yaml_settings(yaml_settings_path)
-BASE_FOLDER = settings["app_image_prompt_creator"]["BASE_FOLDER"]
-DEFAULT_TXT_PATH = settings["app_image_prompt_creator"]["DEFAULT_TXT_PATH"]
-DEFAULT_DB_PATH = settings["app_image_prompt_creator"]["DEFAULT_DB_PATH"]
-POSITION_FILE = settings["app_image_prompt_creator"]["POSITION_FILE"]
-EXCLUSION_CSV = settings["app_image_prompt_creator"]["EXCLUSION_CSV"]
-LLM_ENABLED = settings["app_image_prompt_creator"].get("LLM_ENABLED", False)
-LLM_MODEL = settings["app_image_prompt_creator"].get("LLM_MODEL", "gpt-5-mini")
-LLM_TEMPERATURE = settings["app_image_prompt_creator"].get("LLM_TEMPERATURE", 0.7)
-LLM_MAX_COMPLETION_TOKENS = settings["app_image_prompt_creator"].get("LLM_MAX_COMPLETION_TOKENS", 4500)
-LLM_TIMEOUT = settings["app_image_prompt_creator"].get("LLM_TIMEOUT", 30)
-OPENAI_API_KEY_ENV = settings["app_image_prompt_creator"].get("OPENAI_API_KEY_ENV", "OPENAI_API_KEY")
-ARRANGE_PRESETS_YAML = str(_resolve_path(settings["app_image_prompt_creator"].get("ARRANGE_PRESETS_YAML", "app_image_prompt_creator/arrange_presets.yaml")))
-LLM_INCLUDE_TEMPERATURE = settings["app_image_prompt_creator"].get("LLM_INCLUDE_TEMPERATURE", False)
+settings = {"app_image_prompt_creator": deepcopy(DEFAULT_APP_SETTINGS)}
+BASE_FOLDER = DEFAULT_APP_SETTINGS["BASE_FOLDER"]
+DEFAULT_TXT_PATH = DEFAULT_APP_SETTINGS["DEFAULT_TXT_PATH"]
+DEFAULT_DB_PATH = DEFAULT_APP_SETTINGS["DEFAULT_DB_PATH"]
+POSITION_FILE = DEFAULT_APP_SETTINGS["POSITION_FILE"]
+EXCLUSION_CSV = DEFAULT_APP_SETTINGS["EXCLUSION_CSV"]
+LLM_ENABLED = DEFAULT_APP_SETTINGS["LLM_ENABLED"]
+LLM_MODEL = DEFAULT_APP_SETTINGS["LLM_MODEL"]
+LLM_TEMPERATURE = DEFAULT_APP_SETTINGS["LLM_TEMPERATURE"]
+LLM_MAX_COMPLETION_TOKENS = DEFAULT_APP_SETTINGS["LLM_MAX_COMPLETION_TOKENS"]
+LLM_TIMEOUT = DEFAULT_APP_SETTINGS["LLM_TIMEOUT"]
+OPENAI_API_KEY_ENV = DEFAULT_APP_SETTINGS["OPENAI_API_KEY_ENV"]
+ARRANGE_PRESETS_YAML = str(_resolve_path(DEFAULT_APP_SETTINGS["ARRANGE_PRESETS_YAML"]))
+LLM_INCLUDE_TEMPERATURE = DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
+
+
+def _merge_app_settings(raw_settings: dict) -> dict:
+    """読み込んだ設定をデフォルトにマージして欠損値を補完する。"""
+
+    merged = {"app_image_prompt_creator": deepcopy(DEFAULT_APP_SETTINGS)}
+    if isinstance(raw_settings, dict):
+        merged_app = raw_settings.get("app_image_prompt_creator") or {}
+        merged["app_image_prompt_creator"].update(merged_app)
+    return merged
+
+
+def _apply_app_settings(app_settings: dict):
+    """マージ済み設定をグローバル変数へ適用する。"""
+
+    global BASE_FOLDER, DEFAULT_TXT_PATH, DEFAULT_DB_PATH, POSITION_FILE, EXCLUSION_CSV
+    global LLM_ENABLED, LLM_MODEL, LLM_TEMPERATURE, LLM_MAX_COMPLETION_TOKENS
+    global LLM_TIMEOUT, OPENAI_API_KEY_ENV, ARRANGE_PRESETS_YAML, LLM_INCLUDE_TEMPERATURE, settings
+
+    settings = {"app_image_prompt_creator": deepcopy(app_settings)}
+    BASE_FOLDER = app_settings.get("BASE_FOLDER", DEFAULT_APP_SETTINGS["BASE_FOLDER"])
+    DEFAULT_TXT_PATH = app_settings.get("DEFAULT_TXT_PATH", DEFAULT_APP_SETTINGS["DEFAULT_TXT_PATH"])
+    DEFAULT_DB_PATH = app_settings.get("DEFAULT_DB_PATH", DEFAULT_APP_SETTINGS["DEFAULT_DB_PATH"])
+    POSITION_FILE = app_settings.get("POSITION_FILE", DEFAULT_APP_SETTINGS["POSITION_FILE"])
+    EXCLUSION_CSV = app_settings.get("EXCLUSION_CSV", DEFAULT_APP_SETTINGS["EXCLUSION_CSV"])
+    LLM_ENABLED = app_settings.get("LLM_ENABLED", DEFAULT_APP_SETTINGS["LLM_ENABLED"])
+    LLM_MODEL = app_settings.get("LLM_MODEL", DEFAULT_APP_SETTINGS["LLM_MODEL"])
+    LLM_TEMPERATURE = app_settings.get("LLM_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_TEMPERATURE"])
+    LLM_MAX_COMPLETION_TOKENS = app_settings.get(
+        "LLM_MAX_COMPLETION_TOKENS", DEFAULT_APP_SETTINGS["LLM_MAX_COMPLETION_TOKENS"]
+    )
+    LLM_TIMEOUT = app_settings.get("LLM_TIMEOUT", DEFAULT_APP_SETTINGS["LLM_TIMEOUT"])
+    OPENAI_API_KEY_ENV = app_settings.get("OPENAI_API_KEY_ENV", DEFAULT_APP_SETTINGS["OPENAI_API_KEY_ENV"])
+    ARRANGE_PRESETS_YAML = str(
+        _resolve_path(app_settings.get("ARRANGE_PRESETS_YAML", DEFAULT_APP_SETTINGS["ARRANGE_PRESETS_YAML"]))
+    )
+    LLM_INCLUDE_TEMPERATURE = app_settings.get(
+        "LLM_INCLUDE_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
+    )
+
+
+def initialize_settings(parent: Optional[QtWidgets.QWidget] = None):
+    """設定ファイルを読み込み、フォールバック結果を反映する初期化関数。"""
+
+    raw_settings = load_yaml_settings(yaml_settings_path, parent)
+    merged_settings = _merge_app_settings(raw_settings)
+    _apply_app_settings(merged_settings["app_image_prompt_creator"])
+
+
+def show_deferred_settings_notes(parent: Optional[QtWidgets.QWidget]):
+    """アプリ起動後にまとめて設定読み込み時の警告を表示する。"""
+
+    if not SETTINGS_LOAD_NOTES:
+        return
+    QtWidgets.QMessageBox.information(
+        parent,
+        "設定ファイルの確認",
+        "\n\n".join(SETTINGS_LOAD_NOTES),
+    )
+    SETTINGS_LOAD_NOTES.clear()
 
 
 # =============================
@@ -1173,7 +1344,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
+    # 設定読み込みをここで実行し、エラー時のダイアログ表示を可能にする。
+    initialize_settings()
     window = PromptGeneratorWindow()
+    show_deferred_settings_notes(window)
     window.show()
     sys.exit(app.exec())
 
