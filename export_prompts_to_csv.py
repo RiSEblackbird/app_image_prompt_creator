@@ -112,6 +112,7 @@ class MJImage:
         _ensure_parent_dir(export_path)
 
         with sqlite3.connect(db_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON;")
             cursor = conn.cursor()
             rows = self._fetch_prompt_rows(cursor)
 

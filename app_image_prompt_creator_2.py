@@ -155,6 +155,14 @@ def ensure_db_path(default_db_path: str) -> Optional[Path]:
     messagebox.showerror("DB未検出", build_db_missing_message(db_path))
     return None
 
+
+def connect_with_foreign_keys(db_path: Path) -> sqlite3.Connection:
+    """外部キー制約を確実に有効化した SQLite 接続を提供する。"""
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
+
 def _resolve_path(path_value, base_dir=SCRIPT_DIR):
     """
     受け取ったパスをスクリプト配置ディレクトリ基準で解決する。
@@ -337,7 +345,7 @@ class CSVImportWindow:
             raise Exception("DB未検出のためCSV投入を中断しました")
 
         try:
-            with closing(sqlite3.connect(db_path)) as conn:
+            with closing(connect_with_foreign_keys(db_path)) as conn:
                 cursor = conn.cursor()
 
                 cursor.execute('''
@@ -780,7 +788,7 @@ class TextGeneratorApp:
             return
 
         try:
-            with closing(sqlite3.connect(db_path)) as conn:
+            with closing(connect_with_foreign_keys(db_path)) as conn:
                 cursor = conn.cursor()
 
                 # attribute_types の取得
@@ -922,7 +930,7 @@ class TextGeneratorApp:
             return
 
         try:
-            with closing(sqlite3.connect(db_path)) as conn:
+            with closing(connect_with_foreign_keys(db_path)) as conn:
                 cursor = conn.cursor()
 
                 total_lines = int(self.entry_row_num.get())
