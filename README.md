@@ -35,9 +35,9 @@ Midjourney 向けの画像生成プロンプトを、SQLite の属性データ�
 
 ## 前提／セットアップ
 - **Python**: 3.10+ 推奨
-- **依存ライブラリ**: `requests`, `PyYAML`
+- **依存ライブラリ**: `requests`, `PyYAML`, `PySide6`
 ```bash
-pip install requests PyYAML
+pip install requests PyYAML PySide6
 ```
 - **設定ファイル**: `app_image_prompt_creator/desktop_gui_settings.yaml`
   - 例は `app_image_prompt_creator/desktop_gui_settings.yaml.example`
@@ -57,11 +57,16 @@ setx OPENAI_API_KEY "sk-xxxxx"
   ```
 
 ## 起動方法
-```bash
-python app_image_prompt_creator/app_image_prompt_creator_2.py
-```
+- Tkinter 版（従来UI）
+  ```bash
+  python app_image_prompt_creator/app_image_prompt_creator_2.py
+  ```
+- PySide6 版（新UI・非同期LLM対応）
+  ```bash
+  python app_image_prompt_creator/app_image_prompt_creator_qt.py
+  ```
 
-起動後、右側にメイン設定、左側に出力欄とサブ操作が表示されます。初回は DB の前提テーブル（後述）が用意されている必要があります。
+起動後、右側にメイン設定、左側に出力欄とサブ操作が表示されます。初回は DB の前提テーブル（後述）が用意されている必要があります。PySide6 版はQMainWindowベースの2ペイン構成で、CSV投入やLLM呼び出しをQtダイアログ/スレッドで行います。
 
 ## 使い方（基本）
 1. **属性を選ぶ**

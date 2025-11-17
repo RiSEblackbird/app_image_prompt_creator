@@ -1,0 +1,950 @@
+"""PySide6 版 画像プロンプトランダム生成ツール。
+
+Tkinter 実装から移行し、QMainWindow/QWidget ベースのUIへ再設計。
+主な機能:
+- DBから属性を読み込み、行数とオプションを指定してプロンプト生成
+- 末尾プリセット選択、オプションコンボ、クリップボードコピー
+- LLM 呼び出し（非同期スレッド実行）
+- CSV の投入・出力、除外語句 CSV オープン
+- 動画用 JSON への整形
+"""
+from __future__ import annotations
+
+import csv
+import json
+import os
+import random
+import re
+import socket
+import sqlite3
+import subprocess
+import sys
+import traceback
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, List, Optional, Tuple
+
+import requests
+from PySide6 import QtCore, QtGui, QtWidgets
+
+from export_prompts_to_csv import MJImage
+
+# =============================
+# 設定・定数
+# =============================
+WINDOW_TITLE = "画像プロンプトランダム生成ツール (PySide6)"
+DEFAULT_ROW_NUM = 10
+DEFAULT_TAIL_MEDIA_TYPE = "image"
+AVAILABLE_LLM_MODELS = [
+    "gpt-5.1",
+    "gpt-4o-mini",
+    "gpt-4o",
+]
+TAIL_PRESET_CHOICES = {
+    "image": [
+        "",
+        "A high resolution photograph. Very high resolution. 8K photo",
+        "a Japanese ink painting. Zen painting",
+        "a Medieval European painting.",
+    ],
+    "movie": [
+        "",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film\",\"look\":\"dramatic lighting\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage\",\"format\":\"4K HDR\"}}",
+    ],
+}
+S_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "300", "400", "500", "600", "700", "800", "900", "1000"]
+AR_OPTIONS = ["", "16:9", "9:16", "4:3", "3:4"]
+CHAOS_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]
+Q_OPTIONS = ["", "1", "2"]
+WEIRD_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "500", "750", "1000", "1250", "1500", "1750", "2000", "2250", "2500", "2750", "3000"]
+LABEL_EXCLUSION_WORDS = "除外語句："
+CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+RESPONSES_API_URL = "https://api.openai.com/v1/responses"
+RESPONSES_MODEL_PREFIXES = ("gpt-5",)
+LENGTH_LIMIT_REASONS = {"length", "max_output_tokens"}
+HOSTNAME = socket.gethostname()
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def _resolve_path(path_value, base_dir=SCRIPT_DIR):
+    if path_value is None:
+        return base_dir
+    if isinstance(path_value, Path):
+        path = path_value
+    else:
+        path = Path(str(path_value))
+    if path.is_absolute():
+        return path
+    return base_dir / path
+
+
+def load_yaml_settings(file_path):
+    resolved_path = _resolve_path(file_path)
+    with open(resolved_path, "r", encoding="utf-8") as file:
+        settings = yaml.safe_load(file)
+    return settings
+
+
+# YAML設定の読込（Tk版と互換性維持）
+import yaml
+
+yaml_settings_path = _resolve_path("desktop_gui_settings.yaml")
+settings = load_yaml_settings(yaml_settings_path)
+BASE_FOLDER = settings["app_image_prompt_creator"]["BASE_FOLDER"]
+DEFAULT_TXT_PATH = settings["app_image_prompt_creator"]["DEFAULT_TXT_PATH"]
+DEFAULT_DB_PATH = settings["app_image_prompt_creator"]["DEFAULT_DB_PATH"]
+POSITION_FILE = settings["app_image_prompt_creator"]["POSITION_FILE"]
+EXCLUSION_CSV = settings["app_image_prompt_creator"]["EXCLUSION_CSV"]
+LLM_ENABLED = settings["app_image_prompt_creator"].get("LLM_ENABLED", False)
+LLM_MODEL = settings["app_image_prompt_creator"].get("LLM_MODEL", "gpt-5-mini")
+LLM_TEMPERATURE = settings["app_image_prompt_creator"].get("LLM_TEMPERATURE", 0.7)
+LLM_MAX_COMPLETION_TOKENS = settings["app_image_prompt_creator"].get("LLM_MAX_COMPLETION_TOKENS", 4500)
+LLM_TIMEOUT = settings["app_image_prompt_creator"].get("LLM_TIMEOUT", 30)
+OPENAI_API_KEY_ENV = settings["app_image_prompt_creator"].get("OPENAI_API_KEY_ENV", "OPENAI_API_KEY")
+ARRANGE_PRESETS_YAML = str(_resolve_path(settings["app_image_prompt_creator"].get("ARRANGE_PRESETS_YAML", "app_image_prompt_creator/arrange_presets.yaml")))
+LLM_INCLUDE_TEMPERATURE = settings["app_image_prompt_creator"].get("LLM_INCLUDE_TEMPERATURE", False)
+
+
+# =============================
+# ユーティリティ
+# =============================
+def get_exception_trace() -> str:
+    t, v, tb = sys.exc_info()
+    trace = traceback.format_exception(t, v, tb)
+    return "".join(trace)
+
+
+def load_exclusion_words() -> List[str]:
+    try:
+        with open(EXCLUSION_CSV, "r", encoding="utf-8", newline="") as file:
+            reader = csv.reader(file, quotechar='"', quoting=csv.QUOTE_ALL)
+            return [""] + [row[0] for row in reader if row]
+    except FileNotFoundError:
+        return [""]
+
+
+def _should_use_responses_api(model_name: str) -> bool:
+    if not model_name:
+        return False
+    target = model_name.strip().lower()
+    return any(target.startswith(prefix) for prefix in RESPONSES_MODEL_PREFIXES)
+
+
+def _build_responses_input(system_prompt: str, user_prompt: str):
+    def build_block(role: str, text: str):
+        return {
+            "role": role,
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": text or "",
+                }
+            ],
+        }
+
+    blocks = []
+    if system_prompt is not None:
+        blocks.append(build_block("system", system_prompt))
+    blocks.append(build_block("user", user_prompt or ""))
+    return blocks
+
+
+def _temperature_hint_for_responses(model_name: str, temperature: float) -> str:
+    if temperature is None:
+        return ""
+    if not _should_use_responses_api(model_name):
+        return ""
+    level = "balanced"
+    if temperature <= 0.35:
+        level = "precision / low randomness"
+    elif temperature >= 0.75:
+        level = "bold / high creativity"
+    hint = (
+        "\n\n[Legacy temperature emulation]\n"
+        f"- Treat creativity strength as {level} (legacy temperature {temperature:.2f}).\n"
+        "- Mirror the randomness level implied above even though the API ignores `temperature`.\n"
+        "- Lower values mean deterministic phrasing; higher values allow freer rewording and bolder stylistic exploration."
+    )
+    return hint
+
+
+def _append_temperature_hint(prompt_text: str, model_name: str, temperature: float) -> str:
+    hint = _temperature_hint_for_responses(model_name, temperature)
+    if hint:
+        return f"{prompt_text}{hint}"
+    return prompt_text
+
+
+def _compose_openai_payload(system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, include_temperature: bool, model_name: str):
+    model = model_name or LLM_MODEL
+    use_responses = _should_use_responses_api(model)
+    payload = {"model": model}
+    if use_responses:
+        payload["input"] = _build_responses_input(system_prompt, user_prompt)
+        if max_tokens is not None:
+            payload["max_output_tokens"] = max_tokens
+        endpoint = RESPONSES_API_URL
+        response_kind = "responses"
+    else:
+        payload["messages"] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        if max_tokens is not None:
+            payload["max_completion_tokens"] = max_tokens
+        endpoint = CHAT_COMPLETIONS_URL
+        response_kind = "chat"
+    send_temperature = include_temperature and (temperature is not None) and not use_responses
+    if send_temperature:
+        payload["temperature"] = temperature
+    return endpoint, payload, response_kind
+
+
+def _parse_openai_response(response_kind: str, data: dict):
+    if response_kind == "responses":
+        output = data.get("output", [])
+        texts: List[str] = []
+        finish_reason = ""
+        for item in output or []:
+            finish_reason = finish_reason or item.get("stop_reason", "")
+            if item.get("type") != "message":
+                continue
+            for content in item.get("content", []):
+                if content.get("type") in ("text", "output_text"):
+                    texts.append(content.get("text", ""))
+        if not texts:
+            output_text = data.get("output_text")
+            if isinstance(output_text, list):
+                texts.append("".join(output_text))
+            elif isinstance(output_text, str):
+                texts.append(output_text)
+        return "".join(texts).strip(), finish_reason or data.get("status", "")
+    choices = data.get("choices", [])
+    if not choices:
+        return "", ""
+    message = choices[0].get("message", {}) or {}
+    text = (message.get("content") or "").strip()
+    finish_reason = choices[0].get("finish_reason", "")
+    return text, finish_reason
+
+
+def send_llm_request(api_key: str, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int, timeout: int, model_name: str, include_temperature: bool = True):
+    endpoint, payload, response_kind = _compose_openai_payload(system_prompt, user_prompt, temperature, max_tokens, include_temperature, model_name)
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
+    resp.raise_for_status()
+    data = resp.json()
+    text, finish_reason = _parse_openai_response(response_kind, data)
+    return text, finish_reason, data
+
+
+@dataclass
+class AttributeType:
+    id: int
+    attribute_name: str
+    description: str
+
+
+@dataclass
+class AttributeDetail:
+    id: int
+    attribute_type_id: int
+    description: str
+    value: str
+    content_count: int
+
+
+class LLMWorker(QtCore.QObject):
+    """LLM 呼び出しをバックグラウンドで実行するワーカー。UI スレッドをブロックしない。"""
+
+    finished = QtCore.Signal(str)
+    failed = QtCore.Signal(str)
+
+    def __init__(self, text: str, model: str, length_hint: str):
+        super().__init__()
+        self.text = text
+        self.model = model
+        self.length_hint = length_hint
+
+    @QtCore.Slot()
+    def run(self):
+        try:
+            api_key = os.getenv(OPENAI_API_KEY_ENV)
+            if not api_key:
+                self.failed.emit(f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
+                return
+            user_prompt = (
+                f"Length adjustment request (target: {self.length_hint})\n"
+                f"Instruction: Adjust length ONLY. Preserve meaning, style, and technical parameters.\n"
+                f"Text: {self.text}"
+            )
+            system_prompt = _append_temperature_hint(
+                "You are a text length adjustment specialist. Keep style but meet length hint.",
+                self.model,
+                LLM_TEMPERATURE,
+            )
+            content, finish_reason, _ = send_llm_request(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=LLM_TEMPERATURE,
+                max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                timeout=LLM_TIMEOUT,
+                model_name=self.model,
+                include_temperature=LLM_INCLUDE_TEMPERATURE,
+            )
+            if finish_reason in LENGTH_LIMIT_REASONS:
+                self.failed.emit("LLM応答がトークン制限に達しました。短くして再試行してください。")
+                return
+            self.finished.emit(content)
+        except Exception:
+            self.failed.emit(get_exception_trace())
+
+
+class PromptGeneratorWindow(QtWidgets.QMainWindow):
+    """PySide6 版のメインウィンドウ。UIとイベントを集約。"""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle(WINDOW_TITLE)
+        self.setMinimumSize(1100, 680)
+        self.attribute_types: List[AttributeType] = []
+        self.attribute_details: List[AttributeDetail] = []
+        self.main_prompt: str = ""
+        self.tail_free_texts: str = ""
+        self.option_prompt: str = ""
+        self.available_model_choices = list(dict.fromkeys([LLM_MODEL, *AVAILABLE_LLM_MODELS]))
+        self._thread: Optional[QtCore.QThread] = None
+        self._build_ui()
+        self.load_attribute_data()
+        self.update_attribute_ui_choices()
+        self._update_tail_free_text_choices(reset_selection=True)
+
+    # =============================
+    # UI 構築
+    # =============================
+    def _build_ui(self):
+        central = QtWidgets.QWidget()
+        self.setCentralWidget(central)
+        layout = QtWidgets.QHBoxLayout(central)
+
+        self.left_panel = QtWidgets.QWidget()
+        self.right_panel = QtWidgets.QWidget()
+        layout.addWidget(self.left_panel, 2)
+        layout.addWidget(self.right_panel, 3)
+
+        self._build_left_panel()
+        self._build_right_panel()
+
+    def _build_left_panel(self):
+        left_layout = QtWidgets.QVBoxLayout(self.left_panel)
+
+        # LLMモデル選択
+        model_layout = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(model_layout)
+        model_layout.addWidget(QtWidgets.QLabel("LLMモデル:"))
+        self.combo_llm_model = QtWidgets.QComboBox()
+        self.combo_llm_model.addItems(self.available_model_choices)
+        self.combo_llm_model.setCurrentIndex(0)
+        model_layout.addWidget(self.combo_llm_model)
+        self.label_current_model = QtWidgets.QLabel(f"選択中: {self.combo_llm_model.currentText()}")
+        model_layout.addWidget(self.label_current_model)
+        self.combo_llm_model.currentTextChanged.connect(self._on_model_change)
+
+        # CSV 入出力
+        csv_buttons = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(csv_buttons)
+        csv_import_btn = QtWidgets.QPushButton("CSVをDBに投入")
+        csv_import_btn.clicked.connect(self._open_csv_import_dialog)
+        csv_buttons.addWidget(csv_import_btn)
+        csv_export_btn = QtWidgets.QPushButton("(DB確認用CSV出力)")
+        csv_export_btn.clicked.connect(self._export_csv)
+        csv_buttons.addWidget(csv_export_btn)
+
+        # 行数
+        row_layout = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(row_layout)
+        row_layout.addWidget(QtWidgets.QLabel("行数:"))
+        self.spin_row_num = QtWidgets.QSpinBox()
+        self.spin_row_num.setMinimum(1)
+        self.spin_row_num.setMaximum(999)
+        self.spin_row_num.setValue(DEFAULT_ROW_NUM)
+        row_layout.addWidget(self.spin_row_num)
+
+        # 属性選択（スクロール可能）
+        self.attribute_area = QtWidgets.QScrollArea()
+        self.attribute_area.setWidgetResizable(True)
+        self.attribute_container = QtWidgets.QWidget()
+        self.attribute_layout = QtWidgets.QFormLayout(self.attribute_container)
+        self.attribute_area.setWidget(self.attribute_container)
+        left_layout.addWidget(self.attribute_area, 1)
+
+        # 自動反映チェック
+        auto_layout = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(auto_layout)
+        self.check_autofix = QtWidgets.QCheckBox()
+        auto_layout.addWidget(QtWidgets.QLabel("自動反映:"))
+        auto_layout.addWidget(self.check_autofix)
+
+        # 末尾プリセット切替
+        tail_media_layout = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(tail_media_layout)
+        tail_media_layout.addWidget(QtWidgets.QLabel("末尾プリセット用途:"))
+        self.combo_tail_media_type = QtWidgets.QComboBox()
+        self.combo_tail_media_type.addItems(list(TAIL_PRESET_CHOICES.keys()))
+        self.combo_tail_media_type.currentTextChanged.connect(self._on_tail_media_type_change)
+        tail_media_layout.addWidget(self.combo_tail_media_type)
+
+        # 末尾固定テキスト
+        tail_layout = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(tail_layout)
+        self.check_tail_free = QtWidgets.QCheckBox()
+        tail_layout.addWidget(QtWidgets.QLabel("末尾1:"))
+        tail_layout.addWidget(self.check_tail_free)
+        self.combo_tail_free = QtWidgets.QComboBox()
+        self.combo_tail_free.setEditable(True)
+        tail_layout.addWidget(self.combo_tail_free)
+        self.combo_tail_free.setToolTip("末尾固定文を選択または編集できます。")
+
+        # オプションコンボ
+        self.combo_tail_ar = self._add_option_row(left_layout, "ar オプション:", AR_OPTIONS)
+        self.combo_tail_s = self._add_option_row(left_layout, "s オプション:", S_OPTIONS)
+        self.combo_tail_chaos = self._add_option_row(left_layout, "chaos オプション:", CHAOS_OPTIONS)
+        self.combo_tail_q = self._add_option_row(left_layout, "q オプション:", Q_OPTIONS)
+        self.combo_tail_weird = self._add_option_row(left_layout, "weird オプション:", WEIRD_OPTIONS)
+
+        # 除外語句
+        exclusion_layout = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(exclusion_layout)
+        exclusion_layout.addWidget(QtWidgets.QLabel(LABEL_EXCLUSION_WORDS))
+        self.check_exclusion = QtWidgets.QCheckBox()
+        exclusion_layout.addWidget(self.check_exclusion)
+        self.combo_exclusion = QtWidgets.QComboBox()
+        self.combo_exclusion.setEditable(True)
+        exclusion_layout.addWidget(self.combo_exclusion)
+        self.combo_exclusion.addItems(load_exclusion_words())
+        open_exclusion_btn = QtWidgets.QPushButton("除外語句CSVを開く")
+        open_exclusion_btn.clicked.connect(self._open_exclusion_csv)
+        left_layout.addWidget(open_exclusion_btn)
+
+        # ボタン群
+        generate_btn = QtWidgets.QPushButton("生成")
+        generate_btn.clicked.connect(self.generate_text)
+        left_layout.addWidget(generate_btn)
+
+        generate_copy_btn = QtWidgets.QPushButton("生成とコピー（全文）")
+        generate_copy_btn.clicked.connect(self.generate_and_copy)
+        left_layout.addWidget(generate_copy_btn)
+
+        copy_btn = QtWidgets.QPushButton("クリップボードにコピー(全文)")
+        copy_btn.clicked.connect(self.copy_all_to_clipboard)
+        left_layout.addWidget(copy_btn)
+
+        update_tail_btn = QtWidgets.QPushButton("末尾固定部のみ更新")
+        update_tail_btn.clicked.connect(self.update_tail_free_texts)
+        left_layout.addWidget(update_tail_btn)
+
+        update_option_btn = QtWidgets.QPushButton("オプションのみ更新")
+        update_option_btn.clicked.connect(self.update_option)
+        left_layout.addWidget(update_option_btn)
+
+        format_movie_btn = QtWidgets.QPushButton("動画用に整形(JSON)")
+        format_movie_btn.clicked.connect(self.handle_format_for_movie_prompt)
+        left_layout.addWidget(format_movie_btn)
+
+        # LLM アレンジ
+        arrange_layout = QtWidgets.QHBoxLayout()
+        left_layout.addLayout(arrange_layout)
+        arrange_layout.addWidget(QtWidgets.QLabel("文字数調整:"))
+        self.combo_length_adjust = QtWidgets.QComboBox()
+        self.combo_length_adjust.addItems(["半分", "2割減", "同程度", "2割増", "倍"])
+        arrange_layout.addWidget(self.combo_length_adjust)
+        arrange_btn = QtWidgets.QPushButton("文字数調整してコピー")
+        arrange_btn.clicked.connect(self.handle_length_adjust_and_copy)
+        left_layout.addWidget(arrange_btn)
+
+    def _build_right_panel(self):
+        right_layout = QtWidgets.QVBoxLayout(self.right_panel)
+        self.text_output = QtWidgets.QTextEdit()
+        self.text_output.setPlaceholderText("ここに生成結果が表示されます")
+        right_layout.addWidget(self.text_output, 1)
+
+    def _add_option_row(self, parent_layout: QtWidgets.QVBoxLayout, label: str, values: Iterable[str]) -> QtWidgets.QComboBox:
+        row = QtWidgets.QHBoxLayout()
+        parent_layout.addLayout(row)
+        row.addWidget(QtWidgets.QLabel(label))
+        checkbox = QtWidgets.QCheckBox()
+        row.addWidget(checkbox)
+        combo = QtWidgets.QComboBox()
+        combo.addItems([str(v) for v in values])
+        combo.setEditable(True)
+        combo.setProperty("toggle", checkbox)
+        row.addWidget(combo)
+        combo.currentTextChanged.connect(self.auto_update)
+        checkbox.stateChanged.connect(self.auto_update)
+        return combo
+
+    # =============================
+    # データロード
+    # =============================
+    def load_attribute_data(self):
+        self.attribute_types.clear()
+        self.attribute_details.clear()
+        conn = sqlite3.connect(DEFAULT_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, attribute_name, description FROM attribute_types")
+        for row in cursor.fetchall():
+            self.attribute_types.append(AttributeType(*row))
+        cursor.execute(
+            """
+            SELECT ad.id, ad.attribute_type_id, ad.description, ad.value, COUNT(DISTINCT pad.prompt_id) as content_count
+            FROM attribute_details ad
+            LEFT JOIN prompt_attribute_details pad ON ad.id = pad.attribute_detail_id
+            GROUP BY ad.id
+            """
+        )
+        for row in cursor.fetchall():
+            self.attribute_details.append(AttributeDetail(*row))
+        conn.close()
+
+    def update_attribute_ui_choices(self):
+        # 既存フォームをクリア
+        while self.attribute_layout.count():
+            item = self.attribute_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        self.attribute_combo_map = {}
+        self.attribute_count_map = {}
+        for attr in self.attribute_types:
+            detail_values = ["-"] + [
+                f"{detail.description} ({detail.content_count})"
+                for detail in self.attribute_details
+                if detail.attribute_type_id == attr.id and detail.content_count > 0
+            ]
+            detail_combo = QtWidgets.QComboBox()
+            detail_combo.addItems(detail_values)
+            detail_combo.setCurrentIndex(0)
+            detail_combo.currentTextChanged.connect(self.auto_update)
+
+            count_combo = QtWidgets.QComboBox()
+            count_combo.addItems(["-"] + [str(i) for i in range(11)])
+            count_combo.setCurrentText("0")
+            count_combo.currentTextChanged.connect(self.auto_update)
+
+            line_widget = QtWidgets.QWidget()
+            line_layout = QtWidgets.QHBoxLayout(line_widget)
+            line_layout.setContentsMargins(0, 0, 0, 0)
+            line_layout.addWidget(detail_combo, 8)
+            line_layout.addWidget(count_combo, 2)
+            self.attribute_layout.addRow(QtWidgets.QLabel(attr.description), line_widget)
+
+            self.attribute_combo_map[attr.id] = detail_combo
+            self.attribute_count_map[attr.id] = count_combo
+
+    # =============================
+    # UI イベント
+    # =============================
+    def _on_model_change(self, value: str):
+        self.label_current_model.setText(f"選択中: {value}")
+        print(f"[LLM] 現在のモデル: {value} (changed via UI)")
+
+    def _on_tail_media_type_change(self, value: str):
+        self._update_tail_free_text_choices(reset_selection=True)
+        self.auto_update()
+
+    def _update_tail_free_text_choices(self, reset_selection: bool):
+        presets = TAIL_PRESET_CHOICES.get(self.combo_tail_media_type.currentText(), TAIL_PRESET_CHOICES[DEFAULT_TAIL_MEDIA_TYPE])
+        current = self.combo_tail_free.currentText()
+        self.combo_tail_free.clear()
+        self.combo_tail_free.addItems(presets)
+        if not reset_selection and current in presets:
+            self.combo_tail_free.setCurrentText(current)
+        else:
+            self.combo_tail_free.setCurrentIndex(0)
+
+    def auto_update(self):
+        if self.check_autofix.isChecked() and self.main_prompt:
+            self.update_option()
+
+    def _open_csv_import_dialog(self):
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("CSV Import")
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.addWidget(QtWidgets.QLabel("CSV データを貼り付けてください"))
+        text_edit = QtWidgets.QTextEdit()
+        layout.addWidget(text_edit)
+        button = QtWidgets.QPushButton("投入")
+        layout.addWidget(button)
+
+        def handle_import():
+            content = text_edit.toPlainText().strip()
+            if not content:
+                QtWidgets.QMessageBox.critical(self, "エラー", "CSVデータを入力してください。")
+                return
+            try:
+                self._process_csv(content)
+                QtWidgets.QMessageBox.information(self, "成功", "CSVデータが正常に処理されました。")
+                self.load_attribute_data()
+                self.update_attribute_ui_choices()
+                dialog.accept()
+            except Exception:
+                QtWidgets.QMessageBox.critical(self, "エラー", f"CSVの処理中にエラーが発生しました: {get_exception_trace()}")
+
+        button.clicked.connect(handle_import)
+        dialog.exec()
+
+    def _process_csv(self, csv_content: str):
+        conn = sqlite3.connect(DEFAULT_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS prompts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS prompt_attribute_details (
+                prompt_id INTEGER,
+                attribute_detail_id INTEGER,
+                FOREIGN KEY (prompt_id) REFERENCES prompts (id),
+                FOREIGN KEY (attribute_detail_id) REFERENCES attribute_details (id)
+            )
+            """
+        )
+        for line in csv_content.splitlines():
+            if "citation[oaicite" in line or "```" in line:
+                continue
+            if line.strip() and len(line) > 10 and [line[0], line[-1]] == ['"', '"']:
+                line = line.replace('"""', '"')
+                try:
+                    content, attribute_detail_ids = line.strip('"').split('","')
+                except Exception:
+                    content, attribute_detail_ids = line.strip('"').split('", "')
+                cursor.execute('INSERT INTO prompts (content) VALUES (?)', (content,))
+                prompt_id = cursor.lastrowid
+                for attribute_detail_id in attribute_detail_ids.split(','):
+                    cursor.execute(
+                        'INSERT INTO prompt_attribute_details (prompt_id, attribute_detail_id) VALUES (?, ?)',
+                        (prompt_id, int(attribute_detail_id)),
+                    )
+        conn.commit()
+        conn.close()
+
+    def _export_csv(self):
+        MJImage().run()
+
+    def _open_exclusion_csv(self):
+        try:
+            if os.name == "nt":
+                subprocess.Popen(["notepad.exe", EXCLUSION_CSV])
+            elif sys.platform == "darwin":
+                subprocess.call(["open", "-a", "TextEdit", EXCLUSION_CSV])
+            else:
+                subprocess.call(["xdg-open", EXCLUSION_CSV])
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "エラー", f"CSVファイルを開けませんでした: {e}")
+
+    # =============================
+    # プロンプト生成ロジック
+    # =============================
+    def _make_option_prompt(self) -> str:
+        def segment(combo: QtWidgets.QComboBox, flag: QtWidgets.QCheckBox, key: str) -> str:
+            return f" --{key} {combo.currentText()}" if flag.isChecked() and combo.currentText().strip() else ""
+
+        tail_ar = segment(self.combo_tail_ar, self.combo_tail_ar.property("toggle"), "ar")
+        tail_s = segment(self.combo_tail_s, self.combo_tail_s.property("toggle"), "s")
+        tail_chaos = segment(self.combo_tail_chaos, self.combo_tail_chaos.property("toggle"), "chaos")
+        tail_q = segment(self.combo_tail_q, self.combo_tail_q.property("toggle"), "q")
+        tail_weird = segment(self.combo_tail_weird, self.combo_tail_weird.property("toggle"), "weird")
+        return f"{tail_ar}{tail_s}{tail_chaos}{tail_q}{tail_weird}"
+
+    def _make_tail_text(self) -> str:
+        if self.check_tail_free.isChecked() and self.combo_tail_free.currentText().strip():
+            return " " + self.combo_tail_free.currentText().strip()
+        return ""
+
+    def generate_text(self):
+        try:
+            conn = sqlite3.connect(DEFAULT_DB_PATH)
+            cursor = conn.cursor()
+            total_lines = int(self.spin_row_num.value())
+            exclusion_words = [w.strip() for w in self.combo_exclusion.currentText().split(',') if w.strip()]
+            selected_lines = []
+            if self.check_exclusion.isChecked() and exclusion_words:
+                self._update_exclusion_words(exclusion_words)
+
+            for attr in self.attribute_types:
+                detail_combo = self.attribute_combo_map[attr.id]
+                count_combo = self.attribute_count_map[attr.id]
+                detail = detail_combo.currentText()
+                count = count_combo.currentText()
+                if detail != "-" and count != "-":
+                    count_int = int(count)
+                    if count_int > 0:
+                        detail_description = detail.split(" (")[0]
+                        detail_value = next((d.value for d in self.attribute_details if d.description == detail_description), None)
+                        if detail_value:
+                            if self.check_exclusion.isChecked() and exclusion_words:
+                                exclusion_condition = " AND " + " AND ".join("p.content NOT LIKE ?" for _ in exclusion_words)
+                                query = (
+                                    "SELECT p.content FROM prompts p "
+                                    "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
+                                    "JOIN attribute_details ad ON pad.attribute_detail_id = ad.id "
+                                    "WHERE ad.value = ? "
+                                    f"{exclusion_condition}"
+                                )
+                                params = [detail_value] + [f"%{word}%" for word in exclusion_words]
+                                cursor.execute(query, params)
+                            else:
+                                cursor.execute(
+                                    "SELECT p.content FROM prompts p "
+                                    "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
+                                    "JOIN attribute_details ad ON pad.attribute_detail_id = ad.id "
+                                    "WHERE ad.value = ?",
+                                    (detail_value,),
+                                )
+                            matching = cursor.fetchall()
+                            selected_lines.extend(random.sample(matching, min(count_int, len(matching))))
+
+            remaining = total_lines - len(selected_lines)
+            if remaining > 0:
+                if self.check_exclusion.isChecked() and exclusion_words:
+                    exclusion_condition = " AND " + " AND ".join("content NOT LIKE ?" for _ in exclusion_words)
+                    query = f"SELECT content FROM prompts WHERE 1=1 {exclusion_condition}"
+                    cursor.execute(query, [f"%{w}%" for w in exclusion_words])
+                else:
+                    cursor.execute("SELECT content FROM prompts")
+                all_prompts = cursor.fetchall()
+                remaining_pool = [line for line in all_prompts if line not in selected_lines]
+                selected_lines.extend(random.sample(remaining_pool, min(len(remaining_pool), remaining)))
+            conn.close()
+
+            random.shuffle(selected_lines)
+            processed_lines = []
+            for line in selected_lines:
+                text = line[0].strip()
+                if text.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
+                    text = text[:-1] + "."
+                elif not text.endswith("."):
+                    text += "."
+                processed_lines.append(text)
+            self.main_prompt = " ".join(processed_lines)
+            self.update_option()
+        except Exception:
+            QtWidgets.QMessageBox.critical(self, "エラー", f"エラーが発生しました: {get_exception_trace()}")
+
+    def update_option(self):
+        self.option_prompt = self._make_option_prompt()
+        self.tail_free_texts = self._make_tail_text()
+        result = f"{self.main_prompt}{self.tail_free_texts}{self.option_prompt}"
+        self.text_output.setPlainText(result)
+
+    def update_tail_free_texts(self):
+        self.tail_free_texts = self._make_tail_text()
+        result = f"{self.main_prompt}{self.tail_free_texts}{self.option_prompt}"
+        self.text_output.setPlainText(result)
+
+    def generate_and_copy(self):
+        self.generate_text()
+        self.copy_all_to_clipboard()
+
+    def copy_all_to_clipboard(self):
+        text = self.text_output.toPlainText().strip()
+        if not text:
+            QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
+            return
+        QtGui.QGuiApplication.clipboard().setText(text)
+        QtWidgets.QMessageBox.information(self, "コピー完了", "クリップボードにコピーしました。")
+
+    def handle_format_for_movie_prompt(self):
+        try:
+            src = self.text_output.toPlainText().strip()
+            if not src:
+                QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
+                return
+            core_without_movie, movie_tail = self._detach_movie_tail_for_llm(src)
+            main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
+            if not main_text:
+                QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
+                return
+            sentence_candidates = re.split(r"[。\.]\s*", main_text)
+            details = [s.strip(" .　") for s in sentence_candidates if s.strip(" .　")]
+            world_payload = {
+                "world_description": {
+                    "scope": "single_continuous_world",
+                    "summary": main_text.strip(),
+                    "details": details,
+                }
+            }
+            world_json = json.dumps(world_payload, ensure_ascii=False)
+            parts = [world_json]
+            if movie_tail:
+                parts.append(movie_tail.strip())
+            if options_tail:
+                parts.append(options_tail.strip())
+            result = " ".join(p for p in parts if p)
+            self.text_output.setPlainText(result)
+            self._update_internal_prompt_from_text(result)
+            QtWidgets.QMessageBox.information(self, "整形完了", "動画用のJSONプロンプトに整形しました。")
+        except Exception:
+            QtWidgets.QMessageBox.critical(self, "エラー", f"動画用プロンプト整形中にエラーが発生しました:\n{get_exception_trace()}")
+
+    def handle_length_adjust_and_copy(self):
+        src = self.text_output.toPlainText().strip()
+        if not src:
+            QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
+            return
+        target = self.combo_length_adjust.currentText()
+        self._start_llm_worker(src, target)
+
+    def _start_llm_worker(self, text: str, length_hint: str):
+        if not LLM_ENABLED:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
+            return
+        if self._thread and self._thread.isRunning():
+            QtWidgets.QMessageBox.information(self, "実行中", "LLM 呼び出しが進行中です。完了までお待ちください。")
+            return
+        worker = LLMWorker(text=text, model=self.combo_llm_model.currentText(), length_hint=length_hint)
+        thread = QtCore.QThread()
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(lambda result: self._handle_llm_success(thread, worker, result))
+        worker.failed.connect(lambda err: self._handle_llm_failure(thread, worker, err))
+        thread.start()
+        self._thread = thread
+
+    def _handle_llm_success(self, thread: QtCore.QThread, worker: LLMWorker, result: str):
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        if not result:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
+            return
+        clean = self._inherit_options_if_present(self.text_output.toPlainText(), result)
+        self.text_output.setPlainText(clean)
+        QtGui.QGuiApplication.clipboard().setText(clean)
+        QtWidgets.QMessageBox.information(self, "コピー完了", "LLMで調整したプロンプトをコピーしました。")
+
+    def _handle_llm_failure(self, thread: QtCore.QThread, worker: LLMWorker, error: str):
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        QtWidgets.QMessageBox.critical(self, "エラー", f"LLM 呼び出しでエラーが発生しました:\n{error}")
+
+    def _update_exclusion_words(self, new_words: List[str]):
+        new_words = sorted([w for w in new_words if w])
+        new_phrase = ", ".join(new_words)
+        current_words = load_exclusion_words()
+        if new_phrase and new_phrase not in current_words:
+            with open(EXCLUSION_CSV, "a", encoding="utf-8", newline="") as file:
+                writer = csv.writer(file, quotechar='"', quoting=csv.QUOTE_ALL)
+                writer.writerow([new_phrase])
+            updated = load_exclusion_words()
+            self.combo_exclusion.clear()
+            self.combo_exclusion.addItems(updated)
+            self.combo_exclusion.setCurrentText(new_phrase)
+
+    # =============================
+    # オプション整形系ヘルパー
+    # =============================
+    def _detach_movie_tail_for_llm(self, text: str) -> Tuple[str, str]:
+        tokens = (text or "").strip().split()
+        if not tokens:
+            return "", ""
+        movie_tail = ""
+        if tokens and tokens[-1].startswith("{") and "video_style" in tokens[-1]:
+            movie_tail = tokens[-1]
+            tokens = tokens[:-1]
+        return " ".join(tokens), movie_tail
+
+    def _split_prompt_and_options(self, text: str):
+        try:
+            tokens = (text or "").strip().split()
+            if not tokens:
+                return "", "", False
+            allowed = {"--ar", "--s", "--chaos", "--q", "--weird"}
+            start_idx = None
+            i = len(tokens) - 1
+            while i >= 0:
+                if tokens[i] in allowed:
+                    start_idx = i
+                    i -= 1
+                    if i >= 0 and tokens[i] not in allowed and not tokens[i].startswith("--"):
+                        i -= 1
+                    while i >= 0:
+                        if tokens[i] in allowed:
+                            i -= 1
+                            if i >= 0 and tokens[i] not in allowed and not tokens[i].startswith("--"):
+                                i -= 1
+                        else:
+                            break
+                    start_idx = i + 1
+                    break
+                else:
+                    i -= 1
+            if start_idx is not None and 0 <= start_idx < len(tokens):
+                j = start_idx
+                ok = True
+                while j < len(tokens):
+                    if tokens[j] in allowed:
+                        j += 1
+                        if j < len(tokens) and not tokens[j].startswith("--"):
+                            j += 1
+                    else:
+                        ok = False
+                        break
+                if ok:
+                    main_text = " ".join(tokens[:start_idx]).rstrip()
+                    options_tail = (" " + " ".join(tokens[start_idx:])) if start_idx < len(tokens) else ""
+                    return main_text, options_tail, True
+            return (text or "").strip(), "", False
+        except Exception:
+            return (text or "").strip(), "", False
+
+    def _inherit_options_if_present(self, original_text: str, new_text: str) -> str:
+        orig_main, orig_opts, has_opts = self._split_prompt_and_options(original_text)
+        if has_opts:
+            new_main, _, _ = self._split_prompt_and_options(new_text)
+            return new_main + orig_opts
+        return self._strip_all_options(new_text)
+
+    def _strip_all_options(self, text: str) -> str:
+        try:
+            pattern = r"(?:(?<=\s)|^)--(?:ar|s|chaos|q|weird)(?:\s+(?!-)[^\s]+)?"
+            cleaned = re.sub(pattern, "", text)
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            return cleaned
+        except Exception:
+            return (text or "").strip()
+
+    def _update_internal_prompt_from_text(self, full_text: str):
+        normalized = (full_text or "").strip()
+        if not normalized:
+            return
+        main_text, options_tail, _ = self._split_prompt_and_options(normalized)
+        core, movie_tail = self._detach_movie_tail_for_llm(main_text)
+        self.main_prompt = core
+        self.tail_free_texts = f" {movie_tail}" if movie_tail else ""
+        self.option_prompt = options_tail
+
+
+def main():
+    app = QtWidgets.QApplication(sys.argv)
+    window = PromptGeneratorWindow()
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
