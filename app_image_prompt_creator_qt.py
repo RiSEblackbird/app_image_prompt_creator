@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import random
 import re
@@ -20,6 +21,7 @@ import sqlite3
 import subprocess
 import sys
 import traceback
+from contextlib import closing
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,6 +69,8 @@ LENGTH_LIMIT_REASONS = {"length", "max_output_tokens"}
 HOSTNAME = socket.gethostname()
 SCRIPT_DIR = Path(__file__).resolve().parent
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s\t%(message)s")
+
 FONT_SCALE_PRESETS = [
     {"label": "標準", "pt": 11},
     {"label": "大", "pt": 13},
@@ -93,6 +97,15 @@ DEFAULT_APP_SETTINGS = {
 
 # 設定読み込み中の警告やフォールバック内容を貯めて、ウィンドウ生成後にまとめて案内する。
 SETTINGS_LOAD_NOTES: List[str] = []
+
+
+def log_structured(level: int, event: str, context: Optional[dict] = None) -> None:
+    """環境依存の調査を容易にするため、ホスト名と経路情報を含む構造化ログを出力する。"""
+
+    payload = {"event": event, "hostname": HOSTNAME}
+    if context:
+        payload.update(context)
+    logging.log(level, json.dumps(payload, ensure_ascii=False))
 
 
 def _resolve_path(path_value, base_dir=SCRIPT_DIR):
@@ -761,28 +774,68 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         checkbox.stateChanged.connect(self.auto_update)
         return combo
 
+    def _get_db_path_or_warn(self) -> Optional[Path]:
+        """DBパスの存在をチェックし、欠損時はセットアップ手順を案内する。"""
+
+        db_path = Path(DEFAULT_DB_PATH)
+        log_structured(logging.INFO, "db_path_check", {"db_path": str(db_path)})
+        if db_path.exists():
+            return db_path
+        self._show_db_missing_dialog(db_path)
+        return None
+
+    def _build_db_missing_message(self, db_path: Path) -> str:
+        """初回セットアップを明示した案内文を生成する。"""
+
+        return (
+            "データベースファイルが見つかりませんでした。\n"
+            f"想定パス: {db_path}\n\n"
+            "セットアップ例:\n"
+            "1) `python export_prompts_to_csv.py` を実行して初期DBを生成する\n"
+            "2) アプリ内の『CSVをDBに投入』からCSVを登録する\n"
+            "3) ファイルを配置後、アプリを再起動する"
+        )
+
+    def _show_db_missing_dialog(self, db_path: Path) -> None:
+        """DB欠損時のダイアログ表示をまとめ、利用者に具体的な復旧手順を提示する。"""
+
+        log_structured(logging.ERROR, "db_missing", {"db_path": str(db_path)})
+        QtWidgets.QMessageBox.critical(self, "DB未検出", self._build_db_missing_message(db_path))
+
     # =============================
     # データロード
     # =============================
     def load_attribute_data(self):
         self.attribute_types.clear()
         self.attribute_details.clear()
-        conn = sqlite3.connect(DEFAULT_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, attribute_name, description FROM attribute_types")
-        for row in cursor.fetchall():
-            self.attribute_types.append(AttributeType(*row))
-        cursor.execute(
-            """
-            SELECT ad.id, ad.attribute_type_id, ad.description, ad.value, COUNT(DISTINCT pad.prompt_id) as content_count
-            FROM attribute_details ad
-            LEFT JOIN prompt_attribute_details pad ON ad.id = pad.attribute_detail_id
-            GROUP BY ad.id
-            """
-        )
-        for row in cursor.fetchall():
-            self.attribute_details.append(AttributeDetail(*row))
-        conn.close()
+        db_path = self._get_db_path_or_warn()
+        if not db_path:
+            return
+
+        try:
+            with closing(sqlite3.connect(db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, attribute_name, description FROM attribute_types")
+                for row in cursor.fetchall():
+                    self.attribute_types.append(AttributeType(*row))
+                cursor.execute(
+                    """
+                    SELECT ad.id, ad.attribute_type_id, ad.description, ad.value, COUNT(DISTINCT pad.prompt_id) as content_count
+                    FROM attribute_details ad
+                    LEFT JOIN prompt_attribute_details pad ON ad.id = pad.attribute_detail_id
+                    GROUP BY ad.id
+                    """
+                )
+                for row in cursor.fetchall():
+                    self.attribute_details.append(AttributeDetail(*row))
+        except sqlite3.Error as exc:
+            log_structured(
+                logging.ERROR,
+                "db_connection_failed",
+                {"db_path": str(db_path), "error": str(exc), "caller": "load_attribute_data"},
+            )
+            QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
+            return
 
     def update_attribute_ui_choices(self):
         # 既存フォームをクリア
@@ -873,44 +926,56 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         dialog.exec()
 
     def _process_csv(self, csv_content: str):
-        conn = sqlite3.connect(DEFAULT_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS prompts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                content TEXT
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS prompt_attribute_details (
-                prompt_id INTEGER,
-                attribute_detail_id INTEGER,
-                FOREIGN KEY (prompt_id) REFERENCES prompts (id),
-                FOREIGN KEY (attribute_detail_id) REFERENCES attribute_details (id)
-            )
-            """
-        )
-        for line in csv_content.splitlines():
-            if "citation[oaicite" in line or "```" in line:
-                continue
-            if line.strip() and len(line) > 10 and [line[0], line[-1]] == ['"', '"']:
-                line = line.replace('"""', '"')
-                try:
-                    content, attribute_detail_ids = line.strip('"').split('","')
-                except Exception:
-                    content, attribute_detail_ids = line.strip('"').split('", "')
-                cursor.execute('INSERT INTO prompts (content) VALUES (?)', (content,))
-                prompt_id = cursor.lastrowid
-                for attribute_detail_id in attribute_detail_ids.split(','):
-                    cursor.execute(
-                        'INSERT INTO prompt_attribute_details (prompt_id, attribute_detail_id) VALUES (?, ?)',
-                        (prompt_id, int(attribute_detail_id)),
+        db_path = self._get_db_path_or_warn()
+        if not db_path:
+            return
+
+        try:
+            with closing(sqlite3.connect(db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS prompts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        content TEXT
                     )
-        conn.commit()
-        conn.close()
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS prompt_attribute_details (
+                        prompt_id INTEGER,
+                        attribute_detail_id INTEGER,
+                        FOREIGN KEY (prompt_id) REFERENCES prompts (id),
+                        FOREIGN KEY (attribute_detail_id) REFERENCES attribute_details (id)
+                    )
+                    """
+                )
+                for line in csv_content.splitlines():
+                    if "citation[oaicite" in line or "```" in line:
+                        continue
+                    if line.strip() and len(line) > 10 and [line[0], line[-1]] == ['"', '"']:
+                        line = line.replace('"""', '"')
+                        try:
+                            content, attribute_detail_ids = line.strip('"').split('","')
+                        except Exception:
+                            content, attribute_detail_ids = line.strip('"').split('", "')
+                        cursor.execute('INSERT INTO prompts (content) VALUES (?)', (content,))
+                        prompt_id = cursor.lastrowid
+                        for attribute_detail_id in attribute_detail_ids.split(','):
+                            cursor.execute(
+                                'INSERT INTO prompt_attribute_details (prompt_id, attribute_detail_id) VALUES (?, ?)',
+                                (prompt_id, int(attribute_detail_id)),
+                            )
+                conn.commit()
+        except sqlite3.Error as exc:
+            log_structured(
+                logging.ERROR,
+                "db_connection_failed",
+                {"db_path": str(db_path), "error": str(exc), "caller": "_process_csv"},
+            )
+            QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"CSV投入用DB処理に失敗しました。\n{exc}")
+            return
 
     def _export_csv(self):
         MJImage().run()
@@ -946,72 +1011,82 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         return ""
 
     def generate_text(self):
+        db_path = self._get_db_path_or_warn()
+        if not db_path:
+            return
+
         try:
-            conn = sqlite3.connect(DEFAULT_DB_PATH)
-            cursor = conn.cursor()
-            total_lines = int(self.spin_row_num.value())
-            exclusion_words = [w.strip() for w in self.combo_exclusion.currentText().split(',') if w.strip()]
-            selected_lines = []
-            if self.check_exclusion.isChecked() and exclusion_words:
-                self._update_exclusion_words(exclusion_words)
-
-            for attr in self.attribute_types:
-                detail_combo = self.attribute_combo_map[attr.id]
-                count_combo = self.attribute_count_map[attr.id]
-                detail = detail_combo.currentText()
-                count = count_combo.currentText()
-                if detail != "-" and count != "-":
-                    count_int = int(count)
-                    if count_int > 0:
-                        detail_description = detail.split(" (")[0]
-                        detail_value = next((d.value for d in self.attribute_details if d.description == detail_description), None)
-                        if detail_value:
-                            if self.check_exclusion.isChecked() and exclusion_words:
-                                exclusion_condition = " AND " + " AND ".join("p.content NOT LIKE ?" for _ in exclusion_words)
-                                query = (
-                                    "SELECT p.content FROM prompts p "
-                                    "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
-                                    "JOIN attribute_details ad ON pad.attribute_detail_id = ad.id "
-                                    "WHERE ad.value = ? "
-                                    f"{exclusion_condition}"
-                                )
-                                params = [detail_value] + [f"%{word}%" for word in exclusion_words]
-                                cursor.execute(query, params)
-                            else:
-                                cursor.execute(
-                                    "SELECT p.content FROM prompts p "
-                                    "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
-                                    "JOIN attribute_details ad ON pad.attribute_detail_id = ad.id "
-                                    "WHERE ad.value = ?",
-                                    (detail_value,),
-                                )
-                            matching = cursor.fetchall()
-                            selected_lines.extend(random.sample(matching, min(count_int, len(matching))))
-
-            remaining = total_lines - len(selected_lines)
-            if remaining > 0:
+            with closing(sqlite3.connect(db_path)) as conn:
+                cursor = conn.cursor()
+                total_lines = int(self.spin_row_num.value())
+                exclusion_words = [w.strip() for w in self.combo_exclusion.currentText().split(',') if w.strip()]
+                selected_lines = []
                 if self.check_exclusion.isChecked() and exclusion_words:
-                    exclusion_condition = " AND " + " AND ".join("content NOT LIKE ?" for _ in exclusion_words)
-                    query = f"SELECT content FROM prompts WHERE 1=1 {exclusion_condition}"
-                    cursor.execute(query, [f"%{w}%" for w in exclusion_words])
-                else:
-                    cursor.execute("SELECT content FROM prompts")
-                all_prompts = cursor.fetchall()
-                remaining_pool = [line for line in all_prompts if line not in selected_lines]
-                selected_lines.extend(random.sample(remaining_pool, min(len(remaining_pool), remaining)))
-            conn.close()
+                    self._update_exclusion_words(exclusion_words)
 
-            random.shuffle(selected_lines)
-            processed_lines = []
-            for line in selected_lines:
-                text = line[0].strip()
-                if text.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
-                    text = text[:-1] + "."
-                elif not text.endswith("."):
-                    text += "."
-                processed_lines.append(text)
-            self.main_prompt = " ".join(processed_lines)
-            self.update_option()
+                for attr in self.attribute_types:
+                    detail_combo = self.attribute_combo_map[attr.id]
+                    count_combo = self.attribute_count_map[attr.id]
+                    detail = detail_combo.currentText()
+                    count = count_combo.currentText()
+                    if detail != "-" and count != "-":
+                        count_int = int(count)
+                        if count_int > 0:
+                            detail_description = detail.split(" (")[0]
+                            detail_value = next((d.value for d in self.attribute_details if d.description == detail_description), None)
+                            if detail_value:
+                                if self.check_exclusion.isChecked() and exclusion_words:
+                                    exclusion_condition = " AND " + " AND ".join("p.content NOT LIKE ?" for _ in exclusion_words)
+                                    query = (
+                                        "SELECT p.content FROM prompts p "
+                                        "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
+                                        "JOIN attribute_details ad ON pad.attribute_detail_id = ad.id "
+                                        "WHERE ad.value = ? "
+                                        f"{exclusion_condition}"
+                                    )
+                                    params = [detail_value] + [f"%{word}%" for word in exclusion_words]
+                                    cursor.execute(query, params)
+                                else:
+                                    cursor.execute(
+                                        "SELECT p.content FROM prompts p "
+                                        "JOIN prompt_attribute_details pad ON p.id = pad.prompt_id "
+                                        "JOIN attribute_details ad ON pad.attribute_detail_id = ad.id "
+                                        "WHERE ad.value = ?",
+                                        (detail_value,),
+                                    )
+                                matching = cursor.fetchall()
+                                selected_lines.extend(random.sample(matching, min(count_int, len(matching))))
+
+                remaining = total_lines - len(selected_lines)
+                if remaining > 0:
+                    if self.check_exclusion.isChecked() and exclusion_words:
+                        exclusion_condition = " AND " + " AND ".join("content NOT LIKE ?" for _ in exclusion_words)
+                        query = f"SELECT content FROM prompts WHERE 1=1 {exclusion_condition}"
+                        cursor.execute(query, [f"%{w}%" for w in exclusion_words])
+                    else:
+                        cursor.execute("SELECT content FROM prompts")
+                    all_prompts = cursor.fetchall()
+                    remaining_pool = [line for line in all_prompts if line not in selected_lines]
+                    selected_lines.extend(random.sample(remaining_pool, min(len(remaining_pool), remaining)))
+
+                random.shuffle(selected_lines)
+                processed_lines = []
+                for line in selected_lines:
+                    text = line[0].strip()
+                    if text.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
+                        text = text[:-1] + "."
+                    elif not text.endswith("."):
+                        text += "."
+                    processed_lines.append(text)
+                self.main_prompt = " ".join(processed_lines)
+                self.update_option()
+        except sqlite3.Error as exc:
+            log_structured(
+                logging.ERROR,
+                "db_connection_failed",
+                {"db_path": str(db_path), "error": str(exc), "caller": "generate_text"},
+            )
+            QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
         except Exception:
             QtWidgets.QMessageBox.critical(self, "エラー", f"エラーが発生しました: {get_exception_trace()}")
 
