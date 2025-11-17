@@ -629,16 +629,41 @@ class TextGeneratorApp:
         )
         self.button_length_adjust_and_copy.pack(pady=5, fill='none')
 
-        # 動画用プロンプト整形ボタン
-        self.button_format_for_movie = tk.Button(
-            self.sub_buttons_frame,
-            text="動画用に整形(JSON)",
+        # 動画用プロンプト整形ボタン群
+        self.movie_format_frame = tk.LabelFrame(self.sub_buttons_frame, text="動画用に整形(JSON)")
+        self.movie_format_frame.pack(pady=5, fill='x')
+
+        simple_row = tk.Frame(self.movie_format_frame)
+        simple_row.pack(fill='x', pady=2)
+        tk.Label(simple_row, text="簡易整形(LLMなし):", width=18, anchor='w').pack(side='left')
+        tk.Button(
+            simple_row,
+            text="JSONデータ化",
             padx=5,
-            width=30,
+            width=18,
             font=self.sub_buttons_font,
-            command=self.handle_format_for_movie_prompt,
-        )
-        self.button_format_for_movie.pack(pady=5, fill='none')
+            command=self.handle_format_for_movie_json,
+        ).pack(side='left', padx=2)
+
+        llm_row = tk.Frame(self.movie_format_frame)
+        llm_row.pack(fill='x', pady=2)
+        tk.Label(llm_row, text="LLM改良:", width=18, anchor='w').pack(side='left')
+        tk.Button(
+            llm_row,
+            text="世界観整形",
+            padx=5,
+            width=14,
+            font=self.sub_buttons_font,
+            command=self.handle_movie_worldbuilding,
+        ).pack(side='left', padx=2)
+        tk.Button(
+            llm_row,
+            text="ストーリー構築",
+            padx=5,
+            width=14,
+            font=self.sub_buttons_font,
+            command=self.handle_movie_storyboard,
+        ).pack(side='left', padx=2)
 
         # 変数初期化
         self.file_lines = []
@@ -1069,60 +1094,45 @@ class TextGeneratorApp:
         if self.handle_length_adjust_only():
             self.copy_all_to_clipboard()
 
-    def handle_format_for_movie_prompt(self):
-        """Sora2向けに、メインテキストを世界観JSONとして整形する。
-
-        - 既存テキスト出力から、映画用JSONとMidjourneyオプションを分離する。
-        - メインテキスト部分をworld_description JSONに格納する。
-        - 映画用JSONとオプションはそのまま連結して保持する。
-        LLMは使わず、単純なフォーマット変換のみを行う。
-        """
+    def handle_format_for_movie_json(self):
+        """LLMを使わずメインテキストを world_description JSON に整形する。"""
         try:
-            src = self.text_output.get("1.0", tk.END).strip()
-            if not src:
-                messagebox.showwarning("注意", "まずプロンプトを生成してください。")
+            prepared = self._prepare_movie_prompt_parts()
+            if not prepared:
                 return
 
-            # メインテキスト / 映画用JSON / MJオプションを分離
-            core_without_movie, movie_tail = self._detach_movie_tail_for_llm(src)
-            main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
+            main_text, options_tail, movie_tail = prepared
+            details = self._extract_sentence_details(main_text)
+            world_json = self._build_movie_json_payload(
+                summary=main_text.strip(),
+                details=details,
+                scope="single_continuous_world",
+                key="world_description",
+            )
 
-            if not main_text:
-                messagebox.showwarning("注意", "メインテキストが見つかりません。")
-                return
-
-            # 文ごとの断片も保持しておく（Sora2が世界観の細部を理解しやすくするため）
-            # 既存仕様では「脈絡のない短文の羅列」なので、それぞれをdetailsとして配列に入れる。
-            sentence_candidates = re.split(r"[。\.]\s*", main_text)
-            details = [s.strip(" .　") for s in sentence_candidates if s.strip(" .　")]
-
-            world_payload = {
-                "world_description": {
-                    "scope": "single_continuous_world",
-                    "summary": main_text.strip(),
-                    "details": details,
-                }
-            }
-            world_json = json.dumps(world_payload, ensure_ascii=False)
-
-            parts = [world_json]
-            # 映画用スタイルJSON（video_style）はそのまま後ろに維持
-            if movie_tail:
-                parts.append(movie_tail.strip())
-            # Midjourneyオプション(--ar等)もそのまま維持
-            if options_tail:
-                parts.append(options_tail.strip())
-
-            result = " ".join(p for p in parts if p)
-
+            result = self._compose_movie_prompt(world_json, movie_tail, options_tail)
             self.text_output.delete("1.0", tk.END)
             self.text_output.insert(tk.END, result)
-            # 内部状態も新しい全文に同期させる（次の処理との一貫性確保）
             self._update_internal_prompt_from_text(result)
+            self.copy_all_to_clipboard()
 
-            messagebox.showinfo("整形完了", "動画用のJSONプロンプトに整形しました。\nSora2が世界観として解釈しやすい構造になっています。")
+            messagebox.showinfo(
+                "整形完了", "動画用のJSONプロンプトに整形し、全文をコピーしました。Sora2が世界観として解釈しやすい構造です。"
+            )
         except Exception:
             messagebox.showerror("エラー", f"動画用プロンプト整形中にエラーが発生しました:\n{get_exception_trace()}")
+
+    def handle_movie_worldbuilding(self):
+        """LLMで断片を一つの世界観に自然連結する。"""
+        self._process_movie_llm(mode="world")
+
+    def handle_movie_storyboard(self):
+        """LLMでワンカットのストーリーボード描写へ整形する。"""
+        self._process_movie_llm(mode="storyboard")
+
+    def handle_format_for_movie_prompt(self):
+        """後方互換のためのエイリアス。"""
+        self.handle_format_for_movie_json()
 
     def adjust_text_length_only(self, text, target_length):
         """意味を本質的に変えずに文字数のみを調整する"""
@@ -1623,11 +1633,78 @@ class TextGeneratorApp:
         print(f"  最終的なエラー詳細: {self._last_error_details}")
         return None
 
+    def _call_movie_llm(self, mode: str, main_text: str, details: list):
+        """動画用整形で共通利用するLLM呼び出し。"""
+        if not LLM_ENABLED:
+            messagebox.showwarning("注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
+            return None
+        api_key = os.getenv(OPENAI_API_KEY_ENV)
+        if not api_key:
+            messagebox.showerror("エラー", f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
+            return None
+
+        selected_model = self.get_selected_model()
+        detail_lines = "\n".join(f"- {d}" for d in details)
+        if mode == "world":
+            system_prompt = (
+                "You refine disjoint visual fragments into one coherent world description for a single cinematic environment. "
+                "Do not narrate time progression; describe one continuous world in natural English."
+            )
+            user_prompt = (
+                "Convert the fragments into a single connected world that feels inhabitable.\n"
+                f"Source summary: {main_text}\n"
+                f"Fragments:\n{detail_lines}\n"
+                "Output one concise paragraph that links every fragment into one world."
+            )
+            label = "世界観整形"
+        else:
+            system_prompt = (
+                "You craft a single continuous storyboard beat that can be filmed as one shot. "
+                "Blend all elements into a flowing moment without hard scene cuts."
+            )
+            user_prompt = (
+                "Turn the fragments into a single-shot storyboard that can be captured in one camera move.\n"
+                f"Source summary: {main_text}\n"
+                f"Fragments:\n{detail_lines}\n"
+                "Describe a vivid but single-cut sequence in one paragraph, focusing on visual continuity."
+            )
+            label = "ストーリー構築"
+
+        system_prompt = self._append_temperature_hint_for_model(system_prompt, LLM_TEMPERATURE)
+
+        try:
+            raw_content, finish_reason, data = send_llm_request(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=LLM_TEMPERATURE,
+                max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                timeout=LLM_TIMEOUT,
+                model_name=selected_model,
+                include_temperature=not _should_use_responses_api(selected_model),
+            )
+            if finish_reason in LENGTH_LIMIT_REASONS:
+                messagebox.showwarning("注意", f"{label}のLLM応答がトークン制限に達しました。プロンプトを短縮して再実行してください。")
+                return None
+            if not raw_content:
+                messagebox.showwarning("注意", f"{label}で空のレスポンスが返されました。")
+                return None
+            return sanitize_to_english(raw_content).strip()
+        except requests.exceptions.Timeout as e:
+            messagebox.showerror("エラー", f"{label}実行中にタイムアウトしました: {e}")
+            return None
+        except requests.exceptions.ConnectionError as e:
+            messagebox.showerror("エラー", f"{label}実行中に接続エラーが発生しました: {e}")
+            return None
+        except Exception:
+            messagebox.showerror("エラー", f"{label}実行中にエラーが発生しました:\n{get_exception_trace()}")
+            return None
+
     def update_exclusion_words(self):
         new_words = [word.strip() for word in self.combo_exclusion_words.get().split(',') if word.strip()]
         new_words.sort()
         new_phrase = ", ".join(new_words)
-        
+
         current_words = load_exclusion_words()
         if new_phrase and new_phrase not in current_words:
             with open(EXCLUSION_CSV, 'a', encoding='utf-8', newline='') as file:
@@ -1731,6 +1808,45 @@ class TextGeneratorApp:
                 core = core[: -len(tail_segment)].rstrip()
         self.main_prompt = core
 
+    def _prepare_movie_prompt_parts(self):
+        """動画用整形向けにメイン・動画スタイルJSON・オプションを分離する。"""
+        src = self.text_output.get("1.0", tk.END).strip()
+        if not src:
+            messagebox.showwarning("注意", "まずプロンプトを生成してください。")
+            return None
+        core_without_movie, movie_tail = self._detach_movie_tail_for_llm(src)
+        main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
+        if not main_text:
+            messagebox.showwarning("注意", "メインテキストが見つかりません。")
+            return None
+        return main_text, options_tail, movie_tail
+
+    def _extract_sentence_details(self, text: str):
+        """文末の句読点で区切って細部の配列を生成する。"""
+        sentence_candidates = re.split(r"[。\.]\s*", text or "")
+        details = [s.strip(" .　") for s in sentence_candidates if s.strip(" .　")]
+        return details or [(text or "").strip()]
+
+    def _build_movie_json_payload(self, summary: str, details: list, scope: str, key: str) -> str:
+        """world_description / storyboard のいずれかでJSON文字列を組み立てる。"""
+        payload = {
+            key: {
+                "scope": scope,
+                "summary": (summary or "").strip(),
+                "details": details or [(summary or "").strip()],
+            }
+        }
+        return json.dumps(payload, ensure_ascii=False)
+
+    def _compose_movie_prompt(self, core_json: str, movie_tail: str, options_tail: str) -> str:
+        """動画スタイルJSONとMJオプションを安全に連結した全文を返す。"""
+        parts = [core_json]
+        if movie_tail:
+            parts.append(movie_tail.strip())
+        if options_tail:
+            parts.append(options_tail.strip())
+        return " ".join(p for p in parts if p)
+
     def _current_movie_tail_value(self) -> str:
         """現在のUI設定に基づき、movie用途で有効化されているJSON文字列を返す。"""
         try:
@@ -1783,6 +1899,32 @@ class TextGeneratorApp:
         """UI上で提示する文字数（movie JSONを除外した長さ）を返す。"""
         cleaned, _ = self._detach_movie_tail_for_llm(text)
         return len(cleaned or "")
+
+    def _process_movie_llm(self, mode: str):
+        """動画向けLLM改良（世界観/ストーリー）の共通前処理と後処理。"""
+        prepared = self._prepare_movie_prompt_parts()
+        if not prepared:
+            return
+        main_text, options_tail, movie_tail = prepared
+        details = self._extract_sentence_details(main_text)
+
+        transformed = self._call_movie_llm(mode, main_text, details)
+        if not transformed:
+            return
+
+        scope = "single_continuous_world" if mode == "world" else "single_shot_storyboard"
+        json_key = "world_description" if mode == "world" else "storyboard"
+        enriched_details = self._extract_sentence_details(transformed)
+        world_json = self._build_movie_json_payload(transformed, enriched_details, scope=scope, key=json_key)
+        result = self._compose_movie_prompt(world_json, movie_tail, options_tail)
+
+        self.text_output.delete("1.0", tk.END)
+        self.text_output.insert(tk.END, result)
+        self._update_internal_prompt_from_text(result)
+        self.copy_all_to_clipboard()
+
+        label = "世界観整形" if mode == "world" else "ストーリー構築"
+        messagebox.showinfo("コピー完了", f"{label}をLLMで実行し、全文をコピーしました。")
 
     def _extract_anchor_terms(self, text: str, max_terms: int = 8):
         """原文から保持すべきアンカー語句（名詞・象徴語）を抽出する簡易ロジック。

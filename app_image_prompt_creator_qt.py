@@ -305,6 +305,75 @@ class LLMWorker(QtCore.QObject):
             self.failed.emit(get_exception_trace())
 
 
+class MovieLLMWorker(QtCore.QObject):
+    """動画用整形のためにメインテキストをLLMで改良するワーカー。"""
+
+    finished = QtCore.Signal(str)
+    failed = QtCore.Signal(str)
+
+    def __init__(self, text: str, model: str, mode: str, details: List[str]):
+        super().__init__()
+        self.text = text
+        self.model = model
+        self.mode = mode
+        self.details = details or []
+
+    @QtCore.Slot()
+    def run(self):
+        try:
+            api_key = os.getenv(OPENAI_API_KEY_ENV)
+            if not api_key:
+                self.failed.emit(f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
+                return
+            system_prompt, user_prompt = self._build_prompts()
+            content, finish_reason, _ = send_llm_request(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=LLM_TEMPERATURE,
+                max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                timeout=LLM_TIMEOUT,
+                model_name=self.model,
+                include_temperature=LLM_INCLUDE_TEMPERATURE,
+            )
+            if finish_reason in LENGTH_LIMIT_REASONS:
+                self.failed.emit("LLM応答がトークン制限に達しました。短くして再試行してください。")
+                return
+            self.finished.emit((content or "").strip())
+        except Exception:
+            self.failed.emit(get_exception_trace())
+
+    def _build_prompts(self) -> Tuple[str, str]:
+        detail_lines = "\n".join(f"- {d}" for d in self.details)
+        if self.mode == "world":
+            system_prompt = _append_temperature_hint(
+                "You refine disjoint visual fragments into one coherent world description for a single cinematic environment. "
+                "Do not narrate events in sequence; describe one continuous world in natural English.",
+                self.model,
+                LLM_TEMPERATURE,
+            )
+            user_prompt = (
+                "Convert the following fragments into a single connected world that feels inhabitable.\n"
+                f"Source summary: {self.text}\n"
+                f"Fragments:\n{detail_lines}\n"
+                "Output one concise paragraph that links every fragment into one world."
+            )
+            return system_prompt, user_prompt
+
+        system_prompt = _append_temperature_hint(
+            "You craft a single continuous storyboard beat that can be filmed as one shot. "
+            "Blend all elements into a flowing moment without hard scene cuts.",
+            self.model,
+            LLM_TEMPERATURE,
+        )
+        user_prompt = (
+            "Turn the fragments into a single-shot storyboard that can be captured in one camera move.\n"
+            f"Source summary: {self.text}\n"
+            f"Fragments:\n{detail_lines}\n"
+            "Describe a vivid but single-cut sequence in one paragraph, focusing on visual continuity."
+        )
+        return system_prompt, user_prompt
+
 class PromptGeneratorWindow(QtWidgets.QMainWindow):
     """PySide6 版のメインウィンドウ。UIとイベントを集約。"""
 
@@ -319,6 +388,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.option_prompt: str = ""
         self.available_model_choices = list(dict.fromkeys([LLM_MODEL, *AVAILABLE_LLM_MODELS]))
         self._thread: Optional[QtCore.QThread] = None
+        self._movie_llm_context: Optional[dict] = None
         self._build_ui()
         self.load_attribute_data()
         self.update_attribute_ui_choices()
@@ -452,9 +522,25 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         update_option_btn.clicked.connect(self.update_option)
         left_layout.addWidget(update_option_btn)
 
-        format_movie_btn = QtWidgets.QPushButton("動画用に整形(JSON)")
-        format_movie_btn.clicked.connect(self.handle_format_for_movie_prompt)
-        left_layout.addWidget(format_movie_btn)
+        movie_box = QtWidgets.QGroupBox("動画用に整形(JSON)")
+        movie_layout = QtWidgets.QVBoxLayout(movie_box)
+        simple_row = QtWidgets.QHBoxLayout()
+        simple_row.addWidget(QtWidgets.QLabel("簡易整形(LLMなし):"))
+        format_movie_btn = QtWidgets.QPushButton("JSONデータ化")
+        format_movie_btn.clicked.connect(self.handle_format_for_movie_json)
+        simple_row.addWidget(format_movie_btn)
+        movie_layout.addLayout(simple_row)
+
+        llm_row = QtWidgets.QHBoxLayout()
+        llm_row.addWidget(QtWidgets.QLabel("LLM改良:"))
+        world_btn = QtWidgets.QPushButton("世界観整形")
+        world_btn.clicked.connect(self.handle_movie_worldbuilding)
+        llm_row.addWidget(world_btn)
+        story_btn = QtWidgets.QPushButton("ストーリー構築")
+        story_btn.clicked.connect(self.handle_movie_storyboard)
+        llm_row.addWidget(story_btn)
+        movie_layout.addLayout(llm_row)
+        left_layout.addWidget(movie_box)
 
         # LLM アレンジ
         arrange_layout = QtWidgets.QHBoxLayout()
@@ -765,38 +851,42 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         QtGui.QGuiApplication.clipboard().setText(text)
         QtWidgets.QMessageBox.information(self, "コピー完了", "クリップボードにコピーしました。")
 
-    def handle_format_for_movie_prompt(self):
+    def handle_format_for_movie_json(self):
         try:
-            src = self.text_output.toPlainText().strip()
-            if not src:
-                QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
+            prepared = self._prepare_movie_prompt_parts()
+            if not prepared:
                 return
-            core_without_movie, movie_tail = self._detach_movie_tail_for_llm(src)
-            main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
-            if not main_text:
-                QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
-                return
-            sentence_candidates = re.split(r"[。\.]\s*", main_text)
-            details = [s.strip(" .　") for s in sentence_candidates if s.strip(" .　")]
-            world_payload = {
-                "world_description": {
-                    "scope": "single_continuous_world",
-                    "summary": main_text.strip(),
-                    "details": details,
-                }
-            }
-            world_json = json.dumps(world_payload, ensure_ascii=False)
-            parts = [world_json]
-            if movie_tail:
-                parts.append(movie_tail.strip())
-            if options_tail:
-                parts.append(options_tail.strip())
-            result = " ".join(p for p in parts if p)
+            main_text, options_tail, movie_tail = prepared
+            details = self._extract_sentence_details(main_text)
+            world_json = self._build_movie_json_payload(
+                summary=main_text.strip(),
+                details=details,
+                scope="single_continuous_world",
+                key="world_description",
+            )
+            result = self._compose_movie_prompt(world_json, movie_tail, options_tail)
             self.text_output.setPlainText(result)
             self._update_internal_prompt_from_text(result)
-            QtWidgets.QMessageBox.information(self, "整形完了", "動画用のJSONプロンプトに整形しました。")
+            QtGui.QGuiApplication.clipboard().setText(result)
+            QtWidgets.QMessageBox.information(self, "整形完了", "動画用のJSONプロンプトに整形し、全文をコピーしました。")
         except Exception:
             QtWidgets.QMessageBox.critical(self, "エラー", f"動画用プロンプト整形中にエラーが発生しました:\n{get_exception_trace()}")
+
+    def handle_movie_worldbuilding(self):
+        prepared = self._prepare_movie_prompt_parts()
+        if not prepared:
+            return
+        main_text, options_tail, movie_tail = prepared
+        details = self._extract_sentence_details(main_text)
+        self._start_movie_llm_transformation("world", main_text, details, movie_tail, options_tail)
+
+    def handle_movie_storyboard(self):
+        prepared = self._prepare_movie_prompt_parts()
+        if not prepared:
+            return
+        main_text, options_tail, movie_tail = prepared
+        details = self._extract_sentence_details(main_text)
+        self._start_movie_llm_transformation("storyboard", main_text, details, movie_tail, options_tail)
 
     def handle_length_adjust_and_copy(self):
         src = self.text_output.toPlainText().strip()
@@ -806,21 +896,40 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         target = self.combo_length_adjust.currentText()
         self._start_llm_worker(src, target)
 
+    def _start_background_worker(self, worker: QtCore.QObject, success_handler, failure_handler):
+        if self._thread and self._thread.isRunning():
+            QtWidgets.QMessageBox.information(self, "実行中", "LLM 呼び出しが進行中です。完了までお待ちください。")
+            return False
+        thread = QtCore.QThread()
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(lambda result: success_handler(thread, worker, result))
+        worker.failed.connect(lambda err: failure_handler(thread, worker, err))
+        thread.start()
+        self._thread = thread
+        return True
+
     def _start_llm_worker(self, text: str, length_hint: str):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
-        if self._thread and self._thread.isRunning():
-            QtWidgets.QMessageBox.information(self, "実行中", "LLM 呼び出しが進行中です。完了までお待ちください。")
-            return
         worker = LLMWorker(text=text, model=self.combo_llm_model.currentText(), length_hint=length_hint)
-        thread = QtCore.QThread()
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(lambda result: self._handle_llm_success(thread, worker, result))
-        worker.failed.connect(lambda err: self._handle_llm_failure(thread, worker, err))
-        thread.start()
-        self._thread = thread
+        self._start_background_worker(worker, self._handle_llm_success, self._handle_llm_failure)
+
+    def _start_movie_llm_transformation(
+        self, mode: str, main_text: str, details: List[str], movie_tail: str, options_tail: str
+    ):
+        if not LLM_ENABLED:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
+            return
+        worker = MovieLLMWorker(text=main_text, model=self.combo_llm_model.currentText(), mode=mode, details=details)
+        context = {
+            "mode": mode,
+            "movie_tail": movie_tail,
+            "options_tail": options_tail,
+        }
+        if self._start_background_worker(worker, self._handle_movie_llm_success, self._handle_movie_llm_failure):
+            self._movie_llm_context = context
 
     def _handle_llm_success(self, thread: QtCore.QThread, worker: LLMWorker, result: str):
         thread.quit()
@@ -835,12 +944,44 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         QtGui.QGuiApplication.clipboard().setText(clean)
         QtWidgets.QMessageBox.information(self, "コピー完了", "LLMで調整したプロンプトをコピーしました。")
 
+    def _handle_movie_llm_success(self, thread: QtCore.QThread, worker: MovieLLMWorker, result: str):
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        context = self._movie_llm_context or {}
+        self._movie_llm_context = None
+        if not result:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
+            return
+        mode = context.get("mode", "world")
+        movie_tail = context.get("movie_tail", "")
+        options_tail = context.get("options_tail", "")
+        scope = "single_continuous_world" if mode == "world" else "single_shot_storyboard"
+        json_key = "world_description" if mode == "world" else "storyboard"
+        details = self._extract_sentence_details(result)
+        world_json = self._build_movie_json_payload(result, details, scope=scope, key=json_key)
+        combined = self._compose_movie_prompt(world_json, movie_tail, options_tail)
+        self.text_output.setPlainText(combined)
+        self._update_internal_prompt_from_text(combined)
+        QtGui.QGuiApplication.clipboard().setText(combined)
+        label = "世界観整形" if mode == "world" else "ストーリー構築"
+        QtWidgets.QMessageBox.information(self, "コピー完了", f"{label}をLLMで実行し、全文をコピーしました。")
+
     def _handle_llm_failure(self, thread: QtCore.QThread, worker: LLMWorker, error: str):
         thread.quit()
         thread.wait()
         worker.deleteLater()
         self._thread = None
         QtWidgets.QMessageBox.critical(self, "エラー", f"LLM 呼び出しでエラーが発生しました:\n{error}")
+
+    def _handle_movie_llm_failure(self, thread: QtCore.QThread, worker: MovieLLMWorker, error: str):
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        self._movie_llm_context = None
+        QtWidgets.QMessageBox.critical(self, "エラー", f"動画用整形のLLM処理でエラーが発生しました:\n{error}")
 
     def _update_exclusion_words(self, new_words: List[str]):
         new_words = sorted([w for w in new_words if w])
@@ -858,6 +999,45 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     # =============================
     # オプション整形系ヘルパー
     # =============================
+    def _prepare_movie_prompt_parts(self) -> Optional[Tuple[str, str, str]]:
+        """動画用整形で共通となる入力分解を行い、メインテキストと末尾要素を返す。"""
+        src = self.text_output.toPlainText().strip()
+        if not src:
+            QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
+            return None
+        core_without_movie, movie_tail = self._detach_movie_tail_for_llm(src)
+        main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
+        if not main_text:
+            QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
+            return None
+        return main_text, options_tail, movie_tail
+
+    def _extract_sentence_details(self, text: str) -> List[str]:
+        """文末の句読点で区切り、世界観説明に使う細部の配列を作る。"""
+        sentence_candidates = re.split(r"[。\.]\s*", text or "")
+        details = [s.strip(" .　") for s in sentence_candidates if s.strip(" .　")]
+        return details or [text.strip()]
+
+    def _build_movie_json_payload(self, summary: str, details: List[str], scope: str, key: str) -> str:
+        """world_description もしくは storyboard としてJSON文字列を生成する。"""
+        payload = {
+            key: {
+                "scope": scope,
+                "summary": (summary or "").strip(),
+                "details": details or [(summary or "").strip()],
+            }
+        }
+        return json.dumps(payload, ensure_ascii=False)
+
+    def _compose_movie_prompt(self, core_json: str, movie_tail: str, options_tail: str) -> str:
+        """生成したJSONと末尾要素（動画スタイル・MJオプション）を安全に連結する。"""
+        parts = [core_json]
+        if movie_tail:
+            parts.append(movie_tail.strip())
+        if options_tail:
+            parts.append(options_tail.strip())
+        return " ".join(p for p in parts if p)
+
     def _detach_movie_tail_for_llm(self, text: str) -> Tuple[str, str]:
         tokens = (text or "").strip().split()
         if not tokens:
