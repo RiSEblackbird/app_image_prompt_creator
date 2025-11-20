@@ -47,29 +47,88 @@ AVAILABLE_LLM_MODELS = [
     "gpt-5.1",
 ]
 DEFAULT_LLM_MODEL = AVAILABLE_LLM_MODELS[0]
-TAIL_PRESET_CHOICES = {
+
+# 末尾プリセットのデフォルト定義。
+# YAML が欠損・パース失敗した場合にも既存挙動を維持できるよう、
+# ここに「英語/JSON の実プロンプト」と「日本語 description（UI 表示専用）」の両方を持たせる。
+DEFAULT_TAIL_PRESETS = {
     "image": [
-        "",
-        "A high resolution photograph. Very high resolution. 8K photo",
-        "a Japanese ink painting. Zen painting",
-        "a Medieval European painting.",
+        {"description_ja": "（なし）", "prompt": ""},
+        {
+            "description_ja": "超高解像度写真 (8K)",
+            "prompt": "A high resolution photograph. Very high resolution. 8K photo",
+        },
+        {
+            "description_ja": "日本画・墨絵スタイル",
+            "prompt": "a Japanese ink painting. Zen painting",
+        },
+        {
+            "description_ja": "中世ヨーロッパ絵画スタイル",
+            "prompt": "a Medieval European painting.",
+        },
     ],
     "movie": [
-        "",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film\",\"look\":\"dramatic lighting\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage\",\"format\":\"4K HDR\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film\",\"camera\":\"deliberate movement\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage cut like a modern movie trailer\",\"grade\":\"Dolby Vision\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic shot with controlled, fluid camera motion\",\"format\":\"4K\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"atmospheric sequence graded like a 1960s film print\",\"grade\":\"film emulation\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"crisp studio-lit shot with high contrast and clean composition\",\"look\":\"studio lighting\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"handheld cinematic shot with subtle motion blur and natural grain\",\"camera\":\"handheld\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic shot mastered in 8K with smooth editing rhythm\",\"format\":\"8K\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"continuous one-take aerial drone footage flying smoothly through the scene\",\"camera\":\"drone one-shot\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tense, dramatic scene from a suspense TV drama with moody lighting and framing\",\"genre\":\"suspense drama\"}}",
-        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"single-take documentary-style shot that follows this world in a realistic tone\",\"style\":\"one-shot documentary\"}}"
-    ]
+        {"description_ja": "（なし）", "prompt": ""},
+        {
+            "description_ja": "70mmフィルムのシネマティック全編",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film\",\"look\":\"dramatic lighting\"}}",
+        },
+        {
+            "description_ja": "4K HDR の高精細トラッキングショット",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage\",\"format\":\"4K HDR\"}}",
+        },
+        {
+            "description_ja": "ムーディーなアートハウス短編",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film\",\"camera\":\"deliberate movement\"}}",
+        },
+        {
+            "description_ja": "モダンな映画予告編風の高速モンタージュ",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage cut like a modern movie trailer\",\"grade\":\"Dolby Vision\"}}",
+        },
+        {
+            "description_ja": "タイトなシネマティックショット (4K)",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic shot with controlled, fluid camera motion\",\"format\":\"4K\"}}",
+        },
+        {
+            "description_ja": "1960年代フィルムプリント風の雰囲気カット",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"atmospheric sequence graded like a 1960s film print\",\"grade\":\"film emulation\"}}",
+        },
+        {
+            "description_ja": "スタジオライティングの高コントラストショット",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"crisp studio-lit shot with high contrast and clean composition\",\"look\":\"studio lighting\"}}",
+        },
+        {
+            "description_ja": "ハンドヘルド撮影の自然なモーションブラー",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"handheld cinematic shot with subtle motion blur and natural grain\",\"camera\":\"handheld\"}}",
+        },
+        {
+            "description_ja": "8K マスターのスムーズな編集シネマティック",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic shot mastered in 8K with smooth editing rhythm\",\"format\":\"8K\"}}",
+        },
+        {
+            "description_ja": "ドローンによるワンテイク空撮",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"continuous one-take aerial drone footage flying smoothly through the scene\",\"camera\":\"drone one-shot\"}}",
+        },
+        {
+            "description_ja": "サスペンスドラマ風の緊張感あるシーン",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tense, dramatic scene from a suspense TV drama with moody lighting and framing\",\"genre\":\"suspense drama\"}}",
+        },
+        {
+            "description_ja": "ワンショット・ドキュメンタリー調の現実的トーン",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"single-take documentary-style shot that follows this world in a realistic tone\",\"style\":\"one-shot documentary\"}}",
+        },
+    ],
 }
+
+# 実際に UI/生成で利用する末尾プリセット（起動時に YAML から上書き）
+TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+
+# アレンジプリセット（LLMスタイル用）は Tk 版と同じ YAML (`arrange_presets.yaml`) を共有する。
+# Qt 版では現時点で UI バインディングのみ未実装だが、データ層としてプリセットの読込とホットリロードに対応しておく。
+DEFAULT_ARRANGE_PRESETS = [
+    {"id": "auto", "label": "auto", "guidance": ""},
+]
+ARRANGE_PRESETS: List[dict] = deepcopy(DEFAULT_ARRANGE_PRESETS)
 S_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "300", "400", "500", "600", "700", "800", "900", "1000"]
 AR_OPTIONS = ["", "16:9", "9:16", "4:3", "3:4"]
 CHAOS_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]
@@ -120,6 +179,7 @@ DEFAULT_APP_SETTINGS = {
     "DEFAULT_DB_PATH": "./app_image_prompt_creator/image_prompt_parts.db",
     "EXCLUSION_CSV": "./app_image_prompt_creator/exclusion_targets.csv",
     "ARRANGE_PRESETS_YAML": "./app_image_prompt_creator/arrange_presets.yaml",
+    "TAIL_PRESETS_YAML": "./app_image_prompt_creator/tail_presets.yaml",
     "DEDUPLICATE_PROMPTS": True,
     "LLM_ENABLED": False,
     "LLM_MODEL": DEFAULT_LLM_MODEL,
@@ -135,6 +195,7 @@ SETTINGS_SNAPSHOT_KEYS = [
     "DEFAULT_DB_PATH",
     "EXCLUSION_CSV",
     "ARRANGE_PRESETS_YAML",
+    "TAIL_PRESETS_YAML",
     "LLM_ENABLED",
     "LLM_MODEL",
     "LLM_MAX_COMPLETION_TOKENS",
@@ -418,6 +479,7 @@ LLM_MAX_COMPLETION_TOKENS = DEFAULT_APP_SETTINGS["LLM_MAX_COMPLETION_TOKENS"]
 LLM_TIMEOUT = DEFAULT_APP_SETTINGS["LLM_TIMEOUT"]
 OPENAI_API_KEY_ENV = DEFAULT_APP_SETTINGS["OPENAI_API_KEY_ENV"]
 ARRANGE_PRESETS_YAML = str(_resolve_path(DEFAULT_APP_SETTINGS["ARRANGE_PRESETS_YAML"]))
+TAIL_PRESETS_YAML = str(_resolve_path(DEFAULT_APP_SETTINGS["TAIL_PRESETS_YAML"]))
 LLM_INCLUDE_TEMPERATURE = DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
 
 
@@ -457,7 +519,7 @@ def _apply_app_settings(app_settings: dict):
 
     global BASE_FOLDER, DEFAULT_TXT_PATH, DEFAULT_DB_PATH, POSITION_FILE, EXCLUSION_CSV, DEDUPLICATE_PROMPTS
     global LLM_ENABLED, LLM_MODEL, LLM_TEMPERATURE, LLM_MAX_COMPLETION_TOKENS
-    global LLM_TIMEOUT, OPENAI_API_KEY_ENV, ARRANGE_PRESETS_YAML, LLM_INCLUDE_TEMPERATURE, settings
+    global LLM_TIMEOUT, OPENAI_API_KEY_ENV, ARRANGE_PRESETS_YAML, TAIL_PRESETS_YAML, LLM_INCLUDE_TEMPERATURE, settings
 
     settings = {"app_image_prompt_creator": deepcopy(app_settings)}
     BASE_FOLDER = app_settings.get("BASE_FOLDER", DEFAULT_APP_SETTINGS["BASE_FOLDER"])
@@ -476,6 +538,9 @@ def _apply_app_settings(app_settings: dict):
     OPENAI_API_KEY_ENV = app_settings.get("OPENAI_API_KEY_ENV", DEFAULT_APP_SETTINGS["OPENAI_API_KEY_ENV"])
     ARRANGE_PRESETS_YAML = str(
         _resolve_path(app_settings.get("ARRANGE_PRESETS_YAML", DEFAULT_APP_SETTINGS["ARRANGE_PRESETS_YAML"]))
+    )
+    TAIL_PRESETS_YAML = str(
+        _resolve_path(app_settings.get("TAIL_PRESETS_YAML", DEFAULT_APP_SETTINGS["TAIL_PRESETS_YAML"]))
     )
     LLM_INCLUDE_TEMPERATURE = app_settings.get(
         "LLM_INCLUDE_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
@@ -522,6 +587,145 @@ def load_exclusion_words() -> List[str]:
             return [""] + [row[0] for row in reader if row]
     except FileNotFoundError:
         return [""]
+
+
+def load_arrange_presets_from_yaml() -> None:
+    """アレンジプリセット YAML を読み込み、グローバルな ARRANGE_PRESETS を更新する。
+
+    Tk版と同じ `presets` 配列スキーマを想定し、id/label/guidance を正規化して保持する。
+    読み込みに失敗した場合は DEFAULT_ARRANGE_PRESETS を使用する。
+    """
+
+    global ARRANGE_PRESETS
+
+    path = Path(ARRANGE_PRESETS_YAML)
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        presets = data.get("presets", [])
+        normalized: List[dict] = []
+        for p in presets:
+            if not isinstance(p, dict):
+                continue
+            preset_id = p.get("id") or p.get("key") or p.get("name")
+            if not preset_id:
+                continue
+            normalized.append(
+                {
+                    "id": str(preset_id),
+                    "label": p.get("label") or p.get("name") or p.get("id") or str(preset_id),
+                    "guidance": p.get("guidance") or "",
+                }
+            )
+        ARRANGE_PRESETS = normalized or deepcopy(DEFAULT_ARRANGE_PRESETS)
+        log_structured(
+            logging.INFO,
+            "arrange_presets_yaml_loaded",
+            {"path": str(path), "count": len(ARRANGE_PRESETS)},
+        )
+    except FileNotFoundError:
+        log_structured(
+            logging.WARNING,
+            "arrange_presets_yaml_missing",
+            {"path": str(path)},
+        )
+        ARRANGE_PRESETS = deepcopy(DEFAULT_ARRANGE_PRESETS)
+    except Exception as error:
+        log_structured(
+            logging.ERROR,
+            "arrange_presets_yaml_error",
+            {"path": str(path), "error": str(error)},
+        )
+        ARRANGE_PRESETS = deepcopy(DEFAULT_ARRANGE_PRESETS)
+
+
+def _normalize_tail_presets(raw_presets: dict) -> dict:
+    """YAML から読んだ末尾プリセット定義を内部表現に正規化する。
+
+    - キー: メディア種別（image / movie など）
+    - 値: {"description_ja": str, "prompt": str} の配列
+    """
+
+    if not isinstance(raw_presets, dict):
+        return deepcopy(DEFAULT_TAIL_PRESETS)
+
+    normalized: dict = {}
+    for media_type, items in raw_presets.items():
+        if not isinstance(items, list):
+            continue
+        bucket = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            prompt = str(item.get("prompt", ""))
+            description = str(item.get("description_ja", prompt))
+            bucket.append({"description_ja": description, "prompt": prompt})
+        if bucket:
+            normalized[str(media_type)] = bucket
+
+    # 1つも正規化できなければデフォルトへフォールバック
+    if not normalized:
+        return deepcopy(DEFAULT_TAIL_PRESETS)
+    return normalized
+
+
+def load_tail_presets_from_yaml() -> None:
+    """末尾プリセット YAML を読み込み、グローバルな TAIL_PRESETS を更新する。
+
+    YAML が欠損・パースエラー・スキーマ不正の場合は、DEFAULT_TAIL_PRESETS へフォールバックする。
+    """
+
+    global TAIL_PRESETS
+
+    path = Path(TAIL_PRESETS_YAML)
+    if not path.exists():
+        log_structured(
+            logging.WARNING,
+            "tail_presets_yaml_missing",
+            {"path": str(path)},
+        )
+        TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+        return
+
+    try:
+        with path.open("r", encoding="utf-8") as fp:
+            data = yaml.safe_load(fp) or {}
+    except yaml.YAMLError as error:
+        log_structured(
+            logging.ERROR,
+            "tail_presets_yaml_parse_error",
+            {"path": str(path), "error": str(error)},
+        )
+        TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+        return
+    except OSError as error:
+        log_structured(
+            logging.ERROR,
+            "tail_presets_yaml_io_error",
+            {"path": str(path), "error": str(error)},
+        )
+        TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+        return
+
+    tails = data.get("tails")
+    if not isinstance(tails, dict):
+        log_structured(
+            logging.WARNING,
+            "tail_presets_yaml_invalid_schema",
+            {"path": str(path), "reason": "missing_or_non_mapping_tails"},
+        )
+        TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+        return
+
+    TAIL_PRESETS = _normalize_tail_presets(tails)
+    log_structured(
+        logging.INFO,
+        "tail_presets_yaml_loaded",
+        {
+            "path": str(path),
+            "media_types": list(TAIL_PRESETS.keys()),
+        },
+    )
 
 
 def _should_use_responses_api(model_name: str) -> bool:
@@ -896,10 +1100,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.available_model_choices = list(AVAILABLE_LLM_MODELS)
         self._thread: Optional[QtCore.QThread] = None
         self._movie_llm_context: Optional[dict] = None
+        self._tail_presets_watcher: Optional[QtCore.QFileSystemWatcher] = None
+        self._arrange_presets_watcher: Optional[QtCore.QFileSystemWatcher] = None
         self.font_scale_level = 0
         self._ui_font_family = self.font().family()
         self.button_font_scale: Optional[QtWidgets.QPushButton] = None
         
+        # 末尾プリセット・アレンジプリセットのロード（設定ファイル反映後のパスを使用）
+        load_tail_presets_from_yaml()
+        load_arrange_presets_from_yaml()
+
         # UI構築
         self._build_ui()
         self._apply_font_scale()
@@ -908,6 +1118,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.load_attribute_data()
         self.update_attribute_ui_choices()
         self._update_tail_free_text_choices(reset_selection=True)
+        self._setup_tail_presets_watcher()
+        self._setup_arrange_presets_watcher()
         
         # シグナル接続
         self._worker_success.connect(self._invoke_worker_success, QtCore.Qt.QueuedConnection)
@@ -1060,7 +1272,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         # Tail Settings
         tail_form = QtWidgets.QFormLayout()
         self.combo_tail_media_type = QtWidgets.QComboBox()
-        self.combo_tail_media_type.addItems(list(TAIL_PRESET_CHOICES.keys()))
+        self.combo_tail_media_type.addItems(list(TAIL_PRESETS.keys()))
         self.combo_tail_media_type.currentTextChanged.connect(self._on_tail_media_type_change)
         tail_form.addRow("末尾プリセット用途:", self.combo_tail_media_type)
 
@@ -1357,14 +1569,33 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.auto_update()
 
     def _update_tail_free_text_choices(self, reset_selection: bool):
-        presets = TAIL_PRESET_CHOICES.get(self.combo_tail_media_type.currentText(), TAIL_PRESET_CHOICES[DEFAULT_TAIL_MEDIA_TYPE])
-        current = self.combo_tail_free.currentText()
+        """メディア種別に応じた末尾プリセット候補をコンボボックスへ反映する。
+
+        UI には日本語 description を表示し、実際のプロンプト文字列は userData に保持する。
+        """
+
+        media_type = self.combo_tail_media_type.currentText() or DEFAULT_TAIL_MEDIA_TYPE
+        presets = TAIL_PRESETS.get(media_type, TAIL_PRESETS.get(DEFAULT_TAIL_MEDIA_TYPE, []))
+
+        # 以前の選択肢をプロンプト文字列として記憶し、可能であれば再選択する。
+        previous_prompt = self._resolve_tail_free_prompt()
+
+        self.combo_tail_free.blockSignals(True)
         self.combo_tail_free.clear()
-        self.combo_tail_free.addItems(presets)
-        if not reset_selection and current in presets:
-            self.combo_tail_free.setCurrentText(current)
-        else:
-            self.combo_tail_free.setCurrentIndex(0)
+        for preset in presets:
+            description = str(preset.get("description_ja", ""))
+            prompt = str(preset.get("prompt", ""))
+            self.combo_tail_free.addItem(description, userData=prompt)
+
+        target_index = 0
+        if not reset_selection and previous_prompt:
+            for i in range(self.combo_tail_free.count()):
+                data = self.combo_tail_free.itemData(i)
+                if isinstance(data, str) and data == previous_prompt:
+                    target_index = i
+                    break
+        self.combo_tail_free.setCurrentIndex(target_index)
+        self.combo_tail_free.blockSignals(False)
 
     def auto_update(self):
         if self.check_autofix.isChecked() and self.main_prompt:
@@ -1640,6 +1871,82 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "エラー", f"CSVファイルを開けませんでした: {e}")
 
+    def _setup_tail_presets_watcher(self) -> None:
+        """末尾プリセット YAML の変更を監視し、プルダウン候補へ自動反映する。"""
+
+        path = Path(TAIL_PRESETS_YAML)
+        if not path.exists():
+            return
+
+        watcher = QtCore.QFileSystemWatcher(self)
+        watcher.addPath(str(path))
+        watcher.fileChanged.connect(self._on_tail_presets_file_changed)
+        self._tail_presets_watcher = watcher
+
+    @QtCore.Slot(str)
+    def _on_tail_presets_file_changed(self, changed_path: str) -> None:
+        """YAML 編集完了後にプリセットを再読込し、現在のコンボボックスに反映する。"""
+
+        # 一部エディタは一時ファイルの差し替えを行うため、少し待ってから読みに行く。
+        QtCore.QTimer.singleShot(300, self._reload_tail_presets_and_refresh_ui)
+
+    def _reload_tail_presets_and_refresh_ui(self) -> None:
+        """tail_presets.yaml を再読込し、media_type / tail_free 両コンボを最新状態に更新する。"""
+
+        previous_media_type = self.combo_tail_media_type.currentText() or DEFAULT_TAIL_MEDIA_TYPE
+        previous_prompt = self._resolve_tail_free_prompt()
+
+        load_tail_presets_from_yaml()
+
+        media_types = list(TAIL_PRESETS.keys())
+        if not media_types:
+            return
+
+        self.combo_tail_media_type.blockSignals(True)
+        self.combo_tail_media_type.clear()
+        self.combo_tail_media_type.addItems(media_types)
+
+        # 可能なら以前のメディア種別を維持し、なければデフォルトへフォールバック
+        if previous_media_type in media_types:
+            self.combo_tail_media_type.setCurrentText(previous_media_type)
+        elif DEFAULT_TAIL_MEDIA_TYPE in media_types:
+            self.combo_tail_media_type.setCurrentText(DEFAULT_TAIL_MEDIA_TYPE)
+        else:
+            self.combo_tail_media_type.setCurrentIndex(0)
+        self.combo_tail_media_type.blockSignals(False)
+
+        # メディア種別に応じて末尾プリセットを更新し、同じ prompt があれば再選択を試みる
+        self._update_tail_free_text_choices(reset_selection=True)
+        if previous_prompt:
+            for i in range(self.combo_tail_free.count()):
+                data = self.combo_tail_free.itemData(i)
+                if isinstance(data, str) and data == previous_prompt:
+                    self.combo_tail_free.setCurrentIndex(i)
+                    break
+
+    def _setup_arrange_presets_watcher(self) -> None:
+        """アレンジプリセット YAML の変更を監視し、内部定義を自動更新する。"""
+
+        path = Path(ARRANGE_PRESETS_YAML)
+        if not path.exists():
+            return
+
+        watcher = QtCore.QFileSystemWatcher(self)
+        watcher.addPath(str(path))
+        watcher.fileChanged.connect(self._on_arrange_presets_file_changed)
+        self._arrange_presets_watcher = watcher
+
+    @QtCore.Slot(str)
+    def _on_arrange_presets_file_changed(self, changed_path: str) -> None:
+        """アレンジプリセット YAML 編集完了後に再読込を行う。"""
+
+        QtCore.QTimer.singleShot(300, self._reload_arrange_presets)
+
+    def _reload_arrange_presets(self) -> None:
+        """arrange_presets.yaml を再読込し、ARRANGE_PRESETS を最新状態に更新する。"""
+
+        load_arrange_presets_from_yaml()
+
     # =============================
     # プロンプト生成ロジック
     # =============================
@@ -1655,9 +1962,35 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         return f"{tail_ar}{tail_s}{tail_chaos}{tail_q}{tail_weird}"
 
     def _make_tail_text(self) -> str:
-        if self.check_tail_free.isChecked() and self.combo_tail_free.currentText().strip():
-            return " " + self.combo_tail_free.currentText().strip()
+        if not self.check_tail_free.isChecked():
+            return ""
+
+        prompt = self._resolve_tail_free_prompt()
+        if prompt:
+            return " " + prompt
         return ""
+
+    def _resolve_tail_free_prompt(self) -> str:
+        """末尾プリセットの現在値を「出力用プロンプト文字列」として解決する。
+
+        - YAML 由来のプリセット選択時: 日本語 description ではなく、対応する英語/JSON の prompt を返す
+        - ユーザーがコンボボックスを手入力変更した場合: 入力文字列そのものを返す
+        """
+
+        text = self.combo_tail_free.currentText().strip()
+        if not text:
+            return ""
+
+        index = self.combo_tail_free.currentIndex()
+        if 0 <= index < self.combo_tail_free.count():
+            preset_prompt = self.combo_tail_free.itemData(index)
+            # itemText と UI 上のテキストが一致している場合のみ「プリセット選択」とみなし、
+            # 実プロンプト文字列を優先して返す。
+            if isinstance(preset_prompt, str) and preset_prompt and text == self.combo_tail_free.itemText(index):
+                return preset_prompt
+
+        # 上記条件を満たさない場合は、ユーザーの自由入力をそのまま利用する。
+        return text
 
     def generate_text(self):
         db_path = self._get_db_path_or_warn()

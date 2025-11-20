@@ -1,0 +1,57 @@
+tails:
+  image:
+    - id: none
+      description_ja: "（なし）"
+      prompt: ""
+    - id: photo_8k
+      description_ja: "超高解像度写真 (8K)"
+      prompt: "A high resolution photograph. Very high resolution. 8K photo"
+    - id: sumi_e
+      description_ja: "日本画・墨絵スタイル"
+      prompt: "a Japanese ink painting. Zen painting"
+    - id: medieval_painting
+      description_ja: "中世ヨーロッパ絵画スタイル"
+      prompt: "a Medieval European painting."
+
+  movie:
+    - id: none
+      description_ja: "（なし）"
+      prompt: ""
+    - id: movie_70mm
+      description_ja: "70mmフィルムのシネマティック全編"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film\",\"look\":\"dramatic lighting\"}}"
+    - id: movie_ultra_fidelity
+      description_ja: "4K HDR の高精細トラッキングショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage\",\"format\":\"4K HDR\"}}"
+    - id: movie_arthouse
+      description_ja: "ムーディーなアートハウス短編"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film\",\"camera\":\"deliberate movement\"}}"
+    - id: movie_trailer
+      description_ja: "モダンな映画予告編風の高速モンタージュ"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage cut like a modern movie trailer\",\"grade\":\"Dolby Vision\"}}"
+    - id: movie_tight_cinematic
+      description_ja: "タイトなシネマティックショット (4K)"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic shot with controlled, fluid camera motion\",\"format\":\"4K\"}}"
+    - id: movie_60s_film
+      description_ja: "1960年代フィルムプリント風の雰囲気カット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"atmospheric sequence graded like a 1960s film print\",\"grade\":\"film emulation\"}}"
+    - id: movie_studio_lighting
+      description_ja: "スタジオライティングの高コントラストショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"crisp studio-lit shot with high contrast and clean composition\",\"look\":\"studio lighting\"}}"
+    - id: movie_handheld
+      description_ja: "ハンドヘルド撮影の自然なモーションブラー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"handheld cinematic shot with subtle motion blur and natural grain\",\"camera\":\"handheld\"}}"
+    - id: movie_8k_master
+      description_ja: "8K マスターのスムーズな編集シネマティック"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic shot mastered in 8K with smooth editing rhythm\",\"format\":\"8K\"}}"
+    - id: movie_drone_one_shot
+      description_ja: "ドローンによるワンテイク空撮"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"continuous one-take aerial drone footage flying smoothly through the scene\",\"camera\":\"drone one-shot\"}}"
+    - id: movie_suspense_drama
+      description_ja: "サスペンスドラマ風の緊張感あるシーン"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tense, dramatic scene from a suspense TV drama with moody lighting and framing\",\"genre\":\"suspense drama\"}}"
+    - id: movie_one_shot_doc
+      description_ja: "ワンショット・ドキュメンタリー調の現実的トーン"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"single-take documentary-style shot that follows this world in a realistic tone\",\"style\":\"one-shot documentary\"}}"
+
+
