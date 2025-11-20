@@ -11,10 +11,12 @@ Tkinter 実装から移行し、QMainWindow/QWidget ベースのUIへ再設計�
 from __future__ import annotations
 
 import csv
+import faulthandler
 import importlib
 import json
 import logging
 import os
+import platform
 import random
 import re
 import socket
@@ -71,7 +73,27 @@ LENGTH_LIMIT_REASONS = {"length", "max_output_tokens"}
 HOSTNAME = socket.gethostname()
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s\t%(message)s")
+LOG_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+LOG_FORMAT = (
+    "%(asctime)s.%(msecs)03d\t%(levelname)s\t%(hostname)s\t"
+    "pid=%(process)d\tthread=%(threadName)s\t%(name)s:%(lineno)d\t%(message)s"
+)
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt=LOG_DATETIME_FORMAT)
+try:
+    faulthandler.enable()
+except Exception:
+    logging.getLogger(__name__).warning("Failed to enable faulthandler; native crashes may lack stack traces.")
+
+
+class _HostnameContextFilter(logging.Filter):
+    """ターミナル出力でホスト名を常に表示し、障害発生環境を即時判別できるようにする。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.hostname = HOSTNAME
+        return True
+
+
+logging.getLogger().addFilter(_HostnameContextFilter())
 
 FONT_SCALE_PRESETS = [
     {"label": "標準", "pt": 11},
@@ -98,8 +120,32 @@ DEFAULT_APP_SETTINGS = {
     "LLM_TEMPERATURE": 0.7,
 }
 
+SETTINGS_SNAPSHOT_KEYS = [
+    "BASE_FOLDER",
+    "DEFAULT_DB_PATH",
+    "EXCLUSION_CSV",
+    "ARRANGE_PRESETS_YAML",
+    "LLM_ENABLED",
+    "LLM_MODEL",
+    "LLM_MAX_COMPLETION_TOKENS",
+    "LLM_TIMEOUT",
+    "LLM_INCLUDE_TEMPERATURE",
+]
+
 # 設定読み込み中の警告やフォールバック内容を貯めて、ウィンドウ生成後にまとめて案内する。
 SETTINGS_LOAD_NOTES: List[str] = []
+
+
+def _coerce_json_safe(value):
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, (Path, datetime)):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _coerce_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_coerce_json_safe(v) for v in value]
+    return str(value)
 
 
 def log_structured(level: int, event: str, context: Optional[dict] = None) -> None:
@@ -107,8 +153,75 @@ def log_structured(level: int, event: str, context: Optional[dict] = None) -> No
 
     payload = {"event": event, "hostname": HOSTNAME}
     if context:
-        payload.update(context)
+        safe_context = {str(k): _coerce_json_safe(v) for k, v in context.items()}
+        payload.update(safe_context)
     logging.log(level, json.dumps(payload, ensure_ascii=False))
+
+
+def install_global_exception_logger():
+    """未捕捉例外やQtメッセージを構造化ログに流し、ターミナル調査を容易にする。"""
+
+    if getattr(install_global_exception_logger, "_installed", False):
+        return
+
+    def _handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        trace = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        log_structured(
+            logging.CRITICAL,
+            "unhandled_exception",
+            {
+                "exception_type": exc_type.__name__,
+                "message": str(exc_value),
+                "traceback": trace,
+            },
+        )
+
+    sys.excepthook = _handle_exception
+
+    def _qt_message_handler(mode, context, message):
+        level_map = {
+            QtCore.QtDebugMsg: logging.DEBUG,
+            QtCore.QtInfoMsg: logging.INFO,
+            QtCore.QtWarningMsg: logging.WARNING,
+            QtCore.QtCriticalMsg: logging.ERROR,
+            QtCore.QtFatalMsg: logging.CRITICAL,
+        }
+        payload = {
+            "category": getattr(context, "category", ""),
+            "file": getattr(context, "file", ""),
+            "line": getattr(context, "line", 0),
+            "function": getattr(context, "function", ""),
+            "message": message,
+        }
+        log_structured(level_map.get(mode, logging.INFO), "qt_message", payload)
+        if mode == QtCore.QtFatalMsg:
+            raise SystemExit(1)
+
+    try:
+        QtCore.qInstallMessageHandler(_qt_message_handler)
+    except Exception:
+        logging.getLogger(__name__).debug("Qt message handler installation skipped.", exc_info=True)
+
+    install_global_exception_logger._installed = True
+
+
+def log_startup_environment():
+    """アプリ起動直後の実行環境を計測し、障害再現を容易にする。"""
+
+    payload = {
+        "python_version": platform.python_version(),
+        "executable": sys.executable,
+        "cwd": os.getcwd(),
+        "script_dir": str(SCRIPT_DIR),
+        "default_db_path": DEFAULT_DB_PATH,
+        "settings_path": str(_resolve_path("desktop_gui_settings.yaml")),
+        "qt_version": QtCore.qVersion(),
+        "hostname": HOSTNAME,
+    }
+    log_structured(logging.INFO, "startup_environment", payload)
 
 
 def _show_missing_export_module_dialog() -> None:
@@ -243,18 +356,37 @@ def load_yaml_settings(file_path, parent: Optional[QtWidgets.QWidget] = None):
     """YAML設定のロードを安全に行い、失敗時はフォールバックや再選択を提示する。"""
 
     resolved_path = _resolve_path(file_path)
+    log_structured(logging.INFO, "yaml_settings_load_start", {"path": str(resolved_path)})
     try:
         with open(resolved_path, "r", encoding="utf-8") as file:
             settings = yaml.safe_load(file) or {}
+        log_structured(
+            logging.INFO,
+            "yaml_settings_load_success",
+            {
+                "path": str(resolved_path),
+                "section_keys": sorted(settings.keys()) if isinstance(settings, dict) else [],
+            },
+        )
         return settings
     except FileNotFoundError:
+        log_structured(logging.WARNING, "yaml_settings_missing", {"path": str(resolved_path)})
         alternative = _prompt_settings_path(parent, resolved_path)
         if alternative:
             return load_yaml_settings(alternative, parent)
     except yaml.YAMLError as error:
+        log_structured(
+            logging.ERROR,
+            "yaml_settings_parse_error",
+            {
+                "path": str(resolved_path),
+                "error": str(error),
+            },
+        )
         retry_target = _handle_yaml_error(parent, resolved_path, error)
         if retry_target:
             return load_yaml_settings(retry_target, parent)
+    log_structured(logging.INFO, "yaml_settings_fallback_default", {"path": str(resolved_path)})
     return deepcopy({"app_image_prompt_creator": DEFAULT_APP_SETTINGS})
 
 
@@ -339,6 +471,8 @@ def _apply_app_settings(app_settings: dict):
         "LLM_INCLUDE_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
     )
     settings["app_image_prompt_creator"]["LLM_MODEL"] = LLM_MODEL
+    snapshot = {k.lower(): app_settings.get(k) for k in SETTINGS_SNAPSHOT_KEYS if k in app_settings}
+    log_structured(logging.INFO, "app_settings_applied", snapshot)
 
 
 def initialize_settings(parent: Optional[QtWidgets.QWidget] = None):
@@ -753,6 +887,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.load_attribute_data()
         self.update_attribute_ui_choices()
         self._update_tail_free_text_choices(reset_selection=True)
+        log_structured(
+            logging.INFO,
+            "window_initialized",
+            {
+                "font_family": self._ui_font_family,
+                "font_scale_level": self.font_scale_level,
+                "llm_model": LLM_MODEL,
+                "db_path": DEFAULT_DB_PATH,
+            },
+        )
 
     def _ensure_model_choice_alignment(self) -> None:
         """設定値とコンボボックスの候補がズレた場合に警告し、UIを有効モデルへ合わせる。"""
@@ -989,9 +1133,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     def _connect_with_foreign_keys(self, db_path: Path) -> sqlite3.Connection:
         """外部キー制約を確実に有効化した SQLite 接続を返す。"""
 
+        log_structured(logging.INFO, "sqlite_connect_attempt", {"db_path": str(db_path)})
         conn = sqlite3.connect(db_path)
         # 参照整合性を SQLite 側で強制し、欠損 ID の混入を初期段階で防ぐ。
         conn.execute("PRAGMA foreign_keys = ON;")
+        log_structured(logging.INFO, "sqlite_connect_ready", {"db_path": str(db_path)})
         return conn
 
     def _build_db_missing_message(self, db_path: Path) -> str:
@@ -1020,6 +1166,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.attribute_details.clear()
         db_path = self._get_db_path_or_warn()
         if not db_path:
+            log_structured(
+                logging.WARNING,
+                "db_attribute_load_skipped",
+                {"reason": "db_path_missing"},
+            )
             return
 
         try:
@@ -1046,6 +1197,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             )
             QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
             return
+        log_structured(
+            logging.INFO,
+            "db_attribute_load_success",
+            {
+                "attribute_type_count": len(self.attribute_types),
+                "attribute_detail_count": len(self.attribute_details),
+            },
+        )
 
     def update_attribute_ui_choices(self):
         # 既存フォームをクリア
@@ -1796,8 +1955,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         payload = {
             key: {
                 "scope": scope,
-                "summary": (summary or "").strip(),
-                "details": details or [(summary or "").strip()],
+                "summary": (summary or "").strip()
             }
         }
         return json.dumps(payload, ensure_ascii=False)
@@ -1929,6 +2087,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
 
 def main():
+    install_global_exception_logger()
+    log_startup_environment()
     app = QtWidgets.QApplication(sys.argv)
     # 設定読み込みをここで実行し、エラー時のダイアログ表示を可能にする。
     initialize_settings()
