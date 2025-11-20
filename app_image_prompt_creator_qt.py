@@ -2195,6 +2195,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             app.setFont(new_font)
         self.setFont(new_font)
         
+        # text_output エリアは常に +2pt 大きくする（可読性向上のため）
+        if hasattr(self, 'text_output') and self.text_output is not None:
+            output_font = QtGui.QFont(base_family, base_size + 2)
+            self.text_output.setFont(output_font)
+        
         # スタイルシートの動的更新 (BigActionボタンなどを強調するため)
         # QGroupBox のタイトルサイズなどをベース+1程度に調整
         big_action_size = base_size + 2
