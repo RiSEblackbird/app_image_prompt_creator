@@ -867,6 +867,9 @@ class MovieLLMWorker(QtCore.QObject):
 class PromptGeneratorWindow(QtWidgets.QMainWindow):
     """PySide6 版のメインウィンドウ。UIとイベントを集約。"""
 
+    _worker_success = QtCore.Signal(object, object, object, object)
+    _worker_failure = QtCore.Signal(object, object, object, object)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(WINDOW_TITLE)
@@ -887,6 +890,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.load_attribute_data()
         self.update_attribute_ui_choices()
         self._update_tail_free_text_choices(reset_selection=True)
+        self._worker_success.connect(self._invoke_worker_success, QtCore.Qt.QueuedConnection)
+        self._worker_failure.connect(self._invoke_worker_failure, QtCore.Qt.QueuedConnection)
         log_structured(
             logging.INFO,
             "window_initialized",
@@ -1835,8 +1840,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         thread = QtCore.QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.finished.connect(lambda result: success_handler(thread, worker, result))
-        worker.failed.connect(lambda err: failure_handler(thread, worker, err))
+        worker.finished.connect(
+            lambda result, _handler=success_handler, _thread=thread, _worker=worker: self._worker_success.emit(
+                _handler, _thread, _worker, result
+            )
+        )
+        worker.failed.connect(
+            lambda err, _handler=failure_handler, _thread=thread, _worker=worker: self._worker_failure.emit(
+                _handler, _thread, _worker, err
+            )
+        )
         thread.start()
         self._thread = thread
         return True
@@ -1914,6 +1927,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._thread = None
         self._movie_llm_context = None
         QtWidgets.QMessageBox.critical(self, "エラー", f"動画用整形のLLM処理でエラーが発生しました:\n{error}")
+
+    @QtCore.Slot(object, object, object, object)
+    def _invoke_worker_success(self, handler, thread, worker, payload):
+        handler(thread, worker, payload)
+
+    @QtCore.Slot(object, object, object, object)
+    def _invoke_worker_failure(self, handler, thread, worker, payload):
+        handler(thread, worker, payload)
 
     def _update_exclusion_words(self, new_words: List[str]):
         new_words = sorted([w for w in new_words if w])
