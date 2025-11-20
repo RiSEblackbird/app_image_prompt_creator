@@ -58,7 +58,17 @@ TAIL_PRESET_CHOICES = {
         "",
         "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film\",\"look\":\"dramatic lighting\"}}",
         "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage\",\"format\":\"4K HDR\"}}",
-    ],
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film\",\"camera\":\"deliberate movement\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage cut like a modern movie trailer\",\"grade\":\"Dolby Vision\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic shot with controlled, fluid camera motion\",\"format\":\"4K\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"atmospheric sequence graded like a 1960s film print\",\"grade\":\"film emulation\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"crisp studio-lit shot with high contrast and clean composition\",\"look\":\"studio lighting\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"handheld cinematic shot with subtle motion blur and natural grain\",\"camera\":\"handheld\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic shot mastered in 8K with smooth editing rhythm\",\"format\":\"8K\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"continuous one-take aerial drone footage flying smoothly through the scene\",\"camera\":\"drone one-shot\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tense, dramatic scene from a suspense TV drama with moody lighting and framing\",\"genre\":\"suspense drama\"}}",
+        "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"single-take documentary-style shot that follows this world in a realistic tone\",\"style\":\"one-shot documentary\"}}"
+    ]
 }
 S_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "300", "400", "500", "600", "700", "800", "900", "1000"]
 AR_OPTIONS = ["", "16:9", "9:16", "4:3", "3:4"]
@@ -885,13 +895,20 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.font_scale_level = 0
         self._ui_font_family = self.font().family()
         self.button_font_scale: Optional[QtWidgets.QPushButton] = None
+        
+        # UI構築
         self._build_ui()
         self._apply_font_scale()
+        
+        # データロード
         self.load_attribute_data()
         self.update_attribute_ui_choices()
         self._update_tail_free_text_choices(reset_selection=True)
+        
+        # シグナル接続
         self._worker_success.connect(self._invoke_worker_success, QtCore.Qt.QueuedConnection)
         self._worker_failure.connect(self._invoke_worker_failure, QtCore.Qt.QueuedConnection)
+        
         log_structured(
             logging.INFO,
             "window_initialized",
@@ -937,144 +954,263 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     def _build_ui(self):
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
-        layout = QtWidgets.QHBoxLayout(central)
 
-        self.left_panel = QtWidgets.QWidget()
-        self.right_panel = QtWidgets.QWidget()
-        layout.addWidget(self.left_panel, 2)
-        layout.addWidget(self.right_panel, 3)
+        # モダンなスタイリング
+        central.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px;
+            }
+            QPushButton {
+                padding: 5px 10px;
+            }
+            QPushButton#BigAction {
+                font-weight: bold;
+                font-size: 14px;
+                padding: 8px 16px;
+                background-color: #0078d4;
+                color: white;
+                border-radius: 4px;
+            }
+            QPushButton#BigAction:hover {
+                background-color: #2b88d8;
+            }
+        """)
 
-        self._build_left_panel()
-        self._build_right_panel()
+        main_layout = QtWidgets.QVBoxLayout(central)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
 
-    def _build_left_panel(self):
-        left_layout = QtWidgets.QVBoxLayout(self.left_panel)
+        # 1. Header
+        self._build_header(main_layout)
+
+        # 2. Main Splitter (Left / Right)
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        main_layout.addWidget(splitter, 1)
+
+        # Left Pane Container
+        left_widget = QtWidgets.QWidget()
+        left_layout = QtWidgets.QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 5, 0)
+        left_layout.setSpacing(10)
+        self._build_left_pane_content(left_layout)
+        splitter.addWidget(left_widget)
+
+        # Right Pane Container
+        right_widget = QtWidgets.QWidget()
+        right_layout = QtWidgets.QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(5, 0, 0, 0)
+        right_layout.setSpacing(10)
+        self._build_right_pane_content(right_layout)
+        splitter.addWidget(right_widget)
+
+        # Splitter Initial Ratio (Approx 4:6)
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 6)
+
+    def _build_header(self, parent_layout):
+        header_layout = QtWidgets.QHBoxLayout()
+        parent_layout.addLayout(header_layout)
 
         # LLMモデル選択
-        model_layout = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(model_layout)
-        model_layout.addWidget(QtWidgets.QLabel("LLMモデル:"))
+        header_layout.addWidget(QtWidgets.QLabel("LLMモデル:"))
         self.combo_llm_model = QtWidgets.QComboBox()
         self.combo_llm_model.addItems(self.available_model_choices)
-        model_layout.addWidget(self.combo_llm_model)
+        header_layout.addWidget(self.combo_llm_model)
         self.label_current_model = QtWidgets.QLabel(f"選択中: {self.combo_llm_model.currentText()}")
-        model_layout.addWidget(self.label_current_model)
-        self._ensure_model_choice_alignment()
+        header_layout.addWidget(self.label_current_model)
         self.combo_llm_model.currentTextChanged.connect(self._on_model_change)
+        self._ensure_model_choice_alignment()
 
+        header_layout.addStretch(1)
+
+        # フォント切替
         self.button_font_scale = QtWidgets.QPushButton("フォント: 標準")
         self.button_font_scale.setToolTip("UI全体のフォントサイズを段階的に切り替えます。")
         self.button_font_scale.clicked.connect(self.cycle_font_scale)
-        left_layout.addWidget(self.button_font_scale)
+        header_layout.addWidget(self.button_font_scale)
 
-        # CSV 入出力
-        csv_buttons = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(csv_buttons)
-        csv_import_btn = QtWidgets.QPushButton("CSVをDBに投入")
-        csv_import_btn.clicked.connect(self._open_csv_import_dialog)
-        csv_buttons.addWidget(csv_import_btn)
-        csv_export_btn = QtWidgets.QPushButton("(DB確認用CSV出力)")
-        csv_export_btn.clicked.connect(self._export_csv)
-        csv_buttons.addWidget(csv_export_btn)
-
-        # 行数
-        row_layout = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(row_layout)
-        row_layout.addWidget(QtWidgets.QLabel("行数:"))
+    def _build_left_pane_content(self, layout):
+        # --- 1. Basic Settings (Compact Grid) ---
+        basic_group = QtWidgets.QGroupBox("基本設定")
+        basic_grid = QtWidgets.QGridLayout(basic_group)
+        
+        basic_grid.addWidget(QtWidgets.QLabel("行数:"), 0, 0)
         self.spin_row_num = QtWidgets.QSpinBox()
         self.spin_row_num.setMinimum(1)
         self.spin_row_num.setMaximum(999)
         self.spin_row_num.setValue(DEFAULT_ROW_NUM)
-        row_layout.addWidget(self.spin_row_num)
+        basic_grid.addWidget(self.spin_row_num, 0, 1)
 
-        # 属性選択（スクロール可能）
+        self.check_autofix = QtWidgets.QCheckBox("自動反映")
+        basic_grid.addWidget(self.check_autofix, 0, 2)
+
+        self.check_dedup = QtWidgets.QCheckBox("重複除外")
+        self.check_dedup.setChecked(bool(DEDUPLICATE_PROMPTS))
+        self.check_dedup.stateChanged.connect(self.auto_update)
+        basic_grid.addWidget(self.check_dedup, 1, 0, 1, 2)
+
+        layout.addWidget(basic_group)
+
+        # --- 2. Attributes Selection (Main Scroll Area) ---
+        attr_group = QtWidgets.QGroupBox("属性選択")
+        attr_layout = QtWidgets.QVBoxLayout(attr_group)
         self.attribute_area = QtWidgets.QScrollArea()
         self.attribute_area.setWidgetResizable(True)
         self.attribute_container = QtWidgets.QWidget()
         self.attribute_layout = QtWidgets.QFormLayout(self.attribute_container)
         self.attribute_area.setWidget(self.attribute_container)
-        left_layout.addWidget(self.attribute_area, 1)
+        attr_layout.addWidget(self.attribute_area)
+        layout.addWidget(attr_group, 1)  # Stretch to fill available vertical space
 
-        # 自動反映チェック
-        auto_layout = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(auto_layout)
-        self.check_autofix = QtWidgets.QCheckBox()
-        auto_layout.addWidget(QtWidgets.QLabel("自動反映:"))
-        auto_layout.addWidget(self.check_autofix)
+        # --- 3. Options Tab (Bottom of Left Pane) ---
+        tabs = QtWidgets.QTabWidget()
+        layout.addWidget(tabs)
 
-        # 末尾プリセット切替
-        tail_media_layout = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(tail_media_layout)
-        tail_media_layout.addWidget(QtWidgets.QLabel("末尾プリセット用途:"))
+        # Tab 1: Style & Presets
+        style_tab = QtWidgets.QWidget()
+        style_layout = QtWidgets.QVBoxLayout(style_tab)
+        style_layout.setContentsMargins(5, 5, 5, 5)
+
+        # Tail Settings
+        tail_form = QtWidgets.QFormLayout()
         self.combo_tail_media_type = QtWidgets.QComboBox()
         self.combo_tail_media_type.addItems(list(TAIL_PRESET_CHOICES.keys()))
         self.combo_tail_media_type.currentTextChanged.connect(self._on_tail_media_type_change)
-        tail_media_layout.addWidget(self.combo_tail_media_type)
+        tail_form.addRow("末尾プリセット用途:", self.combo_tail_media_type)
 
-        # 末尾固定テキスト
-        tail_layout = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(tail_layout)
-        self.check_tail_free = QtWidgets.QCheckBox()
-        tail_layout.addWidget(QtWidgets.QLabel("末尾1:"))
-        tail_layout.addWidget(self.check_tail_free)
+        tail_row = QtWidgets.QHBoxLayout()
+        self.check_tail_free = QtWidgets.QCheckBox("末尾1:")
         self.combo_tail_free = QtWidgets.QComboBox()
         self.combo_tail_free.setEditable(True)
-        tail_layout.addWidget(self.combo_tail_free)
         self.combo_tail_free.setToolTip("末尾固定文を選択または編集できます。")
+        tail_row.addWidget(self.check_tail_free)
+        tail_row.addWidget(self.combo_tail_free, 1)
+        tail_form.addRow(tail_row)
+        style_layout.addLayout(tail_form)
 
-        # オプションコンボ
-        self.combo_tail_ar = self._add_option_row(left_layout, "ar オプション:", AR_OPTIONS)
-        self.combo_tail_s = self._add_option_row(left_layout, "s オプション:", S_OPTIONS)
-        self.combo_tail_chaos = self._add_option_row(left_layout, "chaos オプション:", CHAOS_OPTIONS)
-        self.combo_tail_q = self._add_option_row(left_layout, "q オプション:", Q_OPTIONS)
-        self.combo_tail_weird = self._add_option_row(left_layout, "weird オプション:", WEIRD_OPTIONS)
+        # MJ Options Grid
+        mj_group = QtWidgets.QGroupBox("オプション")
+        mj_grid = QtWidgets.QGridLayout(mj_group)
+        self.combo_tail_ar = self._add_option_cell(mj_grid, 0, "ar オプション:", AR_OPTIONS)
+        self.combo_tail_s = self._add_option_cell(mj_grid, 1, "s オプション:", S_OPTIONS)
+        self.combo_tail_chaos = self._add_option_cell(mj_grid, 2, "chaos オプション:", CHAOS_OPTIONS)
+        self.combo_tail_q = self._add_option_cell(mj_grid, 3, "q オプション:", Q_OPTIONS)
+        self.combo_tail_weird = self._add_option_cell(mj_grid, 4, "weird オプション:", WEIRD_OPTIONS)
+        style_layout.addWidget(mj_group)
+        
+        style_layout.addStretch(1)
+        tabs.addTab(style_tab, "スタイル・オプション")
 
-        # 除外語句
-        exclusion_layout = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(exclusion_layout)
-        exclusion_layout.addWidget(QtWidgets.QLabel(LABEL_EXCLUSION_WORDS))
+        # Tab 2: Data Management
+        data_tab = QtWidgets.QWidget()
+        data_layout = QtWidgets.QVBoxLayout(data_tab)
+        data_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Exclusion
+        excl_group = QtWidgets.QGroupBox("除外設定")
+        excl_layout = QtWidgets.QVBoxLayout(excl_group)
+        excl_row = QtWidgets.QHBoxLayout()
+        excl_row.addWidget(QtWidgets.QLabel(LABEL_EXCLUSION_WORDS))
         self.check_exclusion = QtWidgets.QCheckBox()
-        exclusion_layout.addWidget(self.check_exclusion)
+        excl_row.addWidget(self.check_exclusion)
         self.combo_exclusion = QtWidgets.QComboBox()
         self.combo_exclusion.setEditable(True)
-        exclusion_layout.addWidget(self.combo_exclusion)
         self.combo_exclusion.addItems(load_exclusion_words())
-
-        dedup_layout = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(dedup_layout)
-        dedup_layout.addWidget(QtWidgets.QLabel("重複除外:"))
-        self.check_dedup = QtWidgets.QCheckBox()
-        self.check_dedup.setChecked(bool(DEDUPLICATE_PROMPTS))
-        dedup_layout.addWidget(self.check_dedup)
-        self.check_dedup.stateChanged.connect(self.auto_update)
-
+        excl_row.addWidget(self.combo_exclusion, 1)
+        excl_layout.addLayout(excl_row)
+        
         open_exclusion_btn = QtWidgets.QPushButton("除外語句CSVを開く")
         open_exclusion_btn.clicked.connect(self._open_exclusion_csv)
-        left_layout.addWidget(open_exclusion_btn)
+        excl_layout.addWidget(open_exclusion_btn)
+        data_layout.addWidget(excl_group)
 
-        # ボタン群
+        # CSV DB
+        db_group = QtWidgets.QGroupBox("DB管理")
+        db_layout = QtWidgets.QHBoxLayout(db_group)
+        csv_import_btn = QtWidgets.QPushButton("CSVをDBに投入")
+        csv_import_btn.clicked.connect(self._open_csv_import_dialog)
+        db_layout.addWidget(csv_import_btn)
+        csv_export_btn = QtWidgets.QPushButton("(DB確認用CSV出力)")
+        csv_export_btn.clicked.connect(self._export_csv)
+        db_layout.addWidget(csv_export_btn)
+        data_layout.addWidget(db_group)
+
+        data_layout.addStretch(1)
+        tabs.addTab(data_tab, "データ管理")
+
+    def _add_option_cell(self, grid: QtWidgets.QGridLayout, row: int, label: str, values: Iterable[str]) -> QtWidgets.QComboBox:
+        """グリッドレイアウトにオプション項目を追加するヘルパー"""
+        grid.addWidget(QtWidgets.QLabel(label), row, 0)
+        checkbox = QtWidgets.QCheckBox()
+        grid.addWidget(checkbox, row, 1)
+        combo = QtWidgets.QComboBox()
+        combo.addItems([str(v) for v in values])
+        combo.setEditable(True)
+        combo.setProperty("toggle", checkbox)
+        grid.addWidget(combo, row, 2)
+        
+        combo.currentTextChanged.connect(self.auto_update)
+        checkbox.stateChanged.connect(self.auto_update)
+        return combo
+
+    def _build_right_pane_content(self, layout):
+        # 1. Output Area (Top)
+        self.text_output = QtWidgets.QTextEdit()
+        self.text_output.setPlaceholderText("ここに生成結果が表示されます")
+        layout.addWidget(self.text_output, 1)  # Stretch factor 1
+
+        # 2. Primary Actions (Prominent)
+        action_layout = QtWidgets.QHBoxLayout()
+        
         generate_btn = QtWidgets.QPushButton("生成")
+        generate_btn.setObjectName("BigAction")
+        generate_btn.setMinimumHeight(45)
         generate_btn.clicked.connect(self.generate_text)
-        left_layout.addWidget(generate_btn)
+        action_layout.addWidget(generate_btn, 1)
 
         generate_copy_btn = QtWidgets.QPushButton("生成とコピー（全文）")
+        generate_copy_btn.setObjectName("BigAction")
+        generate_copy_btn.setMinimumHeight(45)
         generate_copy_btn.clicked.connect(self.generate_and_copy)
-        left_layout.addWidget(generate_copy_btn)
+        action_layout.addWidget(generate_copy_btn, 1)
+        
+        layout.addLayout(action_layout)
 
+        # 3. Secondary Actions
+        sub_action_layout = QtWidgets.QHBoxLayout()
+        
         copy_btn = QtWidgets.QPushButton("クリップボードにコピー(全文)")
         copy_btn.clicked.connect(self.copy_all_to_clipboard)
-        left_layout.addWidget(copy_btn)
+        sub_action_layout.addWidget(copy_btn)
 
         update_tail_btn = QtWidgets.QPushButton("末尾固定部のみ更新")
         update_tail_btn.clicked.connect(self.update_tail_free_texts)
-        left_layout.addWidget(update_tail_btn)
+        sub_action_layout.addWidget(update_tail_btn)
 
         update_option_btn = QtWidgets.QPushButton("オプションのみ更新")
         update_option_btn.clicked.connect(self.update_option)
-        left_layout.addWidget(update_option_btn)
+        sub_action_layout.addWidget(update_option_btn)
 
-        movie_box = QtWidgets.QGroupBox("動画用に整形(JSON)")
-        movie_layout = QtWidgets.QVBoxLayout(movie_box)
+        layout.addLayout(sub_action_layout)
+
+        # 4. Advanced Tools (Tabs)
+        tools_tabs = QtWidgets.QTabWidget()
+        tools_tabs.setMaximumHeight(160) 
+        layout.addWidget(tools_tabs)
+
+        # Movie Tool Tab
+        movie_tab = QtWidgets.QWidget()
+        movie_layout = QtWidgets.QVBoxLayout(movie_tab)
+        
         simple_row = QtWidgets.QHBoxLayout()
         simple_row.addWidget(QtWidgets.QLabel("簡易整形(LLMなし):"))
         format_movie_btn = QtWidgets.QPushButton("JSONデータ化")
@@ -1091,39 +1227,23 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         story_btn.clicked.connect(self.handle_movie_storyboard)
         llm_row.addWidget(story_btn)
         movie_layout.addLayout(llm_row)
-        left_layout.addWidget(movie_box)
+        movie_layout.addStretch(1)
+        
+        tools_tabs.addTab(movie_tab, "動画用に整形(JSON)")
 
-        # LLM アレンジ
-        arrange_layout = QtWidgets.QHBoxLayout()
-        left_layout.addLayout(arrange_layout)
-        arrange_layout.addWidget(QtWidgets.QLabel("文字数調整:"))
+        # LLM Adjust Tab
+        adjust_tab = QtWidgets.QWidget()
+        adjust_layout = QtWidgets.QHBoxLayout(adjust_tab)
+        adjust_layout.addWidget(QtWidgets.QLabel("文字数調整:"))
         self.combo_length_adjust = QtWidgets.QComboBox()
         self.combo_length_adjust.addItems(["半分", "2割減", "同程度", "2割増", "倍"])
-        arrange_layout.addWidget(self.combo_length_adjust)
+        adjust_layout.addWidget(self.combo_length_adjust)
         arrange_btn = QtWidgets.QPushButton("文字数調整してコピー")
         arrange_btn.clicked.connect(self.handle_length_adjust_and_copy)
-        left_layout.addWidget(arrange_btn)
+        adjust_layout.addWidget(arrange_btn)
+        adjust_layout.addStretch(1)
 
-    def _build_right_panel(self):
-        right_layout = QtWidgets.QVBoxLayout(self.right_panel)
-        self.text_output = QtWidgets.QTextEdit()
-        self.text_output.setPlaceholderText("ここに生成結果が表示されます")
-        right_layout.addWidget(self.text_output, 1)
-
-    def _add_option_row(self, parent_layout: QtWidgets.QVBoxLayout, label: str, values: Iterable[str]) -> QtWidgets.QComboBox:
-        row = QtWidgets.QHBoxLayout()
-        parent_layout.addLayout(row)
-        row.addWidget(QtWidgets.QLabel(label))
-        checkbox = QtWidgets.QCheckBox()
-        row.addWidget(checkbox)
-        combo = QtWidgets.QComboBox()
-        combo.addItems([str(v) for v in values])
-        combo.setEditable(True)
-        combo.setProperty("toggle", checkbox)
-        row.addWidget(combo)
-        combo.currentTextChanged.connect(self.auto_update)
-        checkbox.stateChanged.connect(self.auto_update)
-        return combo
+        tools_tabs.addTab(adjust_tab, "LLM アレンジ")
 
     def _get_db_path_or_warn(self) -> Optional[Path]:
         """DBパスの存在をチェックし、欠損時はセットアップ手順を案内する。"""
