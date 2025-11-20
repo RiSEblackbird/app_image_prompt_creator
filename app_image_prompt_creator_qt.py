@@ -847,13 +847,15 @@ class MovieLLMWorker(QtCore.QObject):
         detail_lines = "\n".join(f"- {d}" for d in self.details)
         if self.mode == "world":
             system_prompt = _append_temperature_hint(
-                "You refine disjoint visual fragments into one coherent world description for a single cinematic environment. "
+                "You refine disjoint visual fragments into one coherent world description for a single 10-second cinematic clip. "
+                "Focus on the most impactful visual elements and atmosphere to fit the short duration. "
                 "Do not narrate events in sequence; describe one continuous world in natural English.",
                 self.model,
                 LLM_TEMPERATURE,
             )
             user_prompt = (
-                "Convert the following fragments into a single connected world that feels inhabitable.\n"
+                "Convert the following fragments into a single connected world description that fits a 10-second video.\n"
+                "Omit minor details to keep it concise and impactful.\n"
                 f"Source summary: {self.text}\n"
                 f"Fragments:\n{detail_lines}\n"
                 "Output one concise paragraph that links every fragment into one world."
@@ -861,16 +863,18 @@ class MovieLLMWorker(QtCore.QObject):
             return system_prompt, user_prompt
 
         system_prompt = _append_temperature_hint(
-            "You craft a single continuous storyboard beat that can be filmed as one shot. "
+            "You craft a single continuous storyboard beat for a 10-second shot. "
+            "Ensure actions and camera moves are simple enough to complete within 10 seconds, even if the pace is slightly fast. "
             "Blend all elements into a flowing moment without hard scene cuts.",
             self.model,
             LLM_TEMPERATURE,
         )
         user_prompt = (
-            "Turn the fragments into a single-shot storyboard that can be captured in one camera move.\n"
+            "Turn the fragments into a 10-second single-shot storyboard.\n"
+            "Condense the sequence to fit the time limit, merging or simplifying transitions where necessary.\n"
             f"Source summary: {self.text}\n"
             f"Fragments:\n{detail_lines}\n"
-            "Describe a vivid but single-cut sequence in one paragraph, focusing on visual continuity."
+            "Describe a vivid, fast-paced but coherent sequence in one paragraph, focusing on visual continuity."
         )
         return system_prompt, user_prompt
 
