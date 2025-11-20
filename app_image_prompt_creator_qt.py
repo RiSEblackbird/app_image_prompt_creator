@@ -1010,12 +1010,13 @@ class MovieLLMWorker(QtCore.QObject):
     finished = QtCore.Signal(str)
     failed = QtCore.Signal(str)
 
-    def __init__(self, text: str, model: str, mode: str, details: List[str]):
+    def __init__(self, text: str, model: str, mode: str, details: List[str], video_style: str = ""):
         super().__init__()
         self.text = text
         self.model = model
         self.mode = mode
         self.details = details or []
+        self.video_style = video_style
 
     @QtCore.Slot()
     def run(self):
@@ -1049,6 +1050,15 @@ class MovieLLMWorker(QtCore.QObject):
 
     def _build_prompts(self) -> Tuple[str, str]:
         detail_lines = "\n".join(f"- {d}" for d in self.details)
+        
+        style_instruction = ""
+        if self.video_style:
+            style_instruction = (
+                f"\n\n[Target Video Style]\n{self.video_style}\n"
+                "IMPORTANT: Adapt the visual description (lighting, camera movement, atmosphere) "
+                "to strictly match the parameters defined in the Target Video Style above."
+            )
+
         if self.mode == "world":
             system_prompt = _append_temperature_hint(
                 "You refine disjoint visual fragments into one coherent world description for a single 10-second cinematic clip. "
@@ -1060,6 +1070,7 @@ class MovieLLMWorker(QtCore.QObject):
             user_prompt = (
                 "Convert the following fragments into a single connected world description that fits a 10-second video.\n"
                 "Omit minor details to keep it concise and impactful.\n"
+                f"{style_instruction}\n"
                 f"Source summary: {self.text}\n"
                 f"Fragments:\n{detail_lines}\n"
                 "Output one concise paragraph that links every fragment into one world."
@@ -1076,6 +1087,7 @@ class MovieLLMWorker(QtCore.QObject):
         user_prompt = (
             "Turn the fragments into a 10-second single-shot storyboard.\n"
             "Condense the sequence to fit the time limit, merging or simplifying transitions where necessary.\n"
+            f"{style_instruction}\n"
             f"Source summary: {self.text}\n"
             f"Fragments:\n{detail_lines}\n"
             "Describe a vivid, fast-paced but coherent sequence in one paragraph, focusing on visual continuity."
@@ -1409,6 +1421,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
         llm_row = QtWidgets.QHBoxLayout()
         llm_row.addWidget(QtWidgets.QLabel("LLM改良:"))
+        
+        self.check_use_video_style = QtWidgets.QCheckBox("スタイル反映")
+        self.check_use_video_style.setToolTip("ONにすると、末尾の video_style 定義(カメラ・照明・雰囲気など)をLLMへ伝え、それに沿った描写になるよう補正します。")
+        # デフォルトはOFFにしておく（ユーザーが意図的に選べるように）
+        llm_row.addWidget(self.check_use_video_style)
+
         world_btn = QtWidgets.QPushButton("世界観整形")
         world_btn.clicked.connect(self.handle_movie_worldbuilding)
         llm_row.addWidget(world_btn)
@@ -2245,7 +2263,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             return
         main_text, options_tail, movie_tail = prepared
         details = self._extract_sentence_details(main_text)
-        self._start_movie_llm_transformation("world", main_text, details, movie_tail, options_tail)
+        
+        video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
+        self._start_movie_llm_transformation("world", main_text, details, movie_tail, options_tail, video_style_arg)
 
     def handle_movie_storyboard(self):
         prepared = self._prepare_movie_prompt_parts()
@@ -2253,7 +2273,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             return
         main_text, options_tail, movie_tail = prepared
         details = self._extract_sentence_details(main_text)
-        self._start_movie_llm_transformation("storyboard", main_text, details, movie_tail, options_tail)
+        
+        video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
+        self._start_movie_llm_transformation("storyboard", main_text, details, movie_tail, options_tail, video_style_arg)
 
     def handle_length_adjust_and_copy(self):
         src = self.text_output.toPlainText().strip()
@@ -2292,12 +2314,18 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._start_background_worker(worker, self._handle_llm_success, self._handle_llm_failure)
 
     def _start_movie_llm_transformation(
-        self, mode: str, main_text: str, details: List[str], movie_tail: str, options_tail: str
+        self, mode: str, main_text: str, details: List[str], movie_tail: str, options_tail: str, video_style_context: str = ""
     ):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
-        worker = MovieLLMWorker(text=main_text, model=self.combo_llm_model.currentText(), mode=mode, details=details)
+        worker = MovieLLMWorker(
+            text=main_text,
+            model=self.combo_llm_model.currentText(),
+            mode=mode,
+            details=details,
+            video_style=video_style_context
+        )
         context = {
             "mode": mode,
             "movie_tail": movie_tail,
