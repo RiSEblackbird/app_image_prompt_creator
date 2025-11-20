@@ -53,5 +53,29 @@ tails:
     - id: movie_one_shot_doc
       description_ja: "ワンショット・ドキュメンタリー調の現実的トーン"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"single-take documentary-style shot that follows this world in a realistic tone\",\"style\":\"one-shot documentary\"}}"
+    - id: movie_heavy_scifi
+      description_ja: "重厚でスタイリッシュなSFスタイル"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"heavy and stylish sci-fi sequence with deep atmosphere\",\"look\":\"futuristic aesthetics\"}}"
+    - id: movie_scifi_trailer
+      description_ja: "モダンなSF映画トレーラー風（ドルビー音響感）"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"modern sci-fi movie trailer style with cinematic lighting\",\"grade\":\"Dolby Digital atmosphere\"}}"
+    - id: movie_accelerating_edit
+      description_ja: "時間経過と共に加速するドラマティックな編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"editing that accelerates dramatically with rapid cut switching over time\",\"style\":\"dynamic speed acceleration\"}}"
+    - id: movie_nature_to_future
+      description_ja: "自然から未来技術へ変化するドキュメンタリー調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"documentary style starting with nature focus and graduating to futuristic technology scenes\",\"style\":\"gradual transition spanning vast time\"}}"
+    - id: movie_psychological_horror
+      description_ja: "静かなる恐怖・ホラーテイスト（ジャンプスケアなし）"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"psychological horror taste with eerie atmosphere and damp visual texture, no jump scares\",\"genre\":\"quiet terror\"}}"
+    - id: movie_hollywood_action
+      description_ja: "ハリウッドアクション大作スタイル"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"Hollywood action blockbuster style with explosive visuals and epic scale\",\"style\":\"high production value\"}}"
+    - id: movie_epic_realism
+      description_ja: "壮大で写実的な実写映画風（IMAX品質）"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"complex narrative structure with practical effects look and grandiose scale\",\"format\":\"IMAX quality realism\"}}"
+    - id: movie_dynamic_samurai
+      description_ja: "ダイナミックな天候と幾何学的構図の時代劇風"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic movement of weather and elements with strong geometric composition\",\"style\":\"epic historical atmosphere\"}}"
 
 
