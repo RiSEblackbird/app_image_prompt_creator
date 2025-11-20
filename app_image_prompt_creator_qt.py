@@ -958,11 +958,12 @@ class LLMWorker(QtCore.QObject):
     finished = QtCore.Signal(str)
     failed = QtCore.Signal(str)
 
-    def __init__(self, text: str, model: str, length_hint: str):
+    def __init__(self, text: str, model: str, length_hint: str, length_limit: int = 0):
         super().__init__()
         self.text = text
         self.model = model
         self.length_hint = length_hint
+        self.length_limit = length_limit
 
     @QtCore.Slot()
     def run(self):
@@ -971,13 +972,18 @@ class LLMWorker(QtCore.QObject):
             if not api_key:
                 self.failed.emit(f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
                 return
+            
+            limit_instruction = ""
+            if self.length_limit > 0:
+                limit_instruction = f"\nIMPORTANT: Strictly limit the output to under {self.length_limit} characters."
+
             user_prompt = (
                 f"Length adjustment request (target: {self.length_hint})\n"
                 f"Instruction: Adjust length ONLY. Preserve meaning, style, and technical parameters.\n"
                 f"Text: {self.text}"
             )
             system_prompt = _append_temperature_hint(
-                "You are a text length adjustment specialist. Keep style but meet length hint.",
+                "You are a text length adjustment specialist. Keep style but meet length hint." + limit_instruction,
                 self.model,
                 LLM_TEMPERATURE,
             )
@@ -1458,6 +1464,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.combo_length_adjust = QtWidgets.QComboBox()
         self.combo_length_adjust.addItems(["半分", "2割減", "同程度", "2割増", "倍"])
         adjust_layout.addWidget(self.combo_length_adjust)
+
+        adjust_layout.addWidget(QtWidgets.QLabel("上限:"))
+        self.combo_length_limit_arrange = QtWidgets.QComboBox()
+        self.combo_length_limit_arrange.addItems(["(制限なし)", "250", "500", "750", "1000", "1250"])
+        adjust_layout.addWidget(self.combo_length_limit_arrange)
+
         arrange_btn = QtWidgets.QPushButton("文字数調整してコピー")
         arrange_btn.clicked.connect(self.handle_length_adjust_and_copy)
         adjust_layout.addWidget(arrange_btn)
@@ -2304,7 +2316,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
             return
         target = self.combo_length_adjust.currentText()
-        self._start_llm_worker(src, target)
+        
+        limit_text = self.combo_length_limit_arrange.currentText()
+        length_limit = int(limit_text) if limit_text.isdigit() else 0
+        
+        self._start_llm_worker(src, target, length_limit)
 
     def _start_background_worker(self, worker: QtCore.QObject, success_handler, failure_handler):
         if self._thread and self._thread.isRunning():
@@ -2327,11 +2343,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._thread = thread
         return True
 
-    def _start_llm_worker(self, text: str, length_hint: str):
+    def _start_llm_worker(self, text: str, length_hint: str, length_limit: int = 0):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
-        worker = LLMWorker(text=text, model=self.combo_llm_model.currentText(), length_hint=length_hint)
+        worker = LLMWorker(text=text, model=self.combo_llm_model.currentText(), length_hint=length_hint, length_limit=length_limit)
         self._start_background_worker(worker, self._handle_llm_success, self._handle_llm_failure)
 
     def _start_movie_llm_transformation(
