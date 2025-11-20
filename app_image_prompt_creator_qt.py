@@ -174,12 +174,12 @@ FONT_SCALE_PRESETS = [
 # 設定ファイルが欠損した場合も動かせるよう、サンプル相当のデフォルト値を持っておく。
 DEFAULT_APP_SETTINGS = {
     "POSITION_FILE": "window_position_app_image_prompt_creator.txt",
-    "BASE_FOLDER": "./app_image_prompt_creator",
-    "DEFAULT_TXT_PATH": "./app_image_prompt_creator/image_prompt_parts.txt",
-    "DEFAULT_DB_PATH": "./app_image_prompt_creator/image_prompt_parts.db",
-    "EXCLUSION_CSV": "./app_image_prompt_creator/exclusion_targets.csv",
-    "ARRANGE_PRESETS_YAML": "./app_image_prompt_creator/arrange_presets.yaml",
-    "TAIL_PRESETS_YAML": "./app_image_prompt_creator/tail_presets.yaml",
+    "BASE_FOLDER": ".",
+    "DEFAULT_TXT_PATH": "image_prompt_parts.txt",
+    "DEFAULT_DB_PATH": "image_prompt_parts.db",
+    "EXCLUSION_CSV": "exclusion_targets.csv",
+    "ARRANGE_PRESETS_YAML": "arrange_presets.yaml",
+    "TAIL_PRESETS_YAML": "tail_presets.yaml",
     "DEDUPLICATE_PROMPTS": True,
     "LLM_ENABLED": False,
     "LLM_MODEL": DEFAULT_LLM_MODEL,
@@ -522,11 +522,11 @@ def _apply_app_settings(app_settings: dict):
     global LLM_TIMEOUT, OPENAI_API_KEY_ENV, ARRANGE_PRESETS_YAML, TAIL_PRESETS_YAML, LLM_INCLUDE_TEMPERATURE, settings
 
     settings = {"app_image_prompt_creator": deepcopy(app_settings)}
-    BASE_FOLDER = app_settings.get("BASE_FOLDER", DEFAULT_APP_SETTINGS["BASE_FOLDER"])
-    DEFAULT_TXT_PATH = app_settings.get("DEFAULT_TXT_PATH", DEFAULT_APP_SETTINGS["DEFAULT_TXT_PATH"])
-    DEFAULT_DB_PATH = app_settings.get("DEFAULT_DB_PATH", DEFAULT_APP_SETTINGS["DEFAULT_DB_PATH"])
-    POSITION_FILE = app_settings.get("POSITION_FILE", DEFAULT_APP_SETTINGS["POSITION_FILE"])
-    EXCLUSION_CSV = app_settings.get("EXCLUSION_CSV", DEFAULT_APP_SETTINGS["EXCLUSION_CSV"])
+    BASE_FOLDER = str(_resolve_path(app_settings.get("BASE_FOLDER", DEFAULT_APP_SETTINGS["BASE_FOLDER"])))
+    DEFAULT_TXT_PATH = str(_resolve_path(app_settings.get("DEFAULT_TXT_PATH", DEFAULT_APP_SETTINGS["DEFAULT_TXT_PATH"])))
+    DEFAULT_DB_PATH = str(_resolve_path(app_settings.get("DEFAULT_DB_PATH", DEFAULT_APP_SETTINGS["DEFAULT_DB_PATH"])))
+    POSITION_FILE = str(_resolve_path(app_settings.get("POSITION_FILE", DEFAULT_APP_SETTINGS["POSITION_FILE"])))
+    EXCLUSION_CSV = str(_resolve_path(app_settings.get("EXCLUSION_CSV", DEFAULT_APP_SETTINGS["EXCLUSION_CSV"])))
     DEDUPLICATE_PROMPTS = app_settings.get("DEDUPLICATE_PROMPTS", DEFAULT_APP_SETTINGS["DEDUPLICATE_PROMPTS"])
     LLM_ENABLED = app_settings.get("LLM_ENABLED", DEFAULT_APP_SETTINGS["LLM_ENABLED"])
     LLM_MODEL = _normalize_llm_model(app_settings.get("LLM_MODEL", DEFAULT_APP_SETTINGS["LLM_MODEL"]))
@@ -2421,22 +2421,50 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         return " ".join(p for p in parts if p)
 
     def _detach_movie_tail_for_llm(self, text: str) -> Tuple[str, str]:
-        tokens = (text or "").strip().split()
-        if not tokens:
-            return "", ""
-
-        movie_tail = ""
-        movie_idx = None
-        for i in range(len(tokens) - 1, -1, -1):
-            if tokens[i].startswith("{") and "video_style" in tokens[i]:
-                movie_idx = i
+        """
+        テキスト内から video_style を含む JSON ブロック({...}) を抽出する。
+        単純な split() では JSON 内のスペースで分割されてしまうため、括弧の対応関係を用いて抽出する。
+        """
+        text = (text or "").strip()
+        search_end = len(text) - 1
+        
+        while search_end >= 0:
+            # 後ろから '}' を探す
+            end_idx = text.rfind("}", 0, search_end + 1)
+            if end_idx == -1:
                 break
-
-        if movie_idx is not None:
-            movie_tail = tokens[movie_idx]
-            tokens = tokens[:movie_idx] + tokens[movie_idx + 1 :]
-
-        return " ".join(tokens).strip(), movie_tail
+            
+            # 対応する '{' を探す
+            depth = 0
+            start_idx = -1
+            for i in range(end_idx, -1, -1):
+                char = text[i]
+                if char == '}':
+                    depth += 1
+                elif char == '{':
+                    depth -= 1
+                    if depth == 0:
+                        start_idx = i
+                        break
+            
+            if start_idx != -1:
+                candidate = text[start_idx : end_idx + 1]
+                # video_style を含むかチェック (簡易的な文字列判定)
+                if '"video_style"' in candidate or "'video_style'" in candidate:
+                    movie_tail = candidate
+                    # 抽出して残りを結合
+                    remaining = (text[:start_idx] + " " + text[end_idx + 1:]).strip()
+                    # 連続空白の正規化
+                    remaining = " ".join(remaining.split())
+                    return remaining, movie_tail
+                else:
+                    # video_style ではないブロックだった場合、これより前から再検索
+                    search_end = start_idx - 1
+            else:
+                # 対応する '{' が見つからない場合、この '}' は無視して前へ
+                search_end = end_idx - 1
+                
+        return text, ""
 
     def _split_prompt_and_options(self, text: str):
         try:
