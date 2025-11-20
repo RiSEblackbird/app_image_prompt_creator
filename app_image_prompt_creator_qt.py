@@ -1107,6 +1107,287 @@ class MovieLLMWorker(QtCore.QObject):
         )
         return system_prompt, user_prompt
 
+def sanitize_to_english(text: str) -> str:
+    """基本的に英語出力を維持するための軽いサニタイズ。"""
+    replacements = {
+        "和風": "Japanese style",
+        "浮世絵": "ukiyo-e",
+        "侍": "samurai",
+        "忍者": "ninja",
+        "アール・デコ": "Art Deco",
+        "アール・ヌーヴォー": "Art Nouveau",
+        "水彩画": "watercolor",
+        "漫画": "manga",
+        "アニメ": "anime",
+        "ノワール": "noir",
+        "ヴェイパーウェーブ": "vaporwave",
+    }
+    out = text
+    for k, v in replacements.items():
+        out = out.replace(k, v)
+    return out
+
+
+def _extract_anchor_terms(text: str, max_terms: int = 8) -> List[str]:
+    """原文から保持すべきアンカー語句（名詞・象徴語）を抽出する。"""
+    try:
+        cleaned = re.sub(r"[^A-Za-z0-9\-\s]", " ", text)
+        tokens = [t.strip('-') for t in cleaned.split()]
+        tokens = [t for t in tokens if len(t) >= 3]
+        priority = {
+            'cherry', 'blossom', 'blossoms', 'lantern', 'lanterns', 'temple', 'shrine', 'garden',
+            'tea', 'bamboo', 'maple', 'zen', 'wabi', 'sabi', 'imperfection', 'architecture', 'wood', 'paper',
+            'stone', 'bridge', 'pond', 'kimono', 'tatami', 'shoji', 'bonsai'
+        }
+        scored = []
+        for t in tokens:
+            score = 1
+            lt = t.lower()
+            if lt in priority:
+                score += 3
+            if any(k in lt for k in ['garden', 'temple', 'shrine', 'lantern', 'blossom', 'bamboo', 'maple', 'tea', 'zen']):
+                score += 1
+            scored.append((score, t))
+        scored.sort(reverse=True)
+        anchors = []
+        seen = set()
+        for _, w in scored:
+            lw = w.lower()
+            if lw not in seen:
+                anchors.append(w)
+                seen.add(lw)
+            if len(anchors) >= max_terms:
+                break
+        return anchors
+    except Exception:
+        return []
+
+
+def _generate_hybrid_cues(anchors: List[str], preset: str, guidance: str, max_items: int = 5) -> List[str]:
+    """アンカー語をスタイル語彙と合成し、ハイブリッド化を促すサジェストを生成する。"""
+    try:
+        if not anchors:
+            return []
+        preset_l = (preset or "").lower()
+        guidance_l = (guidance or "").lower()
+        
+        keys = [preset_l, guidance_l]
+        style = "generic"
+        if any("cyber" in k for k in keys):
+            style = "cyberpunk"
+        elif any("noir" in k for k in keys):
+            style = "noir"
+        elif any(k in ("sci-fi", "scifi", "science fiction") for k in keys):
+            style = "scifi"
+        elif any("vapor" in k for k in keys):
+            style = "vaporwave"
+            
+        vocab = {
+            "cyberpunk": {
+                "materials": ["brushed metal", "titanium inlays", "carbon-fiber", "chromed edges", "micro-etched steel", "polymer plates"],
+                "lighting": ["neon rim-light", "cyan underglow", "magenta accent light", "dynamic LED seams", "HUD glow", "soft holographic glow"],
+                "vfx": ["holographic flicker", "pixel shimmer", "AR overlay", "scanline sheen", "glitch speckles", "volumetric haze"],
+                "detail": ["micro-circuit veins", "fiber-optic threads", "embedded sensors", "heat vents", "panel seams", "thin cabling"]
+            },
+            "noir": {
+                "materials": ["matte enamel", "lacquered wood", "worn steel", "velvet texture"],
+                "lighting": ["hard rim-light", "moody backlight", "rain-soaked reflections", "venetian blind shadows"],
+                "vfx": ["film grain", "soft bloom", "cigarette smoke wisps"],
+                "detail": ["sleek rivets", "aged patina", "subtle scratches"]
+            },
+            "scifi": {
+                "materials": ["brushed alloy", "ceramic composite", "graphene panels", "satin titanium"],
+                "lighting": ["cool rim-light", "ambient panel glow", "bioluminescent accents"],
+                "vfx": ["force-field shimmer", "ionized haze", "specular flares"],
+                "detail": ["hex-mesh patterns", "micro-actuators", "servo joints"]
+            },
+            "vaporwave": {
+                "materials": ["pastel plastic", "glossy acrylic", "pearlescent enamel"],
+                "lighting": ["pink-cyan gradient glow", "retro grid light", "soft bloom"],
+                "vfx": ["CRT scanlines", "pixel dust", "checkerboard reflections"],
+                "detail": ["chrome trims", "90s decals", "retro stickers"]
+            },
+            "generic": {
+                "materials": ["brushed metal", "ceramic-metal composite", "polished steel"],
+                "lighting": ["edge underglow", "accent rim-light", "soft backlight"],
+                "vfx": ["subtle holographic shimmer", "fine grain", "soft bloom"],
+                "detail": ["micro-engraving", "thin inlays", "fiber threads"]
+            }
+        }
+        lex = vocab.get(style, vocab["generic"])
+        templates = [
+            "{a} with {materials} accents and {lighting}",
+            "{a} featuring {detail} and a hint of {vfx}",
+            "part of the {a} converted to {materials} with {lighting}",
+            "{a} showing {detail} beneath the surface and subtle {vfx}",
+            "{a} integrating {materials} inlays and {lighting}"
+        ]
+        cues = []
+        for i, a in enumerate(anchors):
+            if len(cues) >= max_items:
+                break
+            t = templates[i % len(templates)]
+            cue = t.format(
+                a=a,
+                materials=lex["materials"][i % len(lex["materials"])],
+                lighting=lex["lighting"][i % len(lex["lighting"])],
+                vfx=lex["vfx"][i % len(lex["vfx"])],
+                detail=lex["detail"][i % len(lex["detail"])],
+            )
+            cues.append(cue)
+        return cues
+    except Exception:
+        return []
+
+
+class ArrangeLLMWorker(QtCore.QObject):
+    """画像プロンプトのアレンジ・リファインを実行するワーカー。"""
+
+    finished = QtCore.Signal(str)
+    failed = QtCore.Signal(str)
+
+    def __init__(
+        self,
+        text: str,
+        model: str,
+        preset_label: str,
+        strength: int,
+        guidance: str,
+        length_adjust: str,
+        length_limit: int
+    ):
+        super().__init__()
+        self.text = text
+        self.model = model
+        self.preset_label = preset_label
+        self.strength = strength
+        self.guidance = guidance
+        self.length_adjust = length_adjust
+        self.length_limit = length_limit
+
+    @QtCore.Slot()
+    def run(self):
+        try:
+            api_key = os.getenv(OPENAI_API_KEY_ENV)
+            if not api_key:
+                self.failed.emit(f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
+                return
+
+            # 文字数目標の計算
+            original_length = len(self.text)
+            length_multipliers = {
+                "半分": 0.5,
+                "2割減": 0.8,
+                "同程度": 1.0,
+                "2割増": 1.2,
+                "倍": 2.0
+            }
+            multiplier = length_multipliers.get(self.length_adjust, 1.0)
+            target_length = int(original_length * multiplier)
+
+            # ブレンド・アンカー・ハイブリッド
+            blend_weight_map = {0: 20, 1: 35, 2: 65, 3: 80}
+            blend_weight = blend_weight_map.get(self.strength, 55)
+            anchor_terms = _extract_anchor_terms(self.text, max_terms=8)
+            hybrid_cues = _generate_hybrid_cues(anchor_terms, self.preset_label, self.guidance, max_items=5)
+            must_keep_count = 3 if self.strength <= 2 else 2
+
+            strength_descriptions = {
+                0: "Apply very subtle, minimal changes. Keep almost everything the same, just minor word improvements.",
+                1: "Apply gentle, tasteful variations. Improve wording and style while keeping the core concept intact.",
+                2: "Apply moderate creative variations. Enhance style, add vivid descriptors, and improve composition.",
+                3: "Apply bold, creative transformations. Enhance style and add dramatic descriptors while preserving the original subject and key elements."
+            }
+            strength_instruction = strength_descriptions.get(self.strength, strength_descriptions[2])
+
+            system_prompt = ""
+            user_prompt = ""
+            
+            import uuid
+            nonce = uuid.uuid4().hex[:8]
+
+            limit_instruction = ""
+            if self.length_limit > 0:
+                limit_instruction = f"\nIMPORTANT: Strictly limit the output to under {self.length_limit} characters."
+
+            # 強度3用のプロンプト
+            if self.strength == 3:
+                system_prompt = (
+                    f"You are a creative prompt artist. Transform this Midjourney prompt with {strength_instruction}. "
+                    f"If guidance is provided, it SHOULD influence style but MUST BLEND with the original content. "
+                    f"Do NOT eliminate original cultural/subject elements; preserve and merge them with the guidance. "
+                    f"Be BOLD and CREATIVE - enhance the visual style with dramatic effects and vivid cinematic language. "
+                    f"Output only the transformed prompt.{limit_instruction}"
+                )
+                user_prompt = (
+                    f"Preset: {self.preset_label}, Strength: {self.strength} (MAXIMUM CREATIVITY)\n"
+                    f"Nonce: {nonce}\n"
+                    + (f"Guidance: {self.guidance}\n" if self.guidance else "") +
+                    f"Blend weight target: ~{blend_weight}% guidance / ~{100 - blend_weight}% original\n"
+                    + (f"Anchor terms (verbatim): {', '.join(anchor_terms)}\n" if anchor_terms else "") +
+                    f"CRITICAL: Include at least {must_keep_count} of the anchor terms verbatim. Keep the original subject and cultural motifs.\n"
+                    + ("Hybridization suggestions: " + "; ".join(hybrid_cues) + "\n" if hybrid_cues else "") +
+                    f"Length adjustment: {self.length_adjust} (target: ~{target_length} chars, original: {original_length} chars)\n"
+                    f"CRITICAL: Make the output {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original\n"
+                    f"Prompt: {self.text}{limit_instruction}"
+                )
+            else:
+                # 通常(0-2)用のプロンプト
+                guidance_instruction = ""
+                if self.strength == 0:
+                    guidance_instruction = "Apply guidance very subtly if at all. Focus on minimal improvements."
+                elif self.strength == 1:
+                    guidance_instruction = "Apply guidance gently. Blend it subtly with the original content."
+                elif self.strength == 2:
+                    guidance_instruction = "Apply guidance moderately. Enhance the style while keeping core elements."
+                
+                system_prompt = (
+                    f"Rewrite Midjourney prompts with {strength_instruction}. "
+                    f"{guidance_instruction} "
+                    f"Keep core content. Output only the prompt.{limit_instruction}"
+                )
+                user_prompt = (
+                    f"Preset: {self.preset_label}, Strength: {self.strength} (0=minimal, 3=bold)\n"
+                    f"Nonce: {nonce}\n"
+                    + (f"Guidance: {self.guidance}\n" if self.guidance else "") +
+                    f"Guidance instruction: {guidance_instruction}\n"
+                    f"Blend weight target: ~{blend_weight}% guidance / ~{100 - blend_weight}% original\n"
+                    + (f"Anchor terms (verbatim): {', '.join(anchor_terms)}\n" if anchor_terms else "") +
+                    f"CRITICAL: Include at least {must_keep_count} of the anchor terms verbatim. Keep the original subject and cultural motifs.\n"
+                    + ("Hybridization suggestions: " + "; ".join(hybrid_cues) + "\n" if hybrid_cues else "") +
+                    f"Length adjustment: {self.length_adjust} (target: ~{target_length} chars, original: {original_length} chars)\n"
+                    f"CRITICAL: Make the output {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original\n"
+                    f"Prompt: {self.text}{limit_instruction}"
+                )
+
+            system_prompt = _append_temperature_hint(system_prompt, self.model, LLM_TEMPERATURE)
+
+            content, finish_reason, _, retry_count, error_message, status_code = send_llm_request(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=LLM_TEMPERATURE,
+                max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                timeout=LLM_TIMEOUT,
+                model_name=self.model,
+                include_temperature=LLM_INCLUDE_TEMPERATURE,
+            )
+
+            if error_message:
+                self.failed.emit(f"{error_message} (リトライ回数: {retry_count}, ステータス: {status_code})")
+                return
+            
+            if finish_reason in LENGTH_LIMIT_REASONS:
+                self.failed.emit("LLM応答がトークン制限に達しました。短くして再試行してください。")
+                return
+
+            self.finished.emit((content or "").strip())
+
+        except Exception:
+            self.failed.emit(get_exception_trace())
+
+
+
 class PromptGeneratorWindow(QtWidgets.QMainWindow):
     """PySide6 版のメインウィンドウ。UIとイベントを集約。"""
 
@@ -1418,7 +1699,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
         # 4. Advanced Tools (Tabs)
         tools_tabs = QtWidgets.QTabWidget()
-        tools_tabs.setMaximumHeight(160) 
+        # 高さを現在の2倍程度（320px）かつ可変（Maximum制限なし）に変更
+        tools_tabs.setMinimumHeight(320)
         layout.addWidget(tools_tabs)
 
         # Movie Tool Tab
@@ -1459,20 +1741,61 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
         # LLM Adjust Tab
         adjust_tab = QtWidgets.QWidget()
-        adjust_layout = QtWidgets.QHBoxLayout(adjust_tab)
-        adjust_layout.addWidget(QtWidgets.QLabel("文字数調整:"))
+        adjust_layout = QtWidgets.QVBoxLayout(adjust_tab)
+        adjust_layout.setContentsMargins(5, 5, 5, 5)
+
+        # 1. 文字数設定 (簡易・アレンジ共通)
+        length_group = QtWidgets.QHBoxLayout()
+        length_group.addWidget(QtWidgets.QLabel("文字数目標:"))
         self.combo_length_adjust = QtWidgets.QComboBox()
         self.combo_length_adjust.addItems(["半分", "2割減", "同程度", "2割増", "倍"])
-        adjust_layout.addWidget(self.combo_length_adjust)
+        self.combo_length_adjust.setCurrentText("同程度")
+        length_group.addWidget(self.combo_length_adjust)
 
-        adjust_layout.addWidget(QtWidgets.QLabel("上限:"))
+        length_group.addWidget(QtWidgets.QLabel("上限:"))
         self.combo_length_limit_arrange = QtWidgets.QComboBox()
         self.combo_length_limit_arrange.addItems(["(制限なし)", "250", "500", "750", "1000", "1250"])
-        adjust_layout.addWidget(self.combo_length_limit_arrange)
+        length_group.addWidget(self.combo_length_limit_arrange)
+        
+        simple_adjust_btn = QtWidgets.QPushButton("文字数のみ調整")
+        simple_adjust_btn.setToolTip("スタイル変更を行わず、現在のプロンプトの長さを調整します。")
+        simple_adjust_btn.clicked.connect(self.handle_length_adjust_and_copy)
+        length_group.addWidget(simple_adjust_btn)
+        adjust_layout.addLayout(length_group)
 
-        arrange_btn = QtWidgets.QPushButton("文字数調整してコピー")
-        arrange_btn.clicked.connect(self.handle_length_adjust_and_copy)
+        # 2. アレンジ設定
+        arrange_form = QtWidgets.QFormLayout()
+        
+        self.combo_arrange_preset = QtWidgets.QComboBox()
+        self._update_arrange_preset_choices()
+        self.combo_arrange_preset.currentTextChanged.connect(self._on_arrange_preset_change)
+        arrange_form.addRow("プリセット:", self.combo_arrange_preset)
+        
+        strength_row = QtWidgets.QHBoxLayout()
+        self.slider_strength = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.slider_strength.setRange(0, 3)
+        self.slider_strength.setValue(2)
+        self.slider_strength.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.slider_strength.setTickInterval(1)
+        self.slider_strength.setFixedWidth(150)
+        self.label_strength_val = QtWidgets.QLabel("2 (標準)")
+        self.slider_strength.valueChanged.connect(self._on_strength_change)
+        strength_row.addWidget(self.slider_strength)
+        strength_row.addWidget(self.label_strength_val)
+        strength_row.addStretch(1)
+        arrange_form.addRow("強度:", strength_row)
+        
+        self.entry_arrange_guidance = QtWidgets.QLineEdit()
+        self.entry_arrange_guidance.setPlaceholderText("追加ガイダンス (任意)")
+        arrange_form.addRow("ガイダンス:", self.entry_arrange_guidance)
+        
+        adjust_layout.addLayout(arrange_form)
+        
+        arrange_btn = QtWidgets.QPushButton("アレンジしてコピー")
+        arrange_btn.setToolTip("選択したプリセットと強度でプロンプトを再構築し、結果をコピーします。")
+        arrange_btn.clicked.connect(self.handle_arrange_llm_and_copy)
         adjust_layout.addWidget(arrange_btn)
+        
         adjust_layout.addStretch(1)
 
         tools_tabs.addTab(adjust_tab, "LLM アレンジ")
@@ -1989,6 +2312,90 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         """arrange_presets.yaml を再読込し、ARRANGE_PRESETS を最新状態に更新する。"""
 
         load_arrange_presets_from_yaml()
+        self._update_arrange_preset_choices()
+
+    def _update_arrange_preset_choices(self):
+        """アレンジプリセットの選択肢を更新する。"""
+        current = self.combo_arrange_preset.currentText()
+        self.combo_arrange_preset.blockSignals(True)
+        self.combo_arrange_preset.clear()
+        for p in ARRANGE_PRESETS:
+            self.combo_arrange_preset.addItem(p["label"], userData=p)
+        
+        if current:
+            index = self.combo_arrange_preset.findText(current)
+            if index >= 0:
+                self.combo_arrange_preset.setCurrentIndex(index)
+        self.combo_arrange_preset.blockSignals(False)
+        self._on_arrange_preset_change(self.combo_arrange_preset.currentText())
+
+    def _on_arrange_preset_change(self, text):
+        """プリセット変更時にガイダンスのプレースホルダーなどを更新する（必要に応じて実装）。"""
+        pass
+
+    def _on_strength_change(self, value):
+        labels = {0: "0 (微細)", 1: "1 (弱)", 2: "2 (標準)", 3: "3 (強)"}
+        self.label_strength_val.setText(labels.get(value, str(value)))
+
+    def handle_arrange_llm_and_copy(self):
+        """アレンジ機能を実行し、結果をコピーする。"""
+        src = self.text_output.toPlainText().strip()
+        if not src:
+            QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
+            return
+
+        preset_label = self.combo_arrange_preset.currentText()
+        strength = self.slider_strength.value()
+        guidance = self.entry_arrange_guidance.text().strip()
+        length_adjust = self.combo_length_adjust.currentText()
+        
+        limit_text = self.combo_length_limit_arrange.currentText()
+        length_limit = int(limit_text) if limit_text.isdigit() else 0
+        
+        self._start_arrange_llm_worker(src, preset_label, strength, guidance, length_adjust, length_limit)
+
+    def _start_arrange_llm_worker(self, text, preset_label, strength, guidance, length_adjust, length_limit):
+        if not LLM_ENABLED:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
+            return
+        
+        worker = ArrangeLLMWorker(
+            text=text,
+            model=self.combo_llm_model.currentText(),
+            preset_label=preset_label,
+            strength=strength,
+            guidance=guidance,
+            length_adjust=length_adjust,
+            length_limit=length_limit
+        )
+        self._start_background_worker(worker, self._handle_arrange_llm_success, self._handle_arrange_llm_failure)
+
+    def _handle_arrange_llm_success(self, thread: QtCore.QThread, worker: ArrangeLLMWorker, result: str):
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        
+        if not result:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
+            return
+            
+        # オプション継承処理
+        clean = self._inherit_options_if_present(self.text_output.toPlainText(), result)
+        
+        # 結果をテキストエリアに反映するか、あるいはダイアログで比較するか？
+        # Tk版は比較ダイアログを出していたが、Qt版の既存フローに合わせてメインエリア更新＆コピーとする。
+        self.text_output.setPlainText(clean)
+        QtGui.QGuiApplication.clipboard().setText(clean)
+        QtWidgets.QMessageBox.information(self, "コピー完了", "アレンジ済みプロンプトをコピーしました。")
+
+    def _handle_arrange_llm_failure(self, thread: QtCore.QThread, worker: ArrangeLLMWorker, error: str):
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        QtWidgets.QMessageBox.critical(self, "エラー", f"アレンジ処理でエラーが発生しました:\n{error}")
+
 
     # =============================
     # プロンプト生成ロジック
