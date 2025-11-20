@@ -955,36 +955,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
 
-        # モダンなスタイリング
-        central.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #ccc;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 3px;
-            }
-            QPushButton {
-                padding: 5px 10px;
-            }
-            QPushButton#BigAction {
-                font-weight: bold;
-                font-size: 14px;
-                padding: 8px 16px;
-                background-color: #0078d4;
-                color: white;
-                border-radius: 4px;
-            }
-            QPushButton#BigAction:hover {
-                background-color: #2b88d8;
-            }
-        """)
-
+        # モダンなスタイリング（初期適用は _apply_font_scale に任せるため、ここでは構造のみ）
+        # _apply_font_scale() が後で呼ばれてスタイルシートを設定する
+        
         main_layout = QtWidgets.QVBoxLayout(central)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
@@ -2213,12 +2186,50 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not FONT_SCALE_PRESETS:
             return
         preset = FONT_SCALE_PRESETS[self.font_scale_level]
+        base_size = preset["pt"]
         base_family = self._ui_font_family or self.font().family()
-        new_font = QtGui.QFont(base_family, preset["pt"])
+        new_font = QtGui.QFont(base_family, base_size)
+        
         app = QtWidgets.QApplication.instance()
         if app is not None:
             app.setFont(new_font)
         self.setFont(new_font)
+        
+        # スタイルシートの動的更新 (BigActionボタンなどを強調するため)
+        # QGroupBox のタイトルサイズなどをベース+1程度に調整
+        big_action_size = base_size + 2
+        group_title_size = base_size
+        
+        self.centralWidget().setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                font-size: {group_title_size}pt;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                margin-top: 12px;
+                padding-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px;
+            }}
+            QPushButton {{
+                padding: 5px 10px;
+            }}
+            QPushButton#BigAction {{
+                font-weight: bold;
+                font-size: {big_action_size}pt;
+                padding: 8px 16px;
+                background-color: #0078d4;
+                color: white;
+                border-radius: 4px;
+            }}
+            QPushButton#BigAction:hover {{
+                background-color: #2b88d8;
+            }}
+        """)
+        
         self._update_font_button_label(preset["label"])
 
     def _update_font_button_label(self, label: str):
