@@ -1010,13 +1010,14 @@ class MovieLLMWorker(QtCore.QObject):
     finished = QtCore.Signal(str)
     failed = QtCore.Signal(str)
 
-    def __init__(self, text: str, model: str, mode: str, details: List[str], video_style: str = ""):
+    def __init__(self, text: str, model: str, mode: str, details: List[str], video_style: str = "", length_limit: int = 0):
         super().__init__()
         self.text = text
         self.model = model
         self.mode = mode
         self.details = details or []
         self.video_style = video_style
+        self.length_limit = length_limit
 
     @QtCore.Slot()
     def run(self):
@@ -1059,11 +1060,16 @@ class MovieLLMWorker(QtCore.QObject):
                 "to strictly match the parameters defined in the Target Video Style above."
             )
 
+        limit_instruction = ""
+        if self.length_limit > 0:
+            limit_instruction = f"\nIMPORTANT: Strictly limit the output summary to under {self.length_limit} characters."
+
         if self.mode == "world":
             system_prompt = _append_temperature_hint(
                 "You refine disjoint visual fragments into one coherent world description for a single 10-second cinematic clip. "
                 "Focus on the most impactful visual elements and atmosphere to fit the short duration. "
-                "Do not narrate events in sequence; describe one continuous world in natural English.",
+                "Do not narrate events in sequence; describe one continuous world in natural English."
+                f"{limit_instruction}",
                 self.model,
                 LLM_TEMPERATURE,
             )
@@ -1073,14 +1079,15 @@ class MovieLLMWorker(QtCore.QObject):
                 f"{style_instruction}\n"
                 f"Source summary: {self.text}\n"
                 f"Fragments:\n{detail_lines}\n"
-                "Output one concise paragraph that links every fragment into one world."
+                f"Output one concise paragraph that links every fragment into one world.{limit_instruction}"
             )
             return system_prompt, user_prompt
 
         system_prompt = _append_temperature_hint(
             "You craft a single continuous storyboard beat for a 10-second shot. "
             "Ensure actions and camera moves are simple enough to complete within 10 seconds, even if the pace is slightly fast. "
-            "Blend all elements into a flowing moment without hard scene cuts.",
+            "Blend all elements into a flowing moment without hard scene cuts."
+            f"{limit_instruction}",
             self.model,
             LLM_TEMPERATURE,
         )
@@ -1090,7 +1097,7 @@ class MovieLLMWorker(QtCore.QObject):
             f"{style_instruction}\n"
             f"Source summary: {self.text}\n"
             f"Fragments:\n{detail_lines}\n"
-            "Describe a vivid, fast-paced but coherent sequence in one paragraph, focusing on visual continuity."
+            f"Describe a vivid, fast-paced but coherent sequence in one paragraph, focusing on visual continuity.{limit_instruction}"
         )
         return system_prompt, user_prompt
 
@@ -1426,6 +1433,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.check_use_video_style.setToolTip("ONにすると、末尾の video_style 定義(カメラ・照明・雰囲気など)をLLMへ伝え、それに沿った描写になるよう補正します。")
         # デフォルトはOFFにしておく（ユーザーが意図的に選べるように）
         llm_row.addWidget(self.check_use_video_style)
+
+        llm_row.addWidget(QtWidgets.QLabel("上限:"))
+        self.combo_movie_length_limit = QtWidgets.QComboBox()
+        self.combo_movie_length_limit.addItems(["(制限なし)", "250", "500", "750", "1000", "1250"])
+        self.combo_movie_length_limit.setToolTip("出力される summary の文字数上限を指定します。\nLLMへの指示として扱われるため、厳密な保証ではありません。")
+        llm_row.addWidget(self.combo_movie_length_limit)
 
         world_btn = QtWidgets.QPushButton("世界観整形")
         world_btn.clicked.connect(self.handle_movie_worldbuilding)
@@ -2265,7 +2278,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         details = self._extract_sentence_details(main_text)
         
         video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
-        self._start_movie_llm_transformation("world", main_text, details, movie_tail, options_tail, video_style_arg)
+        length_limit = self._get_selected_movie_length_limit()
+        self._start_movie_llm_transformation("world", main_text, details, movie_tail, options_tail, video_style_arg, length_limit)
 
     def handle_movie_storyboard(self):
         prepared = self._prepare_movie_prompt_parts()
@@ -2275,7 +2289,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         details = self._extract_sentence_details(main_text)
         
         video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
-        self._start_movie_llm_transformation("storyboard", main_text, details, movie_tail, options_tail, video_style_arg)
+        length_limit = self._get_selected_movie_length_limit()
+        self._start_movie_llm_transformation("storyboard", main_text, details, movie_tail, options_tail, video_style_arg, length_limit)
+
+    def _get_selected_movie_length_limit(self) -> int:
+        text = self.combo_movie_length_limit.currentText()
+        if text.isdigit():
+            return int(text)
+        return 0
 
     def handle_length_adjust_and_copy(self):
         src = self.text_output.toPlainText().strip()
@@ -2314,7 +2335,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._start_background_worker(worker, self._handle_llm_success, self._handle_llm_failure)
 
     def _start_movie_llm_transformation(
-        self, mode: str, main_text: str, details: List[str], movie_tail: str, options_tail: str, video_style_context: str = ""
+        self, mode: str, main_text: str, details: List[str], movie_tail: str, options_tail: str, video_style_context: str = "", length_limit: int = 0
     ):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
@@ -2324,7 +2345,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             model=self.combo_llm_model.currentText(),
             mode=mode,
             details=details,
-            video_style=video_style_context
+            video_style=video_style_context,
+            length_limit=length_limit
         )
         context = {
             "mode": mode,
