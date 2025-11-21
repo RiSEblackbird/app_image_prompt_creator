@@ -1590,6 +1590,24 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         tail_row.addWidget(self.check_tail_free)
         tail_row.addWidget(self.combo_tail_free, 1)
         tail_form.addRow(tail_row)
+
+        # Tail JSON Flags (末尾2)
+        tail2_group = QtWidgets.QGroupBox("末尾2 (JSONフラグ)")
+        tail2_layout = QtWidgets.QHBoxLayout(tail2_group)
+        self.check_tail_flag_narration = QtWidgets.QCheckBox("ナレーション")
+        self.check_tail_flag_character = QtWidgets.QCheckBox("人物")
+        self.check_tail_flag_character.setToolTip("映像内に人物（人間）が映っているかどうかを指定します。")
+        self.check_tail_flag_bgm = QtWidgets.QCheckBox("BGM")
+        self.check_tail_flag_dialogue = QtWidgets.QCheckBox("人物のセリフ")
+        for chk in (
+            self.check_tail_flag_narration,
+            self.check_tail_flag_character,
+            self.check_tail_flag_bgm,
+            self.check_tail_flag_dialogue,
+        ):
+            chk.stateChanged.connect(self.auto_update)
+            tail2_layout.addWidget(chk)
+        tail_form.addRow(tail2_group)
         style_layout.addLayout(tail_form)
 
         # MJ Options Grid
@@ -2420,6 +2438,32 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             return " " + prompt
         return ""
 
+    def _make_tail_flags_json(self) -> str:
+        """末尾2(JSONフラグ)の現在値からJSON文字列を生成する。
+
+        4つのチェックがすべてOFFの場合は何も付与しない。
+        出力例:
+        {"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false}}
+
+        narration / bgm / dialogue は音声要素、
+        person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ。
+        """
+
+        flags = {
+            "narration": bool(self.check_tail_flag_narration.isChecked()),
+            # 「人物」は「映像内に人物が映っているかどうか」の真偽値を表す
+            "person_present": bool(self.check_tail_flag_character.isChecked()),
+            "bgm": bool(self.check_tail_flag_bgm.isChecked()),
+            "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
+        }
+        if not any(flags.values()):
+            return ""
+        try:
+            json_text = json.dumps({"content_flags": flags}, ensure_ascii=False)
+        except Exception:
+            return ""
+        return " " + json_text
+
     def _resolve_tail_free_prompt(self) -> str:
         """末尾プリセットの現在値を「出力用プロンプト文字列」として解決する。
 
@@ -2648,12 +2692,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     def update_option(self):
         self.option_prompt = self._make_option_prompt()
         self.tail_free_texts = self._make_tail_text()
-        result = f"{self.main_prompt}{self.tail_free_texts}{self.option_prompt}"
+        tail_flags = self._make_tail_flags_json()
+        result = f"{self.main_prompt}{self.tail_free_texts}{tail_flags}{self.option_prompt}"
         self.text_output.setPlainText(result)
 
     def update_tail_free_texts(self):
         self.tail_free_texts = self._make_tail_text()
-        result = f"{self.main_prompt}{self.tail_free_texts}{self.option_prompt}"
+        tail_flags = self._make_tail_flags_json()
+        result = f"{self.main_prompt}{self.tail_free_texts}{tail_flags}{self.option_prompt}"
         self.text_output.setPlainText(result)
 
     def generate_and_copy(self):
@@ -2861,7 +2907,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not src:
             QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
             return None
-        core_without_movie, movie_tail = self._detach_movie_tail_for_llm(src)
+        # 末尾2(JSONフラグ)はLLM用のメインテキストからは除外する
+        core_without_flags, _ = self._detach_content_flags_tail(src)
+        core_without_movie, movie_tail = self._detach_movie_tail_for_llm(core_without_flags)
         main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
         if not main_text:
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
@@ -2892,6 +2940,45 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if options_tail:
             parts.append(options_tail.strip())
         return " ".join(p for p in parts if p)
+
+    def _detach_content_flags_tail(self, text: str) -> Tuple[str, str]:
+        """
+        テキスト末尾付近から content_flags を含む JSON ブロック({...})を抽出する。
+        例: {"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false}}
+        """
+        text = (text or "").strip()
+        search_end = len(text) - 1
+
+        while search_end >= 0:
+            end_idx = text.rfind("}", 0, search_end + 1)
+            if end_idx == -1:
+                break
+
+            depth = 0
+            start_idx = -1
+            for i in range(end_idx, -1, -1):
+                char = text[i]
+                if char == "}":
+                    depth += 1
+                elif char == "{":
+                    depth -= 1
+                    if depth == 0:
+                        start_idx = i
+                        break
+
+            if start_idx != -1:
+                candidate = text[start_idx : end_idx + 1]
+                if '"content_flags"' in candidate or "'content_flags'" in candidate:
+                    flags_tail = candidate
+                    remaining = (text[:start_idx] + " " + text[end_idx + 1 :]).strip()
+                    remaining = " ".join(remaining.split())
+                    return remaining, flags_tail
+                else:
+                    search_end = start_idx - 1
+            else:
+                search_end = end_idx - 1
+
+        return text, ""
 
     def _detach_movie_tail_for_llm(self, text: str) -> Tuple[str, str]:
         """
@@ -3004,7 +3091,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not normalized:
             return
         main_text, options_tail, _ = self._split_prompt_and_options(normalized)
-        core, movie_tail = self._detach_movie_tail_for_llm(main_text)
+        # 末尾2(JSONフラグ)は内部状態の main_prompt からは外す
+        core_without_flags, _ = self._detach_content_flags_tail(main_text)
+        core, movie_tail = self._detach_movie_tail_for_llm(core_without_flags)
         self.main_prompt = core
         self.tail_free_texts = f" {movie_tail}" if movie_tail else ""
         self.option_prompt = options_tail
