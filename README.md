@@ -1,6 +1,6 @@
 # 画像プロンプトランダム生成ツール
 
-<img width="1246" height="1102" alt="image" src="https://github.com/user-attachments/assets/4c5c9c6d-c324-4343-827c-9a678fe4ddaf" />
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/94caeef6-a26a-43a9-9966-38aa62ac623e" />
 
 ## 概要
 Midjourney 向けの画像生成プロンプトを、SQLite の属性データからランダム合成して生成するデスクトップツールです。GUI で「どの属性をどれくらい使うか」を指定し、抽出・整形した文を自動で結合します。さらに、LLM を用いた英語出力の「アレンジ（味変）」と「文字数調整」も搭載し、作例づくりから量産までを効率化します。
