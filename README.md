@@ -133,6 +133,20 @@ setx OPENAI_API_KEY "sk-xxxxx"
         prompt: "{\"video_style\":{...}}"   # Sora 等向けの video_style JSON
   ```
 - **description_ja は UI 表示専用であり、プロンプトには一切含まれません。** 末尾に付与されるのは `prompt` フィールドの英語/JSONテキストのみです。
+- `tails.movie` の `prompt.description` では、「〜風 / 〜style / like ...」といった比喩的な言い回しではなく、「〇〇という映画/トレーラー/ドキュメンタリーである」と**断定する英語表現**を使うことを推奨します。
+- 強い誘導が必要な場合は、ジャンル指定に加えて品質や完成度を明示するフレーズを末尾に加えてください（例: `..., delivering intensely polished visual storytelling`）。
+- 正例（断定 + 強い品質指定）:
+  ```yaml
+  - id: "movie_scifi_trailer"
+    description_ja: "モダンなSF映画トレーラー風（ドルビー音響感）"
+    prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"modern sci-fi movie trailer with cinematic lighting and bold pacing, delivering intensely polished visual storytelling\",\"grade\":\"Dolby Digital atmosphere\"}}"
+  ```
+- 負例（「〜風」「style」「like ...」で弱い誘導になっているケース）:
+  ```yaml
+  - id: "movie_scifi_trailer"
+    description_ja: "モダンなSF映画トレーラー風（ドルビー音響感）"
+    prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"modern sci-fi movie trailer style with cinematic lighting, like a blockbuster teaser\",\"grade\":\"Dolby Digital atmosphere\"}}"
+  ```
 - `tails.image` / `tails.movie` の配列要素を追加・削除することで、`image` / `movie` それぞれのプリセットをカスタマイズできます。
 - アプリ起動中に `tail_presets.yaml` を保存し直すと、数百ミリ秒以内に QFileSystemWatcher によって自動検知され、`末尾プリセット用途` と「末尾1」プルダウンに最新の内容が反映されます（再起動不要）。
 
