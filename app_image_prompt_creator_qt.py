@@ -2397,12 +2397,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not result:
             QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
             return
-            
-        # オプション継承処理
-        clean = self._inherit_options_if_present(self.text_output.toPlainText(), result)
-        
-        # 結果をテキストエリアに反映するか、あるいはダイアログで比較するか？
-        # Tk版は比較ダイアログを出していたが、Qt版の既存フローに合わせてメインエリア更新＆コピーとする。
+        # オプション継承処理 + 末尾2(content_flags)の再付与
+        merged = self._inherit_options_if_present(self.text_output.toPlainText(), result)
+        base_without_flags, _ = self._detach_content_flags_tail(merged)
+        flags_tail = self._make_tail_flags_json()
+        clean = (base_without_flags or "").rstrip() + flags_tail
+
         self.text_output.setPlainText(clean)
         QtGui.QGuiApplication.clipboard().setText(clean)
         QtWidgets.QMessageBox.information(self, "コピー完了", "アレンジ済みプロンプトをコピーしました。")
@@ -2727,7 +2727,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 scope="single_continuous_world",
                 key="world_description",
             )
-            result = self._compose_movie_prompt(world_json, movie_tail, options_tail)
+            flags_tail = self._make_tail_flags_json()
+            result = self._compose_movie_prompt(world_json, movie_tail, flags_tail, options_tail)
             self.text_output.setPlainText(result)
             self._update_internal_prompt_from_text(result)
             QtGui.QGuiApplication.clipboard().setText(result)
@@ -2833,7 +2834,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not result:
             QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
             return
-        clean = self._inherit_options_if_present(self.text_output.toPlainText(), result)
+        merged = self._inherit_options_if_present(self.text_output.toPlainText(), result)
+        base_without_flags, _ = self._detach_content_flags_tail(merged)
+        flags_tail = self._make_tail_flags_json()
+        clean = (base_without_flags or "").rstrip() + flags_tail
         self.text_output.setPlainText(clean)
         QtGui.QGuiApplication.clipboard().setText(clean)
         QtWidgets.QMessageBox.information(self, "コピー完了", "LLMで調整したプロンプトをコピーしました。")
@@ -2855,7 +2859,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         json_key = "world_description" if mode == "world" else "storyboard"
         details = self._extract_sentence_details(result)
         world_json = self._build_movie_json_payload(result, details, scope=scope, key=json_key)
-        combined = self._compose_movie_prompt(world_json, movie_tail, options_tail)
+        flags_tail = self._make_tail_flags_json()
+        combined = self._compose_movie_prompt(world_json, movie_tail, flags_tail, options_tail)
         self.text_output.setPlainText(combined)
         self._update_internal_prompt_from_text(combined)
         QtGui.QGuiApplication.clipboard().setText(combined)
@@ -2932,11 +2937,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         }
         return json.dumps(payload, ensure_ascii=False)
 
-    def _compose_movie_prompt(self, core_json: str, movie_tail: str, options_tail: str) -> str:
-        """生成したJSONと末尾要素（動画スタイル・MJオプション）を安全に連結する。"""
+    def _compose_movie_prompt(self, core_json: str, movie_tail: str, flags_tail: str, options_tail: str) -> str:
+        """生成したJSONと末尾要素（動画スタイル・末尾2フラグ・MJオプション）を安全に連結する。"""
         parts = [core_json]
         if movie_tail:
             parts.append(movie_tail.strip())
+        if flags_tail:
+            parts.append(flags_tail.strip())
         if options_tail:
             parts.append(options_tail.strip())
         return " ".join(p for p in parts if p)
