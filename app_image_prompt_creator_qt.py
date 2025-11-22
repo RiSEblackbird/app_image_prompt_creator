@@ -1603,6 +1603,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.check_tail_flags_enabled.stateChanged.connect(self.auto_update)
         tail2_layout.addWidget(self.check_tail_flags_enabled)
 
+        # 音声・人物フラグ
         flags_row = QtWidgets.QHBoxLayout()
         self.check_tail_flag_narration = QtWidgets.QCheckBox("ナレーション")
         self.check_tail_flag_character = QtWidgets.QCheckBox("人物")
@@ -1617,8 +1618,19 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         ):
             chk.stateChanged.connect(self.auto_update)
             flags_row.addWidget(chk)
-
         tail2_layout.addLayout(flags_row)
+
+        # 構成カット数 (Auto / 1-6)
+        cuts_row = QtWidgets.QHBoxLayout()
+        cuts_row.addWidget(QtWidgets.QLabel("構成カット数:"))
+        self.combo_tail_cut_count = QtWidgets.QComboBox()
+        self.combo_tail_cut_count.addItems(["(Auto)", "1", "2", "3", "4", "5", "6"])
+        self.combo_tail_cut_count.setToolTip("動画全体を何カット程度で構成するかの目安です。(Auto) はモデル任せ。")
+        self.combo_tail_cut_count.currentTextChanged.connect(self.auto_update)
+        cuts_row.addWidget(self.combo_tail_cut_count)
+        cuts_row.addStretch(1)
+        tail2_layout.addLayout(cuts_row)
+
         tail_form.addRow(tail2_group)
         style_layout.addLayout(tail_form)
 
@@ -2454,10 +2466,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         """末尾2(JSONフラグ)の現在値からJSON文字列を生成する。
 
         出力例:
-        {"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false}}
+        {"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false,"planned_cuts":3}}
 
         narration / bgm / dialogue は音声要素、
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ。
+        planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6）を表します。
+        (Auto) 選択時や未指定時は planned_cuts フィールド自体を省略します。
         """
 
         # マスターチェックがOFFなら、フラグの値に関わらず JSON は付与しない
@@ -2471,6 +2485,17 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             "bgm": bool(self.check_tail_flag_bgm.isChecked()),
             "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
         }
+        # 構成カット数 (1〜6) を planned_cuts として追加 (Auto の場合は省略)
+        cut_combo = getattr(self, "combo_tail_cut_count", None)
+        if isinstance(cut_combo, QtWidgets.QComboBox):
+            text = (cut_combo.currentText() or "").strip()
+            if text and text != "(Auto)" and text.isdigit():
+                try:
+                    cuts = int(text)
+                    if 1 <= cuts <= 6:
+                        flags["planned_cuts"] = cuts
+                except ValueError:
+                    pass
         try:
             json_text = json.dumps({"content_flags": flags}, ensure_ascii=False)
         except Exception:
