@@ -91,8 +91,8 @@ tails:
       description_ja: "出演者を追いながら実在の街や名所を歩く、ロケ主体の旅番組スタイル"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"travelogue program following hosts walking through real locations with handheld and on-location shots, delivering intensely polished visual storytelling\",\"genre\":\"tv_travelogue\"}}"
     - id: tv_cooking_show
-      description_ja: "食材と手元のアップを多用し、手順を丁寧に見せる料理番組スタイル"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cooking program that focuses on close-up shots of ingredients and careful step-by-step preparation, delivering intensely polished visual storytelling\",\"genre\":\"tv_cooking_show\"}}"
+      description_ja: "手元や道具、対象の変化をクローズアップで丁寧に追う解説型の番組スタイル"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"instructional program that focuses on close-up shots of hands, tools, and changing subjects with careful step-by-step coverage, delivering intensely polished visual storytelling\",\"genre\":\"tv_cooking_show\"}}"
     - id: tv_documentary_series
       description_ja: "実在の人物と場所を静かに観察する、シリーズ型TVドキュメンタリー番組"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"episodic television documentary program that calmly observes real people and places, delivering intensely polished visual storytelling\",\"genre\":\"tv_documentary_series\"}}"
@@ -141,28 +141,28 @@ tails:
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"large-scale disaster blockbuster that stages massive destruction sequences and ensemble character arcs, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\"}}"
     # ---- 静止画入力（Sora2 など）からの映像展開向けプリセット ----
     - id: movie_from_still_snowfield
-      description_ja: "広い雪原を舞台に、ゆっくりしたトラッキングとオービットで風景を広げる連続ショット"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic sequence set in a wide snowy field that uses slow tracking and orbit shots to expand the landscape while preserving strong composition, delivering intensely polished visual storytelling\",\"genre\":\"landscape\"}}"
+      description_ja: "シーン全体をゆっくりしたトラッキングとオービットで広げる、構図重視の連続ショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic sequence that uses slow tracking and orbit shots to expand the scene around the main subject and its environment while preserving strong composition, delivering intensely polished visual storytelling\",\"genre\":\"landscape\"}}"
     - id: movie_from_still_museum_exhibit
-      description_ja: "一点の展示物に寄りつつ、周囲の作品や照明・来場者を徐々に見せていく美術館ウォークスルー"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"museum walkthrough film that focuses on a single exhibit and then slowly reveals surrounding artworks, lighting, and visitors, delivering intensely polished visual storytelling\",\"genre\":\"museum_documentary\"}}"
+      description_ja: "一つの注目要素から始まり、周囲の要素や光の配置、人の動きを徐々に見せていくウォークスルー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"walkthrough film that starts with a detailed view of a focal element and then slowly reveals surrounding elements, lighting, and people in the space, delivering intensely polished visual storytelling\",\"genre\":\"museum_documentary\"}}"
     - id: movie_from_still_city_night
-      description_ja: "静かな街角から始まり、反射や車の流れ、遠景の灯りへと広がるシティナイトシークエンス"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"urban night film that begins at a quiet city street corner and expands into moving reflections, passing traffic, and distant lights, delivering intensely polished visual storytelling\",\"genre\":\"urban_night\"}}"
+      description_ja: "静かなポイントから始まり、反射や遠くの動き、層状の光の広がりへとつなぐナイトシークエンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"night-time film that begins from a quiet corner of the scene and expands into moving reflections, distant motion, and layered lights, delivering intensely polished visual storytelling\",\"genre\":\"urban_night\"}}"
     - id: movie_from_still_gallery_wall
-      description_ja: "額装された作品が並ぶギャラリー壁面を、横方向のスムーズなカメラ移動でなぞるシーケンス"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"gallery wall film with a smooth lateral camera move across framed works and the entire exhibition space, delivering intensely polished visual storytelling\",\"genre\":\"art_gallery\"}}"
+      description_ja: "並んだ要素の列と空間全体を、横方向のスムーズなカメラ移動でなぞるシーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"film with a smooth lateral camera move across a series of aligned elements and the surrounding space, delivering intensely polished visual storytelling\",\"genre\":\"art_gallery\"}}"
     - id: movie_from_still_object_table
-      description_ja: "テーブル上の一つのオブジェクトを、マクロ寄りで質感と立体感を探るカメラワーク"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"macro-focused film around an object on a table that explores depth, texture, and small controlled camera movements, delivering intensely polished visual storytelling\",\"genre\":\"macro_object\"}}"
+      description_ja: "小さな主題の周囲をマクロ寄りでなぞり、質感と立体感を探るカメラワーク"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"macro-focused film around a small main subject that explores depth, texture, and small controlled camera movements, delivering intensely polished visual storytelling\",\"genre\":\"macro_object\"}}"
     - id: movie_from_still_interior
-      description_ja: "一室の内部を、パララックスやドア越しの見せ方と光の変化で探索する室内シーン"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"interior exploration film with gentle parallax moves, doorway reveals, and shifting light inside a detailed room, delivering intensely polished visual storytelling\",\"genre\":\"interior\"}}"
+      description_ja: "囲まれた空間を、パララックスや開口部越しの見せ方と光の変化で探索するシーン"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"interior-style exploration film with gentle parallax moves, reveals through openings, and shifting light across an enclosed space, delivering intensely polished visual storytelling\",\"genre\":\"interior\"}}"
     - id: movie_from_still_aerial_view
-      description_ja: "真上からの俯瞰構図を保ちつつ、風景の上をゆっくりと漂う上空移動ショット"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"aerial film that maintains an overhead view and slowly transitions into continuous drifting flight over the landscape, delivering intensely polished visual storytelling\",\"genre\":\"aerial_landscape\"}}"
+      description_ja: "真上に近い俯瞰構図を保ちつつ、シーンの上をゆっくり漂う上空移動ショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"aerial film that maintains an overhead view and slowly transitions into continuous drifting flight over the scene, delivering intensely polished visual storytelling\",\"genre\":\"aerial_landscape\"}}"
     - id: movie_from_still_art_installation
-      description_ja: "一つのインスタレーション作品から始め、慎重なカメラ経路で会場全体の空間構成を見せるシーケンス"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"art installation film that first observes a single piece and then gradually reveals the full exhibition space with careful camera paths, delivering intensely polished visual storytelling\",\"genre\":\"installation_art\"}}"
+      description_ja: "中央の見せ場から始め、慎重なカメラ経路で周囲の空間構成全体を見せるシーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"art installation-style film that first observes a central focal area and then gradually reveals the surrounding spatial layout with careful camera paths, delivering intensely polished visual storytelling\",\"genre\":\"installation_art\"}}"
 
 
