@@ -164,5 +164,36 @@ tails:
     - id: movie_from_still_art_installation
       description_ja: "中央の見せ場から始め、慎重なカメラ経路で周囲の空間構成全体を見せるシーケンス"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"art installation-style film that first observes a central focal area and then gradually reveals the surrounding spatial layout with careful camera paths, delivering intensely polished visual storytelling\",\"genre\":\"installation_art\"}}"
+    # ---- 象徴的なポイントから世界全体へ広がるシーン集（汎用）----
+    - id: movie_entrance_facility_walkthrough
+      description_ja: "シーン内の注目エリアから始まり、異なるゾーンを順に巡るウォークスルー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"environment walkthrough film that starts at a focal region and then moves through multiple distinct zones with controlled camera moves, delivering intensely polished visual storytelling\",\"structure\":\"multi-zone walkthrough\"}}"
+    - id: movie_entrance_world_tour
+      description_ja: "象徴的なフォーカルポイントを軸に、この世界の多様なロケーションを横断するシーン集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"world-spanning tour film that treats a distinctive focal structure or motif as a symbol and cuts between diverse locations across the same world, delivering intensely polished visual storytelling\",\"structure\":\"motif-linked world montage\"}}"
+    - id: movie_entrance_time_layers
+      description_ja: "同じエリアを、時間帯や雰囲気の変化ごとに積層して見せるタイムレイヤー構成"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"time-layered sequence that revisits the same region under changing light, mood, and conditions, stacking variations into a cohesive progression, delivering intensely polished visual storytelling\",\"edit\":\"time-layered variations\"}}"
+    - id: movie_entrance_flow_observer
+      description_ja: "特定のポイント付近を固定視点気味に据え、通過する流れや動きを静かに観察するドキュメンタリー調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"observational film that anchors the frame near a stable region and calmly records changing flows of people, vehicles, or other moving elements, delivering intensely polished visual storytelling\",\"camera\":\"anchored observer\"}}"
+    - id: movie_entrance_symbolic_montage
+      description_ja: "フォーカルカットと象徴的なディテールカットを交互に積み重ね、世界観を暗示するモンタージュ"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"symbolic montage that alternates focal shots with close-up details from across the world to imply a larger narrative, delivering intensely polished visual storytelling\",\"edit\":\"focal-symbol cut pattern\"}}"
+    - id: movie_entrance_vertical_journey
+      description_ja: "シーン内のある地点を起点に、上下方向へカメラを移動させてレイヤー構造を見せる立体的ジャーニー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"vertical journey film that begins at a chosen region and then travels upward and downward through connected spaces, revealing stacked layers of the environment, delivering intensely polished visual storytelling\",\"camera\":\"vertical traversal\"}}"
+    - id: movie_entrance_reflection_series
+      description_ja: "シーンやその周辺を、反射面やスクリーン越しに多様なアングルで見せるリフレクションシーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"reflection-driven sequence that repeatedly frames the scene and its surroundings through reflective surfaces and screens from varied angles, delivering intensely polished visual storytelling\",\"look\":\"layered reflections\"}}"
+    - id: movie_entrance_environment_echo
+      description_ja: "特定の形や光のモチーフを、世界各地の別の場所にも反復させて見せるエコー構成"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"environmental echo film that repeats shapes and lighting motifs associated with a distinctive focal area across many different locations, delivering intensely polished visual storytelling\",\"structure\":\"motif echo across locations\"}}"
+    - id: movie_entrance_routes_overview
+      description_ja: "基準となるポイントから伸びる複数のルートや動線を、俯瞰気味のショットで俯瞰・切り替えるオーバービュー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"overview film that maps multiple routes and paths branching from a central hub using semi-aerial and high-angle shots, delivering intensely polished visual storytelling\",\"camera\":\"route overview\"}}"
+    - id: movie_entrance_memory_fragments
+      description_ja: "ある起点の先に広がるであろう場所を、断片的な記憶カットとして連ねるフラグメント集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"memory fragment film that assembles brief, vivid cuts of spaces that conceptually lie beyond an initial focal region, delivering intensely polished visual storytelling\",\"structure\":\"fragmented vignette series\"}}"
 
 
