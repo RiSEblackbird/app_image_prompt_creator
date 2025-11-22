@@ -1609,11 +1609,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.check_tail_flag_character = QtWidgets.QCheckBox("人物")
         self.check_tail_flag_character.setToolTip("映像内に人物（人間）が映っているかどうかを指定します。")
         self.check_tail_flag_bgm = QtWidgets.QCheckBox("BGM")
+        self.check_tail_flag_ambient = QtWidgets.QCheckBox("環境音")
+        self.check_tail_flag_ambient.setToolTip("風・水・街並み・機械音など、環境そのものから発生する音があるかどうかを指定します。")
         self.check_tail_flag_dialogue = QtWidgets.QCheckBox("人物のセリフ")
         for chk in (
             self.check_tail_flag_narration,
             self.check_tail_flag_character,
             self.check_tail_flag_bgm,
+            self.check_tail_flag_ambient,
             self.check_tail_flag_dialogue,
         ):
             chk.stateChanged.connect(self.auto_update)
@@ -2466,10 +2469,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         """末尾2(JSONフラグ)の現在値からJSON文字列を生成する。
 
         出力例:
-        {"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false,"planned_cuts":3}}
+        {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"planned_cuts":3}}
 
-        narration / bgm / dialogue は音声要素、
+        narration / bgm / dialogue / ambient_sound は音声要素、
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ。
+        ambient_sound は風・水・街並み・機械音など「環境そのものから発生する音」が存在するかどうかを表します。
         planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6）を表します。
         (Auto) 選択時や未指定時は planned_cuts フィールド自体を省略します。
         """
@@ -2483,6 +2487,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             # 「人物」は「映像内に人物が映っているかどうか」の真偽値を表す
             "person_present": bool(self.check_tail_flag_character.isChecked()),
             "bgm": bool(self.check_tail_flag_bgm.isChecked()),
+            "ambient_sound": bool(self.check_tail_flag_ambient.isChecked()),
             "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
         }
         # 構成カット数 (1〜6) を planned_cuts として追加 (Auto の場合は省略)

@@ -153,13 +153,14 @@ setx OPENAI_API_KEY "sk-xxxxx"
 #### 末尾2(JSONフラグ)と content_flags
 - 左ペイン「スタイル・オプション」タブの `末尾2 (JSONフラグ)` グループでは、以下2段構成で映像メタ情報を JSON として末尾に付与できます。
   - `末尾2を反映` チェック: 末尾2の JSON を出力に含めるかどうかのマスタースイッチ。
-  - 個別フラグ: `ナレーション` / `人物` / `BGM` / `人物のセリフ`
+  - 個別フラグ: `ナレーション` / `人物` / `BGM` / `環境音` / `人物のセリフ`
   - 構成カット数: `(Auto)` / `1` / `2` / `3` / `4` / `5` / `6`
 - 出力される JSON 例:
   ```json
-  {"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false,"planned_cuts":3}}
+  {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"planned_cuts":3}}
   ```
-- `narration` / `bgm` / `dialogue` は音声要素、`person_present` は映像内に人物が映っているかどうかの真偽値を表します。
+- `narration` / `bgm` / `dialogue` / `ambient_sound` は音声要素、`person_present` は映像内に人物が映っているかどうかの真偽値を表します。
+- `ambient_sound` は風・水・街並み・機械音など「環境そのものから発生する音」が存在するかどうかを表します。
 - `planned_cuts` は「作品全体をおおよそ何カットで構成するか」の目安を表し、`1-6` のいずれかを指定します。`(Auto)` 選択時は `planned_cuts` フィールド自体が省略され、モデルに任せる前提になります。
 - 仕様:
   - `末尾2を反映` が **OFF** の場合: フラグ状態に関わらず `content_flags` JSON は一切付与されません。
