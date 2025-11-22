@@ -1593,7 +1593,17 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
         # Tail JSON Flags (末尾2)
         tail2_group = QtWidgets.QGroupBox("末尾2 (JSONフラグ)")
-        tail2_layout = QtWidgets.QHBoxLayout(tail2_group)
+        tail2_layout = QtWidgets.QVBoxLayout(tail2_group)
+
+        # 末尾2を出力に反映するかどうかのマスターチェック
+        self.check_tail_flags_enabled = QtWidgets.QCheckBox("末尾2を反映")
+        self.check_tail_flags_enabled.setToolTip(
+            "ONにすると content_flags JSON を末尾に付与します。すべてのフラグが OFF でも JSON 自体が付きます。"
+        )
+        self.check_tail_flags_enabled.stateChanged.connect(self.auto_update)
+        tail2_layout.addWidget(self.check_tail_flags_enabled)
+
+        flags_row = QtWidgets.QHBoxLayout()
         self.check_tail_flag_narration = QtWidgets.QCheckBox("ナレーション")
         self.check_tail_flag_character = QtWidgets.QCheckBox("人物")
         self.check_tail_flag_character.setToolTip("映像内に人物（人間）が映っているかどうかを指定します。")
@@ -1606,7 +1616,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             self.check_tail_flag_dialogue,
         ):
             chk.stateChanged.connect(self.auto_update)
-            tail2_layout.addWidget(chk)
+            flags_row.addWidget(chk)
+
+        tail2_layout.addLayout(flags_row)
         tail_form.addRow(tail2_group)
         style_layout.addLayout(tail_form)
 
@@ -2441,13 +2453,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     def _make_tail_flags_json(self) -> str:
         """末尾2(JSONフラグ)の現在値からJSON文字列を生成する。
 
-        4つのチェックがすべてOFFの場合は何も付与しない。
         出力例:
         {"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false}}
 
         narration / bgm / dialogue は音声要素、
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ。
         """
+
+        # マスターチェックがOFFなら、フラグの値に関わらず JSON は付与しない
+        if not getattr(self, "check_tail_flags_enabled", None) or not self.check_tail_flags_enabled.isChecked():
+            return ""
 
         flags = {
             "narration": bool(self.check_tail_flag_narration.isChecked()),
@@ -2456,8 +2471,6 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             "bgm": bool(self.check_tail_flag_bgm.isChecked()),
             "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
         }
-        if not any(flags.values()):
-            return ""
         try:
             json_text = json.dumps({"content_flags": flags}, ensure_ascii=False)
         except Exception:

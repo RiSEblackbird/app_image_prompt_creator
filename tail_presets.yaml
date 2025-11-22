@@ -77,5 +77,67 @@ tails:
     - id: movie_dynamic_samurai
       description_ja: "ダイナミックな天候と幾何学的構図の時代劇風"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic movement of weather and elements with strong geometric composition, delivering intensely polished visual storytelling\",\"style\":\"epic historical atmosphere\"}}"
+    # ---- TV番組系プリセット（番組: 10パターン）----
+    - id: tv_news_studio
+      description_ja: "ニュース番組スタジオの本番収録"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"live news studio program with clear lighting, anchor desk framing, and crisp on-air graphics, delivering intensely polished visual storytelling\",\"genre\":\"tv_news_program\"}}"
+    - id: tv_morning_show
+      description_ja: "朝の情報番組スタジオの明るい雰囲気"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"morning information program filmed in a bright studio with lively hosts and gentle camera movement, delivering intensely polished visual storytelling\",\"genre\":\"tv_morning_show\"}}"
+    - id: tv_talk_variety
+      description_ja: "トーク中心のバラエティ番組収録"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"studio talk variety program with seated guests, multi-camera switching, and clearly framed reactions, delivering intensely polished visual storytelling\",\"genre\":\"tv_talk_variety\"}}"
+    - id: tv_travelogue
+      description_ja: "街歩き・旅番組スタイルのロケ映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"travelogue program following hosts walking through real locations with handheld and on-location shots, delivering intensely polished visual storytelling\",\"genre\":\"tv_travelogue\"}}"
+    - id: tv_cooking_show
+      description_ja: "料理手元アップ中心の料理番組"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cooking program that focuses on close-up shots of ingredients and careful step-by-step preparation, delivering intensely polished visual storytelling\",\"genre\":\"tv_cooking_show\"}}"
+    - id: tv_documentary_series
+      description_ja: "シリーズ型TVドキュメンタリー番組"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"episodic television documentary program that calmly observes real people and places, delivering intensely polished visual storytelling\",\"genre\":\"tv_documentary_series\"}}"
+    - id: tv_sports_broadcast
+      description_ja: "実況・解説付きのスポーツ中継番組"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sports broadcast program with dynamic camera coverage of the field and clearly framed scoreboard graphics, delivering intensely polished visual storytelling\",\"genre\":\"tv_sports_broadcast\"}}"
+    - id: tv_music_live
+      description_ja: "ステージ照明が映える音楽番組ライブ"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"music performance program captured on a live stage with concert lighting and rhythmic editing, delivering intensely polished visual storytelling\",\"genre\":\"tv_music_live\"}}"
+    - id: tv_reality_show
+      description_ja: "日常を追うリアリティ番組"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"reality television program that closely follows everyday life and unscripted reactions, delivering intensely polished visual storytelling\",\"genre\":\"tv_reality_show\"}}"
+    - id: tv_educational_kids
+      description_ja: "子ども向け教育番組（スタジオ＆アニメーション）"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"children's educational television program combining studio segments and simple animations, delivering intensely polished visual storytelling\",\"genre\":\"tv_educational_program\"}}"
+    # ---- 映画系プリセット（映画: 10パターン）----
+    - id: movie_historical_epic
+      description_ja: "大規模な戦闘と密度の高い人間ドラマの歴史超大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping historical war epic that combines large-scale battle scenes with intimate character drama, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\"}}"
+    - id: movie_urban_romance
+      description_ja: "現代都市を舞台にしたロマンティックな恋愛映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"romantic drama film set in a contemporary city at night with glowing streetlights and close character framing, delivering intensely polished visual storytelling\",\"genre\":\"romantic_drama\"}}"
+    - id: movie_coming_of_age
+      description_ja: "若者の成長と葛藤を描く青春映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"coming-of-age feature film that follows a young protagonist through quiet everyday moments and decisive turning points, delivering intensely polished visual storytelling\",\"genre\":\"coming_of_age\"}}"
+    - id: movie_noir_crime
+      description_ja: "影の強いライティングのノワール犯罪映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"noir crime film filled with hard shadows, reflective wet streets, and tense close-ups, delivering intensely polished visual storytelling\",\"genre\":\"noir_crime\"}}"
+    - id: movie_road_journey
+      description_ja: "長距離移動と風景描写が中心のロードムービー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"road movie that follows a long-distance journey through changing landscapes and quiet in-car conversations, delivering intensely polished visual storytelling\",\"genre\":\"road_movie\"}}"
+    - id: movie_fantasy_epic
+      description_ja: "魔法世界と壮大な戦いを描くファンタジー超大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"high fantasy epic film set in a fully realized magical world with expansive battlefields and mythical creatures, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\"}}"
+    - id: movie_family_animation
+      description_ja: "家族向けの温かい長編アニメーション映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"feature-length family animation film with expressive character designs and gentle, colorful lighting, delivering intensely polished visual storytelling\",\"genre\":\"family_animation\"}}"
+    - id: movie_nature_documentary
+      description_ja: "大自然を長期取材したシネマティックなネイチャードキュメンタリー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic feature documentary that observes wild nature and landscapes over a long period, delivering intensely polished visual storytelling\",\"genre\":\"nature_documentary\"}}"
+    - id: movie_courtroom_drama
+      description_ja: "法廷での緊張感ある攻防を描く法廷ドラマ映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"courtroom drama film centered on tense verbal exchanges, reflective surfaces, and controlled camera movement, delivering intensely polished visual storytelling\",\"genre\":\"courtroom_drama\"}}"
+    - id: movie_disaster_blockbuster
+      description_ja: "大規模な破壊描写と群像劇のディザスター映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"large-scale disaster blockbuster that stages massive destruction sequences and ensemble character arcs, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\"}}"
 
 
