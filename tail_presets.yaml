@@ -246,6 +246,21 @@ tails:
     - id: movie_from_still_object_table
       description_ja: "小さな主題の周囲をマクロ寄りでなぞり、質感と立体感を探るカメラワーク"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"macro-focused film around a small main subject that explores depth, texture, and small controlled camera movements, delivering intensely polished visual storytelling\",\"genre\":\"macro_object\"}}"
+    - id: movie_from_still_close_inspection
+      description_ja: "対象物のすぐそばを低速で周回し、細部と質感を観察する近距離ショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"slow close-range orbit that inspects the subject's surface, texture, and small details from multiple angles, delivering intensely polished visual storytelling\",\"genre\":\"macro_observation_close\"}}"
+    - id: movie_from_still_mid_orbit_background
+      description_ja: "背景を広く見せるために少し距離を取り、同心円状に対象物の周囲を巡る観察ショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"medium-distance circular orbit around the subject that continuously reveals the surrounding background and environment, delivering intensely polished visual storytelling\",\"genre\":\"observation_orbit_background\"}}"
+    - id: movie_from_still_multi_radius
+      description_ja: "近距離から中距離へと半径を変えながら、段階的に世界全体を見せていく観察シーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"multi-radius observation sequence that begins close to the subject and gradually steps back through wider circular paths to expose the larger world, delivering intensely polished visual storytelling\",\"structure\":\"expanding radial orbits\"}}"
+    - id: movie_from_still_full_circle_study
+      description_ja: "対象物の周囲をぐるりと一周し、360度の角度からじっくりと形状と関係性を捉えるショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"full 360-degree study that orbits completely around the subject, examining its silhouette and relationship to the environment from every side, delivering intensely polished visual storytelling\",\"camera\":\"full_circle_orbit\"}}"
+    - id: movie_from_still_vertical_orbit
+      description_ja: "対象物の周囲を上下に回り込みながら、見下ろしと見上げの両方から観察する立体的なカメラワーク"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"three-dimensional orbit that shifts between high and low vantage points around the subject, combining overhead and low-angle views to study its form, delivering intensely polished visual storytelling\",\"camera\":\"vertical_orbit\"}}"
 
     # ---- 象徴的なポイントから世界全体へ広がるシーン集（汎用）----
     - id: section_movie_entrance
