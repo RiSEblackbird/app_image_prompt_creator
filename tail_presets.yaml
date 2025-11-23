@@ -221,6 +221,36 @@ tails:
     - id: movie_from_still_aerial_view
       description_ja: "真上に近い俯瞰構図を保ちつつ、シーンの上をゆっくり漂う上空移動ショット"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"aerial film that maintains an overhead view and slowly transitions into continuous drifting flight over the scene, delivering intensely polished visual storytelling\",\"genre\":\"aerial_landscape\"}}"
+    - id: movie_from_still_forest_expansion
+      description_ja: "緑豊かな森林を、木々の間を縫うように蛇行しながら広大な風景を展開するシーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"forest expansion sequence that weaves through dense trees and gradually reveals the vast woodland landscape, delivering intensely polished visual storytelling\",\"genre\":\"forest_landscape\"}}"
+    - id: movie_from_still_dawn_dusk_transition
+      description_ja: "日の出から日の入りまでの時間変化を、徐々に移り変わる光と影で表現する風景展開"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dawn-to-dusk transition sequence that captures the gradual shifting of light and shadows across the landscape, delivering intensely polished visual storytelling\",\"genre\":\"temporal_landscape\"}}"
+    - id: movie_from_still_seasonal_cycle
+      description_ja: "四季の移り変わりを連続的に描き、風景の季節的変容を時系列で追うサイクルショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"seasonal cycle sequence that follows the landscape through spring, summer, autumn, and winter transitions, delivering intensely polished visual storytelling\",\"genre\":\"seasonal_landscape\"}}"
+    - id: movie_from_still_river_flow
+      description_ja: "河川の流れに沿ってカメラを移動させ、水辺の風景と周囲環境を一体的に展開するショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"river flow sequence that follows the waterway's path to reveal the integrated landscape of water and surroundings, delivering intensely polished visual storytelling\",\"genre\":\"riverine_landscape\"}}"
+    - id: movie_from_still_mountain_panorama
+      description_ja: "山岳地帯を登攀するような視点移動で、連なる峰々と谷間の風景をパノラマ展開するシーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"mountain panorama sequence that ascends through rugged terrain to reveal connected peaks and valleys, delivering intensely polished visual storytelling\",\"genre\":\"mountainous_landscape\"}}"
+    - id: movie_from_still_time_distortion
+      description_ja: "時間軸を歪曲させ、過去と現在の風景要素が混在・干渉する独創的な時空間展開"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"time-distorted sequence where past and present landscape elements intermingle and interfere with each other in a creative spacetime continuum, delivering intensely polished visual storytelling\",\"genre\":\"temporal_distortion\"}}"
+    - id: movie_from_still_human_environment_interaction
+      description_ja: "人間の動きや行動が環境そのものを変容させる相互作用を描く、ダイナミックな風景変形シーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"human-environment interaction sequence where human movements and actions dynamically reshape and transform the surrounding landscape, delivering intensely polished visual storytelling\",\"genre\":\"interactive_landscape\"}}"
+    - id: movie_from_still_abstract_light_shadow
+      description_ja: "光と影を抽象的に扱い、風景を幾何学模様や純粋な明暗の構成として再解釈する芸術的展開"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"abstract light-shadow sequence that reinterprets the landscape as geometric patterns and pure tonal compositions, delivering intensely polished visual storytelling\",\"genre\":\"abstract_composition\"}}"
+    - id: movie_from_still_micro_macro_fusion
+      description_ja: "風景の微細なディテールと広大な全体像を同時に表現し、両者が融合・共振する独自の視覚体験"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"micro-macro fusion sequence that simultaneously presents minute landscape details alongside vast vistas in a resonant visual experience, delivering intensely polished visual storytelling\",\"genre\":\"scale_fusion\"}}"
+    - id: movie_from_still_fantasy_metamorphosis
+      description_ja: "風景が現実と幻想の境界を越えて変容し、夢のような要素が現れ出没する魔法的展開シーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fantasy metamorphosis sequence where the landscape transcends reality-fantasy boundaries with dreamlike elements appearing and disappearing, delivering intensely polished visual storytelling\",\"genre\":\"fantastical_transformation\"}}"
 
     # 室内・展示空間ウォークスルー展開
     - id: section_sub_movie_from_still_interior
@@ -283,6 +313,39 @@ tails:
     - id: movie_entrance_routes_overview
       description_ja: "基準となるポイントから伸びる複数のルートや動線を、俯瞰気味のショットで俯瞰・切り替えるオーバービュー"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"overview film that maps multiple routes and paths branching from a central hub using semi-aerial and high-angle shots, delivering intensely polished visual storytelling\",\"camera\":\"route overview\"}}"
+    - id: movie_entrance_tourist_path_walk
+      description_ja: "観光者の主観視点で道沿いを歩きながら右側を向き、その後左側を向いて両サイドをしっかり映す歩行シークエンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tourist's first-person walking sequence along a path that turns to face the right side first, then the left side, capturing both sides thoroughly with natural walking camera shake and blur, delivering intensely polished visual storytelling\",\"camera\":\"first_person_tourist_walk\"}}"
+    - id: movie_entrance_staircase_ascent
+      description_ja: "階段を登る視点で各段ごとに周囲の風景が変化していく上昇型のウォークスルー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"staircase ascent walkthrough that reveals changing surroundings with each step upward, delivering intensely polished visual storytelling\",\"structure\":\"vertical_step_progression\"}}"
+    - id: movie_entrance_corridor_journey
+      description_ja: "廊下や通路を進みながら両側の壁面や開口部を順次見せていく直線的空間移動"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"corridor journey that sequentially reveals wall surfaces and openings on both sides while moving forward, delivering intensely polished visual storytelling\",\"structure\":\"linear_corridor_progression\"}}"
+    - id: movie_entrance_forest_path
+      description_ja: "森の中の小道を蛇行しながら進み、木々の間から差し込む光と周囲の自然を探索する歩行シーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"forest path walking sequence that weaves through trees, revealing filtered light and surrounding nature, delivering intensely polished visual storytelling\",\"structure\":\"natural_path_exploration\"}}"
+    - id: movie_entrance_urban_street_walk
+      description_ja: "街路を歩きながら建物や店舗、通行人を交互に捉えていく都市探索型の移動ショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"urban street walking sequence that alternately captures buildings, shops, and pedestrians, delivering intensely polished visual storytelling\",\"structure\":\"urban_exploration_walk\"}}"
+    - id: movie_entrance_bridge_crossing
+      description_ja: "橋を渡りながら川面と両岸の風景を交互に眺め、移動の変化で視界が広がる横断シーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"bridge crossing sequence that alternates views of the water surface and both banks, with expanding vistas through movement, delivering intensely polished visual storytelling\",\"structure\":\"crossing_expansion\"}}"
+    - id: movie_entrance_temporal_journey
+      description_ja: "同じ道を歩きながら時代が移り変わり、過去と現在の風景が交互に現れる時間旅行風の独創的旅路"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"temporal journey that walks the same path while eras shift, with past and present landscapes alternating in a time-traveling exploration, delivering intensely polished visual storytelling\",\"structure\":\"time_shifting_path\"}}"
+    - id: movie_entrance_perspective_shift_travel
+      description_ja: "歩行中に視点が突然切り替わり、鳥瞰や水中視点など多様なアングルから同じ道を再観察する独創的構成"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"perspective-shifting travel where viewpoints suddenly change during walking, re-examining the same path from bird's-eye, underwater, and other angles, delivering intensely polished visual storytelling\",\"structure\":\"multi_perspective_reveal\"}}"
+    - id: movie_entrance_floating_dream_walk
+      description_ja: "現実の重力から解放され、浮遊しながら道を進む夢のような移動で、周囲が柔らかく歪む幻想的歩行"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"floating dream walk that moves along paths free from gravity, with surroundings softly distorting in a dreamlike journey, delivering intensely polished visual storytelling\",\"structure\":\"weightless_dream_exploration\"}}"
+    - id: movie_entrance_labyrinth_navigation
+      description_ja: "複雑な迷路のような経路を試行錯誤しながら進み、行き止まりや分岐点で方向転換を繰り返す挑戦的探索"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"labyrinth navigation that trial-and-error progresses through complex paths, repeatedly changing direction at dead ends and branches, delivering intensely polished visual storytelling\",\"structure\":\"trial_error_maze\"}}"
+    - id: movie_entrance_rhythmic_sound_walk
+      description_ja: "環境音や想像上の音楽に合わせてリズミカルに歩を進め、周囲の要素が音に同期して反応する没入型移動"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"rhythmic sound walk that advances steps in sync with environmental sounds or imagined music, with surrounding elements reacting to the rhythm, delivering intensely polished visual storytelling\",\"structure\":\"sound_synchronized_movement\"}}"
 
     # 時間変化／モチーフ反復構成プリセット
     - id: section_sub_movie_entrance_time_motif
