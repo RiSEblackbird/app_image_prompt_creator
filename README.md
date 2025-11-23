@@ -139,7 +139,7 @@ setx OPENAI_API_KEY "sk-xxxxx"
   ```yaml
   - id: "movie_scifi_trailer"
     description_ja: "モダンなSF映画トレーラー風（ドルビー音響感）"
-    prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"modern sci-fi movie trailer with cinematic lighting and bold pacing, delivering intensely polished visual storytelling\",\"grade\":\"Dolby Digital atmosphere\"}}"
+    prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a modern sci-fi movie trailer with cinematic lighting and bold pacing, delivering intensely polished visual storytelling\",\"grade\":\"Dolby Digital atmosphere\"}}"
   ```
 - 負例（「〜風」「style」「like ...」で弱い誘導になっているケース）:
   ```yaml
@@ -148,6 +148,7 @@ setx OPENAI_API_KEY "sk-xxxxx"
     prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"modern sci-fi movie trailer style with cinematic lighting, like a blockbuster teaser\",\"grade\":\"Dolby Digital atmosphere\"}}"
   ```
 - `tails.image` / `tails.movie` の配列要素を追加・削除することで、`image` / `movie` それぞれのプリセットをカスタマイズできます。
+- `tails.movie` 側の `prompt.description` は、**「動画生成の設定」ではなく「生成される映像そのもの」を英語で述べる**ことを推奨します（例: `this is a ... film / this is a ... recording ...` のように、「これは〜である」と明示する）。Sora2 などの動画モデルに対して、「〜というシーケンスを生成してほしい」というメタな指示ではなく、「今見ている映像そのものが何であるか」を強く主張することで、挙動が安定しやすくなります。
 - アプリ起動中に `tail_presets.yaml` を保存し直すと、数百ミリ秒以内に QFileSystemWatcher によって自動検知され、`末尾プリセット用途` と「末尾1」プルダウンに最新の内容が反映されます（再起動不要）。
 
 #### 末尾2(JSONフラグ)と content_flags
