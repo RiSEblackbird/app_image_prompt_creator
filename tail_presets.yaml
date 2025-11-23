@@ -17,45 +17,54 @@ tails:
     - id: none
       description_ja: "（末尾の動画スタイル指定を付けない）"
       prompt: ""
+    # ---- シネマティック基礎スタイル（撮影・演出・編集テンプレ）----
+    - id: section_movie_core
+      description_ja: "===【カテゴリ】シネマティック基礎スタイル（撮影・演出・編集テンプレ）"
+      prompt: ""
+    # ベース撮影フォーマット／質感プリセット
+    - id: section_sub_movie_format
+      description_ja: "==【サブ】ベース撮影フォーマット／質感プリセット"
+      prompt: ""
     - id: movie_70mm
       description_ja: "70mmフィルムで撮影された、ドラマチック照明の横移動シネマティック全編"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film, delivering intensely polished visual storytelling\",\"look\":\"dramatic lighting\"}}"
     - id: movie_ultra_fidelity
       description_ja: "4K HDR で収録された、高精細なダイナミックトラッキングショット全編"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage, delivering intensely polished visual storytelling\",\"format\":\"4K HDR\"}}"
-    - id: movie_arthouse
-      description_ja: "ムード重視でカメラを慎重に動かすアートハウス系短編映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film, delivering intensely polished visual storytelling\",\"camera\":\"deliberate movement\"}}"
-    - id: movie_trailer
-      description_ja: "モダンな映画予告編のように、タイトにカットを繋いだ高速モンタージュ全編"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage that is a modern movie trailer with tightly cut sequences, delivering intensely polished visual storytelling\",\"grade\":\"Dolby Vision\"}}"
-    - id: movie_tight_cinematic
-      description_ja: "4K解像度で、制御された滑らかなカメラワークのタイトなシネマティックショット"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic shot with controlled, fluid camera motion, delivering intensely polished visual storytelling\",\"format\":\"4K\"}}"
+    - id: movie_8k_master
+      description_ja: "8Kマスターで滑らかな編集リズムを持つ高解像度シネマティック作品"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic shot mastered in 8K with smooth editing rhythm, delivering intensely polished visual storytelling\",\"format\":\"8K\"}}"
     - id: movie_60s_film
       description_ja: "1960年代のフィルムプリント風グレーディングで仕上げた雰囲気重視のカット群"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"atmospheric sequence graded as an authentic 1960s film print, delivering intensely polished visual storytelling\",\"grade\":\"film emulation\"}}"
     - id: movie_studio_lighting
       description_ja: "高コントラストなスタジオライティングとクリーンな構図のショット全編"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"crisp studio-lit shot with high contrast and clean composition, delivering intensely polished visual storytelling\",\"look\":\"studio lighting\"}}"
+
+    # カメラワーク／ショット運動プリセット
+    - id: section_sub_movie_camera
+      description_ja: "==【サブ】カメラワーク／ショット運動プリセット"
+      prompt: ""
+    - id: movie_tight_cinematic
+      description_ja: "4K解像度で、制御された滑らかなカメラワークのタイトなシネマティックショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic shot with controlled, fluid camera motion, delivering intensely polished visual storytelling\",\"format\":\"4K\"}}"
     - id: movie_handheld
       description_ja: "微かなモーションブラーと自然な粒子感を伴うハンドヘルド撮影映画"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"handheld cinematic shot with subtle motion blur and natural grain, delivering intensely polished visual storytelling\",\"camera\":\"handheld\"}}"
-    - id: movie_8k_master
-      description_ja: "8Kマスターで滑らかな編集リズムを持つ高解像度シネマティック作品"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic shot mastered in 8K with smooth editing rhythm, delivering intensely polished visual storytelling\",\"format\":\"8K\"}}"
     - id: movie_drone_one_shot
       description_ja: "ドローンでシーン全体をワンテイクで滑らかに飛行する空撮シーケンス"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"continuous one-take aerial drone footage flying smoothly through the scene, delivering intensely polished visual storytelling\",\"camera\":\"drone one-shot\"}}"
-    - id: movie_suspense_drama
-      description_ja: "照明とフレーミングで緊張感を高めたサスペンスTVドラマ風シーン"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tense, dramatic scene from a suspense TV drama with moody lighting and framing, delivering intensely polished visual storytelling\",\"genre\":\"suspense drama\"}}"
-    - id: movie_one_shot_doc
-      description_ja: "世界をリアルに追い続ける、ワンショット構成のドキュメンタリー映像"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"single-take documentary shot that follows this world in a realistic tone, delivering intensely polished visual storytelling\",\"style\":\"one-shot documentary\"}}"
-    - id: movie_heavy_scifi
-      description_ja: "重厚な雰囲気とスタイリッシュな未来的デザインに包まれたSFシーケンス"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"heavy and stylish sci-fi sequence with deep atmosphere, delivering intensely polished visual storytelling\",\"look\":\"futuristic aesthetics\"}}"
+    - id: movie_dynamic_samurai
+      description_ja: "天候の変化と幾何学的構図を強調した、壮大な時代劇シネマティック"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic movement of weather and elements with strong geometric composition, delivering intensely polished visual storytelling\",\"style\":\"epic historical atmosphere\"}}"
+
+    # 編集リズム／シーケンス構成プリセット
+    - id: section_sub_movie_edit
+      description_ja: "==【サブ】編集リズム／シーケンス構成プリセット"
+      prompt: ""
+    - id: movie_trailer
+      description_ja: "モダンな映画予告編のように、タイトにカットを繋いだ高速モンタージュ全編"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage that is a modern movie trailer with tightly cut sequences, delivering intensely polished visual storytelling\",\"grade\":\"Dolby Vision\"}}"
     - id: movie_scifi_trailer
       description_ja: "ドルビーサウンドを想起させる、モダンなSF映画トレーラー調の高速カット"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"modern sci-fi movie trailer with cinematic lighting and bold pacing, delivering intensely polished visual storytelling\",\"grade\":\"Dolby Digital atmosphere\"}}"
@@ -65,6 +74,23 @@ tails:
     - id: movie_nature_to_future
       description_ja: "自然描写から未来技術のシーンへと連続的に移行するドキュメンタリー構成"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"documentary that starts with a focus on nature and then transitions to futuristic technology scenes, delivering intensely polished visual storytelling\",\"style\":\"gradual transition spanning vast time\"}}"
+    - id: movie_one_shot_doc
+      description_ja: "世界をリアルに追い続ける、ワンショット構成のドキュメンタリー映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"single-take documentary shot that follows this world in a realistic tone, delivering intensely polished visual storytelling\",\"style\":\"one-shot documentary\"}}"
+
+    # トーン／ジャンル指向シネマティックプリセット
+    - id: section_sub_movie_tone
+      description_ja: "==【サブ】トーン／ジャンル指向シネマティックプリセット"
+      prompt: ""
+    - id: movie_arthouse
+      description_ja: "ムード重視でカメラを慎重に動かすアートハウス系短編映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film, delivering intensely polished visual storytelling\",\"camera\":\"deliberate movement\"}}"
+    - id: movie_suspense_drama
+      description_ja: "照明とフレーミングで緊張感を高めたサスペンスTVドラマ風シーン"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tense, dramatic scene from a suspense TV drama with moody lighting and framing, delivering intensely polished visual storytelling\",\"genre\":\"suspense drama\"}}"
+    - id: movie_heavy_scifi
+      description_ja: "重厚な雰囲気とスタイリッシュな未来的デザインに包まれたSFシーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"heavy and stylish sci-fi sequence with deep atmosphere, delivering intensely polished visual storytelling\",\"look\":\"futuristic aesthetics\"}}"
     - id: movie_psychological_horror
       description_ja: "ジャンプスケアを使わず、湿った質感と不穏な空気で静かな恐怖を描く心理ホラー"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"psychological horror film with eerie atmosphere and damp visual texture, no jump scares, delivering intensely polished visual storytelling\",\"genre\":\"quiet terror\"}}"
@@ -74,10 +100,15 @@ tails:
     - id: movie_epic_realism
       description_ja: "実写的な質感と巨大スケールを両立した、IMAX品質の壮大な劇映画"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"complex narrative structure with practical effects look and grandiose scale, delivering intensely polished visual storytelling\",\"format\":\"IMAX quality realism\"}}"
-    - id: movie_dynamic_samurai
-      description_ja: "天候の変化と幾何学的構図を強調した、壮大な時代劇シネマティック"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic movement of weather and elements with strong geometric composition, delivering intensely polished visual storytelling\",\"style\":\"epic historical atmosphere\"}}"
+
     # ---- TV番組系プリセット（番組: 10パターン）----
+    - id: section_tv_programs
+      description_ja: "===【カテゴリ】TV番組系プリセット（番組: 10パターン）"
+      prompt: ""
+    # スタジオ情報・トーク番組系
+    - id: section_sub_tv_studio
+      description_ja: "==【サブ】スタジオ情報・トーク番組系"
+      prompt: ""
     - id: tv_news_studio
       description_ja: "明るい照明とニュースデスク構図で撮る、スタジオ生放送ニュース番組"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"live news studio program with clear lighting, anchor desk framing, and crisp on-air graphics, delivering intensely polished visual storytelling\",\"genre\":\"tv_news_program\"}}"
@@ -87,113 +118,183 @@ tails:
     - id: tv_talk_variety
       description_ja: "複数カメラでゲストの表情とリアクションを抜く、トーク中心のスタジオバラエティ"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"studio talk variety program with seated guests, multi-camera switching, and clearly framed reactions, delivering intensely polished visual storytelling\",\"genre\":\"tv_talk_variety\"}}"
+
+    # ロケ／体験・旅番組系
+    - id: section_sub_tv_travel
+      description_ja: "==【サブ】ロケ／体験・旅番組系"
+      prompt: ""
     - id: tv_travelogue
       description_ja: "出演者を追いながら実在の街や名所を歩く、ロケ主体の旅番組スタイル"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"travelogue program following hosts walking through real locations with handheld and on-location shots, delivering intensely polished visual storytelling\",\"genre\":\"tv_travelogue\"}}"
+    - id: tv_reality_show
+      description_ja: "参加者の日常や反応を密着で追う、ドキュメント寄りのリアリティ番組"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"reality television program that closely follows everyday life and unscripted reactions, delivering intensely polished visual storytelling\",\"genre\":\"tv_reality_show\"}}"
+
+    # 解説・教育／ドキュメンタリー番組系
+    - id: section_sub_tv_educational
+      description_ja: "==【サブ】解説・教育／ドキュメンタリー番組系"
+      prompt: ""
     - id: tv_cooking_show
       description_ja: "手元や道具、対象の変化をクローズアップで丁寧に追う解説型の番組スタイル"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"instructional program that focuses on close-up shots of hands, tools, and changing subjects with careful step-by-step coverage, delivering intensely polished visual storytelling\",\"genre\":\"tv_cooking_show\"}}"
     - id: tv_documentary_series
       description_ja: "実在の人物と場所を静かに観察する、シリーズ型TVドキュメンタリー番組"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"episodic television documentary program that calmly observes real people and places, delivering intensely polished visual storytelling\",\"genre\":\"tv_documentary_series\"}}"
+    - id: tv_educational_kids
+      description_ja: "スタジオパートとシンプルなアニメーションを組み合わせた、子ども向け教育番組"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"children's educational television program combining studio segments and simple animations, delivering intensely polished visual storytelling\",\"genre\":\"tv_educational_program\"}}"
+
+    # スポーツ／音楽ライブ番組系
+    - id: section_sub_tv_sports_music
+      description_ja: "==【サブ】スポーツ／音楽ライブ番組系"
+      prompt: ""
     - id: tv_sports_broadcast
       description_ja: "フィールド全体とスコアボードを捉える、実況解説付きのスポーツ中継"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sports broadcast program with dynamic camera coverage of the field and clearly framed scoreboard graphics, delivering intensely polished visual storytelling\",\"genre\":\"tv_sports_broadcast\"}}"
     - id: tv_music_live
       description_ja: "コンサート照明とリズミカルな編集で見せる、ステージ音楽ライブ番組"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"music performance program captured on a live stage with concert lighting and rhythmic editing, delivering intensely polished visual storytelling\",\"genre\":\"tv_music_live\"}}"
-    - id: tv_reality_show
-      description_ja: "参加者の日常や反応を密着で追う、ドキュメント寄りのリアリティ番組"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"reality television program that closely follows everyday life and unscripted reactions, delivering intensely polished visual storytelling\",\"genre\":\"tv_reality_show\"}}"
-    - id: tv_educational_kids
-      description_ja: "スタジオパートとシンプルなアニメーションを組み合わせた、子ども向け教育番組"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"children's educational television program combining studio segments and simple animations, delivering intensely polished visual storytelling\",\"genre\":\"tv_educational_program\"}}"
+
     # ---- 映画系プリセット（映画: 10パターン）----
+    - id: section_movie_features
+      description_ja: "===【カテゴリ】映画系プリセット（映画: 10パターン）"
+      prompt: ""
+    # 歴史／ファンタジー／ディザスター大作系
+    - id: section_sub_movie_features_epic
+      description_ja: "==【サブ】歴史／ファンタジー／ディザスター大作系"
+      prompt: ""
     - id: movie_historical_epic
       description_ja: "大規模な戦闘シーンと濃密な人間ドラマを併走させる歴史戦争超大作"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping historical war epic that combines large-scale battle scenes with intimate character drama, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\"}}"
+    - id: movie_fantasy_epic
+      description_ja: "完全に作り込まれた魔法世界と大規模な戦闘シーンを描くファンタジー超大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"high fantasy epic film set in a fully realized magical world with expansive battlefields and mythical creatures, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\"}}"
+    - id: movie_disaster_blockbuster
+      description_ja: "巨大な破壊シーンと多人数の群像劇を組み合わせた、スケールの大きいディザスター映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"large-scale disaster blockbuster that stages massive destruction sequences and ensemble character arcs, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\"}}"
+
+    # 現代ドラマ／青春・家族映画系
+    - id: section_sub_movie_features_drama
+      description_ja: "==【サブ】現代ドラマ／青春・家族映画系"
+      prompt: ""
     - id: movie_urban_romance
       description_ja: "現代の大都市の夜景の中で、親密なフレーミングで描くロマンティックな恋愛映画"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"romantic drama film set in a contemporary city at night with glowing streetlights and close character framing, delivering intensely polished visual storytelling\",\"genre\":\"romantic_drama\"}}"
     - id: movie_coming_of_age
       description_ja: "若い主人公の日常と転機を静かに追いかける、成長と葛藤の青春映画"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"coming-of-age feature film that follows a young protagonist through quiet everyday moments and decisive turning points, delivering intensely polished visual storytelling\",\"genre\":\"coming_of_age\"}}"
-    - id: movie_noir_crime
-      description_ja: "濡れた路地と硬い影を多用し、緊張したクローズアップで見せるノワール犯罪映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"noir crime film filled with hard shadows, reflective wet streets, and tense close-ups, delivering intensely polished visual storytelling\",\"genre\":\"noir_crime\"}}"
     - id: movie_road_journey
       description_ja: "長距離移動と変化する風景、車内の静かな会話に焦点を当てたロードムービー"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"road movie that follows a long-distance journey through changing landscapes and quiet in-car conversations, delivering intensely polished visual storytelling\",\"genre\":\"road_movie\"}}"
-    - id: movie_fantasy_epic
-      description_ja: "完全に作り込まれた魔法世界と大規模な戦闘シーンを描くファンタジー超大作"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"high fantasy epic film set in a fully realized magical world with expansive battlefields and mythical creatures, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\"}}"
     - id: movie_family_animation
       description_ja: "表情豊かなキャラクターデザインと柔らかい色彩で描く、家族向け長編アニメ映画"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"feature-length family animation film with expressive character designs and gentle, colorful lighting, delivering intensely polished visual storytelling\",\"genre\":\"family_animation\"}}"
-    - id: movie_nature_documentary
-      description_ja: "長期間にわたり自然と景観を観察する、シネマティックなネイチャードキュメンタリー映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic feature documentary that observes wild nature and landscapes over a long period, delivering intensely polished visual storytelling\",\"genre\":\"nature_documentary\"}}"
+
+    # 犯罪／法廷／ドキュメンタリー映画系
+    - id: section_sub_movie_features_crime_doc
+      description_ja: "==【サブ】犯罪／法廷／ドキュメンタリー映画系"
+      prompt: ""
+    - id: movie_noir_crime
+      description_ja: "濡れた路地と硬い影を多用し、緊張したクローズアップで見せるノワール犯罪映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"noir crime film filled with hard shadows, reflective wet streets, and tense close-ups, delivering intensely polished visual storytelling\",\"genre\":\"noir_crime\"}}"
     - id: movie_courtroom_drama
       description_ja: "対立する弁論と反射する表面を丁寧に映す、緊張感の高い法廷ドラマ映画"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"courtroom drama film centered on tense verbal exchanges, reflective surfaces, and controlled camera movement, delivering intensely polished visual storytelling\",\"genre\":\"courtroom_drama\"}}"
-    - id: movie_disaster_blockbuster
-      description_ja: "巨大な破壊シーンと多人数の群像劇を組み合わせた、スケールの大きいディザスター映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"large-scale disaster blockbuster that stages massive destruction sequences and ensemble character arcs, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\"}}"
+    - id: movie_nature_documentary
+      description_ja: "長期間にわたり自然と景観を観察する、シネマティックなネイチャードキュメンタリー映画"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic feature documentary that observes wild nature and landscapes over a long period, delivering intensely polished visual storytelling\",\"genre\":\"nature_documentary\"}}"
+
     # ---- 静止画入力（Sora2 など）からの映像展開向けプリセット ----
+    - id: section_movie_from_still
+      description_ja: "===【カテゴリ】静止画入力（Sora2 など）からの映像展開向けプリセット"
+      prompt: ""
+    # 風景／都市／広域環境展開
+    - id: section_sub_movie_from_still_landscape
+      description_ja: "==【サブ】風景／都市／広域環境展開"
+      prompt: ""
     - id: movie_from_still_snowfield
       description_ja: "シーン全体をゆっくりしたトラッキングとオービットで広げる、構図重視の連続ショット"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic sequence that uses slow tracking and orbit shots to expand the scene around the main subject and its environment while preserving strong composition, delivering intensely polished visual storytelling\",\"genre\":\"landscape\"}}"
-    - id: movie_from_still_museum_exhibit
-      description_ja: "一つの注目要素から始まり、周囲の要素や光の配置、人の動きを徐々に見せていくウォークスルー"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"walkthrough film that starts with a detailed view of a focal element and then slowly reveals surrounding elements, lighting, and people in the space, delivering intensely polished visual storytelling\",\"genre\":\"museum_documentary\"}}"
     - id: movie_from_still_city_night
       description_ja: "静かなポイントから始まり、反射や遠くの動き、層状の光の広がりへとつなぐナイトシークエンス"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"night-time film that begins from a quiet corner of the scene and expands into moving reflections, distant motion, and layered lights, delivering intensely polished visual storytelling\",\"genre\":\"urban_night\"}}"
-    - id: movie_from_still_gallery_wall
-      description_ja: "並んだ要素の列と空間全体を、横方向のスムーズなカメラ移動でなぞるシーケンス"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"film with a smooth lateral camera move across a series of aligned elements and the surrounding space, delivering intensely polished visual storytelling\",\"genre\":\"art_gallery\"}}"
-    - id: movie_from_still_object_table
-      description_ja: "小さな主題の周囲をマクロ寄りでなぞり、質感と立体感を探るカメラワーク"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"macro-focused film around a small main subject that explores depth, texture, and small controlled camera movements, delivering intensely polished visual storytelling\",\"genre\":\"macro_object\"}}"
-    - id: movie_from_still_interior
-      description_ja: "囲まれた空間を、パララックスや開口部越しの見せ方と光の変化で探索するシーン"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"interior-style exploration film with gentle parallax moves, reveals through openings, and shifting light across an enclosed space, delivering intensely polished visual storytelling\",\"genre\":\"interior\"}}"
     - id: movie_from_still_aerial_view
       description_ja: "真上に近い俯瞰構図を保ちつつ、シーンの上をゆっくり漂う上空移動ショット"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"aerial film that maintains an overhead view and slowly transitions into continuous drifting flight over the scene, delivering intensely polished visual storytelling\",\"genre\":\"aerial_landscape\"}}"
+
+    # 室内・展示空間ウォークスルー展開
+    - id: section_sub_movie_from_still_interior
+      description_ja: "==【サブ】室内・展示空間ウォークスルー展開"
+      prompt: ""
+    - id: movie_from_still_museum_exhibit
+      description_ja: "一つの注目要素から始まり、周囲の要素や光の配置、人の動きを徐々に見せていくウォークスルー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"walkthrough film that starts with a detailed view of a focal element and then slowly reveals surrounding elements, lighting, and people in the space, delivering intensely polished visual storytelling\",\"genre\":\"museum_documentary\"}}"
+    - id: movie_from_still_gallery_wall
+      description_ja: "並んだ要素の列と空間全体を、横方向のスムーズなカメラ移動でなぞるシーケンス"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"film with a smooth lateral camera move across a series of aligned elements and the surrounding space, delivering intensely polished visual storytelling\",\"genre\":\"art_gallery\"}}"
+    - id: movie_from_still_interior
+      description_ja: "囲まれた空間を、パララックスや開口部越しの見せ方と光の変化で探索するシーン"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"interior-style exploration film with gentle parallax moves, reveals through openings, and shifting light across an enclosed space, delivering intensely polished visual storytelling\",\"genre\":\"interior\"}}"
     - id: movie_from_still_art_installation
       description_ja: "中央の見せ場から始め、慎重なカメラ経路で周囲の空間構成全体を見せるシーケンス"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"art installation-style film that first observes a central focal area and then gradually reveals the surrounding spatial layout with careful camera paths, delivering intensely polished visual storytelling\",\"genre\":\"installation_art\"}}"
+
+    # マクロ被写体／小物ディテール展開
+    - id: section_sub_movie_from_still_macro
+      description_ja: "==【サブ】マクロ被写体／小物ディテール展開"
+      prompt: ""
+    - id: movie_from_still_object_table
+      description_ja: "小さな主題の周囲をマクロ寄りでなぞり、質感と立体感を探るカメラワーク"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"macro-focused film around a small main subject that explores depth, texture, and small controlled camera movements, delivering intensely polished visual storytelling\",\"genre\":\"macro_object\"}}"
+
     # ---- 象徴的なポイントから世界全体へ広がるシーン集（汎用）----
+    - id: section_movie_entrance
+      description_ja: "===【カテゴリ】象徴的なポイントから世界全体へ広がるシーン集（汎用）"
+      prompt: ""
+
+    # 空間ウォークスルー／旅路構成プリセット
+    - id: section_sub_movie_entrance_walkthrough
+      description_ja: "==【サブ】空間ウォークスルー／旅路構成プリセット"
+      prompt: ""
     - id: movie_entrance_facility_walkthrough
       description_ja: "シーン内の注目エリアから始まり、異なるゾーンを順に巡るウォークスルー"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"environment walkthrough film that starts at a focal region and then moves through multiple distinct zones with controlled camera moves, delivering intensely polished visual storytelling\",\"structure\":\"multi-zone walkthrough\"}}"
     - id: movie_entrance_world_tour
       description_ja: "象徴的なフォーカルポイントを軸に、この世界の多様なロケーションを横断するシーン集"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"world-spanning tour film that treats a distinctive focal structure or motif as a symbol and cuts between diverse locations across the same world, delivering intensely polished visual storytelling\",\"structure\":\"motif-linked world montage\"}}"
+    - id: movie_entrance_vertical_journey
+      description_ja: "シーン内のある地点を起点に、上下方向へカメラを移動させてレイヤー構造を見せる立体的ジャーニー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"vertical journey film that begins at a chosen region and then travels upward and downward through connected spaces, revealing stacked layers of the environment, delivering intensely polished visual storytelling\",\"camera\":\"vertical traversal\"}}"
+    - id: movie_entrance_routes_overview
+      description_ja: "基準となるポイントから伸びる複数のルートや動線を、俯瞰気味のショットで俯瞰・切り替えるオーバービュー"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"overview film that maps multiple routes and paths branching from a central hub using semi-aerial and high-angle shots, delivering intensely polished visual storytelling\",\"camera\":\"route overview\"}}"
+
+    # 時間変化／モチーフ反復構成プリセット
+    - id: section_sub_movie_entrance_time_motif
+      description_ja: "==【サブ】時間変化／モチーフ反復構成プリセット"
+      prompt: ""
     - id: movie_entrance_time_layers
       description_ja: "同じエリアを、時間帯や雰囲気の変化ごとに積層して見せるタイムレイヤー構成"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"time-layered sequence that revisits the same region under changing light, mood, and conditions, stacking variations into a cohesive progression, delivering intensely polished visual storytelling\",\"edit\":\"time-layered variations\"}}"
+    - id: movie_entrance_environment_echo
+      description_ja: "特定の形や光のモチーフを、世界各地の別の場所にも反復させて見せるエコー構成"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"environmental echo film that repeats shapes and lighting motifs associated with a distinctive focal area across many different locations, delivering intensely polished visual storytelling\",\"structure\":\"motif echo across locations\"}}"
+    - id: movie_entrance_memory_fragments
+      description_ja: "ある起点の先に広がるであろう場所を、断片的な記憶カットとして連ねるフラグメント集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"memory fragment film that assembles brief, vivid cuts of spaces that conceptually lie beyond an initial focal region, delivering intensely polished visual storytelling\",\"structure\":\"fragmented vignette series\"}}"
+
+    # 観察視点／モンタージュ／リフレクション構成プリセット
+    - id: section_sub_movie_entrance_observe
+      description_ja: "==【サブ】観察視点／モンタージュ／リフレクション構成プリセット"
+      prompt: ""
     - id: movie_entrance_flow_observer
       description_ja: "特定のポイント付近を固定視点気味に据え、通過する流れや動きを静かに観察するドキュメンタリー調"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"observational film that anchors the frame near a stable region and calmly records changing flows of people, vehicles, or other moving elements, delivering intensely polished visual storytelling\",\"camera\":\"anchored observer\"}}"
     - id: movie_entrance_symbolic_montage
       description_ja: "フォーカルカットと象徴的なディテールカットを交互に積み重ね、世界観を暗示するモンタージュ"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"symbolic montage that alternates focal shots with close-up details from across the world to imply a larger narrative, delivering intensely polished visual storytelling\",\"edit\":\"focal-symbol cut pattern\"}}"
-    - id: movie_entrance_vertical_journey
-      description_ja: "シーン内のある地点を起点に、上下方向へカメラを移動させてレイヤー構造を見せる立体的ジャーニー"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"vertical journey film that begins at a chosen region and then travels upward and downward through connected spaces, revealing stacked layers of the environment, delivering intensely polished visual storytelling\",\"camera\":\"vertical traversal\"}}"
     - id: movie_entrance_reflection_series
       description_ja: "シーンやその周辺を、反射面やスクリーン越しに多様なアングルで見せるリフレクションシーケンス"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"reflection-driven sequence that repeatedly frames the scene and its surroundings through reflective surfaces and screens from varied angles, delivering intensely polished visual storytelling\",\"look\":\"layered reflections\"}}"
-    - id: movie_entrance_environment_echo
-      description_ja: "特定の形や光のモチーフを、世界各地の別の場所にも反復させて見せるエコー構成"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"environmental echo film that repeats shapes and lighting motifs associated with a distinctive focal area across many different locations, delivering intensely polished visual storytelling\",\"structure\":\"motif echo across locations\"}}"
-    - id: movie_entrance_routes_overview
-      description_ja: "基準となるポイントから伸びる複数のルートや動線を、俯瞰気味のショットで俯瞰・切り替えるオーバービュー"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"overview film that maps multiple routes and paths branching from a central hub using semi-aerial and high-angle shots, delivering intensely polished visual storytelling\",\"camera\":\"route overview\"}}"
-    - id: movie_entrance_memory_fragments
-      description_ja: "ある起点の先に広がるであろう場所を、断片的な記憶カットとして連ねるフラグメント集"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"memory fragment film that assembles brief, vivid cuts of spaces that conceptually lie beyond an initial focal region, delivering intensely polished visual storytelling\",\"structure\":\"fragmented vignette series\"}}"
 
 
