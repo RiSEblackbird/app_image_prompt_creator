@@ -316,6 +316,9 @@ tails:
     - id: movie_entrance_tourist_path_walk
       description_ja: "観光客の一人称視点で道沿いを歩き続けながら、歩行中に何度も右側と左側へ視線とカメラを振り、両サイドの様子を手ブレを伴う歩行映像としてしっかり記録する動画"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a first-person recording as a tourist walking along a path who keeps walking while repeatedly turning the view toward the right side and then back to the left side so that both sides of the street are clearly shown while walking, with continuous natural handheld shake and small bumps in the movement, delivering intensely polished visual storytelling\",\"camera\":\"first_person_tourist_walk\"}}"
+    - id: movie_entrance_tourist_path_walk_neutral
+      description_ja: "観光客の一人称視点で道沿いを歩き続けながら、自然な手ブレと足運びの揺れを伴って道中の風景を記録するウォークスルー映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a first-person recording as a tourist walking along a path who keeps walking forward and naturally capturing the surroundings along the way, with continuous natural handheld shake and small bumps in the movement, delivering intensely polished visual storytelling\",\"camera\":\"first_person_tourist_walk\"}}"
     - id: movie_entrance_staircase_ascent
       description_ja: "階段を登る視点で各段ごとに周囲の風景が変化していく上昇型のウォークスルー"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a staircase ascent walkthrough that reveals changing surroundings with each step upward, delivering intensely polished visual storytelling\",\"structure\":\"vertical_step_progression\"}}"
