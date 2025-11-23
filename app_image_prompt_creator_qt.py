@@ -1511,6 +1511,25 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 6)
 
+        # Status Bar (Loading Indicator)
+        self.status_bar = self.statusBar()
+        self.loading_progress = QtWidgets.QProgressBar()
+        self.loading_progress.setRange(0, 0)  # Indeterminate (Marquee)
+        self.loading_progress.setTextVisible(False)
+        self.loading_progress.setFixedWidth(200)
+        self.loading_progress.setMaximumHeight(15)
+        self.loading_progress.setVisible(False)
+        self.status_bar.addPermanentWidget(self.loading_progress)
+
+    def _set_loading_state(self, is_loading: bool, message: str = ""):
+        """LLM処理中のローディング表示を制御する。"""
+        if is_loading:
+            self.loading_progress.setVisible(True)
+            self.status_bar.showMessage(message)
+        else:
+            self.loading_progress.setVisible(False)
+            self.status_bar.clearMessage()
+
     def _build_header(self, parent_layout):
         header_layout = QtWidgets.QHBoxLayout()
         parent_layout.addLayout(header_layout)
@@ -2416,6 +2435,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._start_background_worker(worker, self._handle_arrange_llm_success, self._handle_arrange_llm_failure)
 
     def _handle_arrange_llm_success(self, thread: QtCore.QThread, worker: ArrangeLLMWorker, result: str):
+        self._set_loading_state(False)
         thread.quit()
         thread.wait()
         worker.deleteLater()
@@ -2435,6 +2455,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.information(self, "コピー完了", "アレンジ済みプロンプトをコピーしました。")
 
     def _handle_arrange_llm_failure(self, thread: QtCore.QThread, worker: ArrangeLLMWorker, error: str):
+        self._set_loading_state(False)
         thread.quit()
         thread.wait()
         worker.deleteLater()
@@ -2823,6 +2844,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if self._thread and self._thread.isRunning():
             QtWidgets.QMessageBox.information(self, "実行中", "LLM 呼び出しが進行中です。完了までお待ちください。")
             return False
+        
+        self._set_loading_state(True, "LLM 処理中...")
+        
         thread = QtCore.QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -2870,6 +2894,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             self._movie_llm_context = context
 
     def _handle_llm_success(self, thread: QtCore.QThread, worker: LLMWorker, result: str):
+        self._set_loading_state(False)
         thread.quit()
         thread.wait()
         worker.deleteLater()
@@ -2886,6 +2911,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.information(self, "コピー完了", "LLMで調整したプロンプトをコピーしました。")
 
     def _handle_movie_llm_success(self, thread: QtCore.QThread, worker: MovieLLMWorker, result: str):
+        self._set_loading_state(False)
         thread.quit()
         thread.wait()
         worker.deleteLater()
@@ -2911,6 +2937,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.information(self, "コピー完了", f"{label}をLLMで実行し、全文をコピーしました。")
 
     def _handle_llm_failure(self, thread: QtCore.QThread, worker: LLMWorker, error: str):
+        self._set_loading_state(False)
         thread.quit()
         thread.wait()
         worker.deleteLater()
@@ -2918,6 +2945,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.critical(self, "エラー", f"LLM 呼び出しでエラーが発生しました:\n{error}")
 
     def _handle_movie_llm_failure(self, thread: QtCore.QThread, worker: MovieLLMWorker, error: str):
+        self._set_loading_state(False)
         thread.quit()
         thread.wait()
         worker.deleteLater()
