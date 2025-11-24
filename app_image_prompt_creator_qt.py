@@ -1622,7 +1622,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.check_tail_flags_enabled.stateChanged.connect(self.auto_update)
         tail2_layout.addWidget(self.check_tail_flags_enabled)
 
-        # 音声・人物フラグ
+        # 音声・人物・字幕フラグ
         flags_row = QtWidgets.QHBoxLayout()
         self.check_tail_flag_narration = QtWidgets.QCheckBox("ナレーション")
         self.check_tail_flag_character = QtWidgets.QCheckBox("人物")
@@ -1631,12 +1631,15 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.check_tail_flag_ambient = QtWidgets.QCheckBox("環境音")
         self.check_tail_flag_ambient.setToolTip("風・水・街並み・機械音など、環境そのものから発生する音があるかどうかを指定します。")
         self.check_tail_flag_dialogue = QtWidgets.QCheckBox("人物のセリフ")
+        self.check_tail_flag_subtitle = QtWidgets.QCheckBox("字幕")
+        self.check_tail_flag_subtitle.setToolTip("ONにすると、画面下部の字幕やテロップなど「文字によるセリフ/説明」が表示されているシーンとして扱います。")
         for chk in (
             self.check_tail_flag_narration,
             self.check_tail_flag_character,
             self.check_tail_flag_bgm,
             self.check_tail_flag_ambient,
             self.check_tail_flag_dialogue,
+            self.check_tail_flag_subtitle,
         ):
             chk.stateChanged.connect(self.auto_update)
             flags_row.addWidget(chk)
@@ -2490,11 +2493,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         """末尾2(JSONフラグ)の現在値からJSON文字列を生成する。
 
         出力例:
-        {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"planned_cuts":3}}
-
-        narration / bgm / dialogue / ambient_sound は音声要素、
+        {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"subtitle":true,"planned_cuts":3}}
+        
+        narration / bgm / dialogue / ambient_sound / subtitle は音声・字幕要素、
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ。
         ambient_sound は風・水・街並み・機械音など「環境そのものから発生する音」が存在するかどうかを表します。
+        subtitle は「画面上に字幕やテロップが表示されているかどうか」を表します。
         planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6）を表します。
         (Auto) 選択時や未指定時は planned_cuts フィールド自体を省略します。
         """
@@ -2510,6 +2514,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             "bgm": bool(self.check_tail_flag_bgm.isChecked()),
             "ambient_sound": bool(self.check_tail_flag_ambient.isChecked()),
             "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
+            "subtitle": bool(self.check_tail_flag_subtitle.isChecked()),
         }
         # 構成カット数 (1〜6) を planned_cuts として追加 (Auto の場合は省略)
         cut_combo = getattr(self, "combo_tail_cut_count", None)
