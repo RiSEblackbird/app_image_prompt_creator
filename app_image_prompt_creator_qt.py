@@ -3132,7 +3132,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "エラー", f"エラーが発生しました: {get_exception_trace()}")
 
     def _generate_text_via_llm(self):
-        """属性条件と行数に応じて、通常生成をLLMでまとめて実行する。"""
+        """属性条件と行数に応じて、通常生成をLLMでまとめて実行する。
+
+        - ユーザーが明示的に選んだ属性: そのまま attribute_conditions に反映
+        - 「-」かつ数値のみ指定された属性: 対応するプルダウン候補からランダムに詳細を選定して数ぶん展開
+        - 行数に対して合計requested_countが不足している場合: すべての属性プルダウン候補から不足分だけランダムに詳細を追加
+        """
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(
                 self,
@@ -3147,31 +3152,89 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             self._update_exclusion_words(exclusion_words)
 
         attribute_conditions: List[dict] = []
+        used_detail_ids: Set[int] = set()
+
+        # 1) 明示選択された属性 / 「-」指定＋数値ありの属性を attribute_conditions に反映
         for attr in self.attribute_types:
             detail_combo = self.attribute_combo_map.get(attr.id)
             count_combo = self.attribute_count_map.get(attr.id)
             if not detail_combo or not count_combo:
                 continue
+
             selected_detail_id = detail_combo.currentData()
             count_text = count_combo.currentText()
-            if selected_detail_id is None or count_text == "-":
+            if count_text == "-":
                 continue
+
             try:
                 count_int = int(count_text)
             except ValueError:
                 continue
             if count_int <= 0:
                 continue
-            detail_obj = next((d for d in self.attribute_details if d.id == selected_detail_id), None)
-            if not detail_obj:
+
+            # ケース1: 特定の詳細が選ばれている場合（従来どおり）
+            if selected_detail_id is not None:
+                detail_obj = next((d for d in self.attribute_details if d.id == selected_detail_id), None)
+                if not detail_obj:
+                    continue
+                attribute_conditions.append(
+                    {
+                        "attribute_name": attr.attribute_name,
+                        "detail": detail_obj.description,
+                        "requested_count": count_int,
+                        "attribute_type_id": attr.id,
+                        "detail_id": detail_obj.id,
+                    }
+                )
+                used_detail_ids.add(detail_obj.id)
                 continue
-            attribute_conditions.append(
-                {
-                    "attribute_name": attr.attribute_name,
-                    "detail": detail_obj.description,
-                    "requested_count": count_int,
-                }
-            )
+
+            # ケース2: 「-」で数値のみ指定された属性
+            # → 対応するattribute_type_idの詳細候補から、指定数だけランダムに詳細を選定（重複は許容）
+            candidates = [d for d in self.attribute_details if d.attribute_type_id == attr.id]
+            if not candidates:
+                continue
+            for _ in range(count_int):
+                chosen = random.choice(candidates)
+                attribute_conditions.append(
+                    {
+                        "attribute_name": attr.attribute_name,
+                        "detail": chosen.description,
+                        "requested_count": 1,
+                        "attribute_type_id": attr.id,
+                        "detail_id": chosen.id,
+                    }
+                )
+                used_detail_ids.add(chosen.id)
+
+        # 2) 行数に対してrequested_countが不足している場合、全プルダウン候補からランダム補完
+        total_requested = 0
+        for cond in attribute_conditions:
+            try:
+                total_requested += int(cond.get("requested_count", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+
+        shortage = max(0, total_lines - total_requested)
+        if shortage > 0 and self.attribute_details:
+            # すべての属性詳細の中から「未使用」を優先して候補を作成し、足りなければ全件からも選ぶ
+            by_type = {t.id: t for t in self.attribute_types}
+            unused_details = [d for d in self.attribute_details if d.id not in used_detail_ids]
+            base_pool = unused_details or list(self.attribute_details)
+            for _ in range(shortage):
+                chosen = random.choice(base_pool)
+                attr_type = by_type.get(chosen.attribute_type_id)
+                attr_name = attr_type.attribute_name if attr_type else ""
+                attribute_conditions.append(
+                    {
+                        "attribute_name": attr_name,
+                        "detail": chosen.description,
+                        "requested_count": 1,
+                        "attribute_type_id": chosen.attribute_type_id,
+                        "detail_id": chosen.id,
+                    }
+                )
 
         chaos_level = getattr(self, "slider_llm_chaos", None).value() if hasattr(self, "slider_llm_chaos") else 1
         worker = GeneratePromptLLMWorker(
@@ -3185,6 +3248,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             "total_lines": total_lines,
             "deduplicate": bool(self.check_dedup.isChecked()),
             "exclusion_words": exclusion_words if self.check_exclusion.isChecked() else [],
+            "attribute_conditions": attribute_conditions,
+            "chaos_level": chaos_level,
         }
         if self._start_background_worker(worker, self._handle_generate_llm_success, self._handle_generate_llm_failure):
             self._llm_generate_context = context
@@ -3250,6 +3315,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
         self.main_prompt = " ".join(processed_lines)
         self.update_option()
+        chaos_level = int(context.get("chaos_level") or 1)
+        attr_conditions = context.get("attribute_conditions") or []
         log_structured(
             logging.INFO,
             "llm_generation_success",
@@ -3258,8 +3325,66 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 "actual_fragments": len(processed_lines),
                 "deduplicate": dedup,
                 "exclusion_words": exclusion_words,
+                "chaos_level": chaos_level,
+                "attribute_condition_count": len(attr_conditions),
             },
         )
+
+        # 生成完了ダイアログに、LLMに渡した準備データセットをJSON形式で表示する
+        # 生成完了ダイアログに、LLMに渡した準備データセットをJSON形式で常時表示する
+        try:
+            summary_lines: List[str] = []
+            for cond in attr_conditions:
+                line_obj = {
+                    "attribute_name": str(cond.get("attribute_name", "") or ""),
+                    "detail": str(cond.get("detail", "") or ""),
+                    "requested_count": cond.get("requested_count", 0) or 0,
+                }
+                summary_lines.append(json.dumps(line_obj, ensure_ascii=False))
+
+            preview = (
+                "\n".join(summary_lines)
+                if summary_lines
+                else "（属性条件なし: LLMには自由生成として依頼しました）"
+            )
+
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("LLM生成 完了")
+            dialog.setModal(True)
+            dialog.setSizeGripEnabled(True)
+            # 元のメッセージボックスよりも縦横ともおおよそ3倍程度の初期サイズ
+            dialog.resize(1200, 900)
+
+            layout = QtWidgets.QVBoxLayout(dialog)
+
+            info_label = QtWidgets.QLabel(
+                f"LLM生成が完了しました。\n\n"
+                f"行数指定: {target_total}\n"
+                f"実際のフラグメント数: {len(processed_lines)}\n"
+                f"カオス度(LLM): {chaos_level}\n"
+                f"除外語句: {', '.join(exclusion_words) if exclusion_words else 'なし'}\n\n"
+                "下部にLLMへの準備データセット（属性条件）をJSON形式で表示します。"
+            )
+            info_label.setWordWrap(True)
+            layout.addWidget(info_label)
+
+            text_edit = QtWidgets.QPlainTextEdit()
+            text_edit.setReadOnly(True)
+            text_edit.setPlainText(preview)
+            layout.addWidget(text_edit, 1)
+
+            button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok)
+            button_box.accepted.connect(dialog.accept)
+            layout.addWidget(button_box)
+
+            dialog.exec()
+        except Exception:
+            # ダイアログ表示の失敗は致命的ではないため、ログに残すのみとする
+            log_structured(
+                logging.WARNING,
+                "llm_generation_summary_dialog_failed",
+                {"error": get_exception_trace()},
+            )
 
     def _handle_generate_llm_failure(self, thread: QtCore.QThread, worker: GeneratePromptLLMWorker, error: str):
         self._set_loading_state(False)
