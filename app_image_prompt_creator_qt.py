@@ -1892,6 +1892,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         story_btn = QtWidgets.QPushButton("ストーリー構築")
         story_btn.clicked.connect(self.handle_movie_storyboard)
         llm_row.addWidget(story_btn)
+        chaos_mix_btn = QtWidgets.QPushButton("カオスミックス")
+        chaos_mix_btn.setToolTip("メインプロンプト断片を1つの場面に無理やり押し込み、全文をコピーします。")
+        chaos_mix_btn.clicked.connect(self.handle_chaos_mix_and_copy)
+        llm_row.addWidget(chaos_mix_btn)
         movie_layout.addLayout(llm_row)
         movie_layout.addStretch(1)
         
@@ -1953,11 +1957,6 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         arrange_btn.setToolTip("選択したプリセットと強度でプロンプトを再構築し、結果をコピーします。")
         arrange_btn.clicked.connect(self.handle_arrange_llm_and_copy)
         adjust_layout.addWidget(arrange_btn)
-
-        chaos_mix_btn = QtWidgets.QPushButton("カオスミックス")
-        chaos_mix_btn.setToolTip("メインプロンプトの断片を一つのカオスな場面へ無理やり結合し、全文をコピーします。")
-        chaos_mix_btn.clicked.connect(self.handle_chaos_mix_and_copy)
-        adjust_layout.addWidget(chaos_mix_btn)
         
         adjust_layout.addStretch(1)
 
