@@ -1494,12 +1494,15 @@ class GeneratePromptLLMWorker(QtCore.QObject):
         attribute_conditions: List[dict],
         exclusion_words: List[str],
         chaos_level: int,
+        output_language: str = "en",
     ):
         super().__init__()
         self.model = model
         self.total_lines = max(1, int(total_lines) if total_lines else 1)
         self.attribute_conditions = attribute_conditions or []
         self.exclusion_words = exclusion_words or []
+        # LLM生成時の出力言語（en: 英語, ja: 日本語）。想定外の値は英語にフォールバックする。
+        self.output_language = output_language if output_language in ("en", "ja") else "en"
         # カオス度スライダーの値（1〜10）を安全に正規化して保持する
         try:
             level = int(chaos_level)
@@ -1589,14 +1592,29 @@ class GeneratePromptLLMWorker(QtCore.QObject):
         else:
             chaos_desc = "maximum chaos: wild, highly unexpected compositions and mixtures"
 
+        is_japanese = self.output_language == "ja"
+        if is_japanese:
+            language_label = "Japanese"
+            language_sentence = (
+                "Output language: Japanese. Return only Japanese text in each fragment; "
+                "do not append English translations."
+            )
+        else:
+            language_label = "English"
+            language_sentence = (
+                "Output language: English. Return only English text in each fragment; "
+                "do not append Japanese translations."
+            )
+
         system_prompt = _append_temperature_hint(
             "You generate diverse, high-quality prompt fragments for image generation models like Midjourney. "
-            "Follow the requested attribute mix and avoid forbidden words while keeping outputs concise and visual.",
+            "Follow the requested attribute mix and avoid forbidden words while keeping outputs concise and visual. "
+            + language_sentence,
             self.model,
             temperature,
         )
         user_prompt = (
-            f"Generate {self.total_lines} distinct prompt fragments for image generation in English.\n"
+            f"Generate {self.total_lines} distinct prompt fragments for image generation in {language_label}.\n"
             "Formatting rules:\n"
             "- Output exactly one fragment per line.\n"
             "- Do NOT prepend numbers, bullets, or labels.\n"
@@ -1836,6 +1854,17 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         chaos_layout.addWidget(self.label_llm_chaos_val)
         self._llm_chaos_container.setVisible(False)
         basic_grid.addWidget(self._llm_chaos_container, 3, 1, 1, 2)
+
+        # LLM生成時の出力言語選択（英語 / 日本語）
+        basic_grid.addWidget(QtWidgets.QLabel("LLM生成言語:"), 4, 0)
+        self.combo_llm_output_lang = QtWidgets.QComboBox()
+        self.combo_llm_output_lang.addItem("英語", userData="en")
+        self.combo_llm_output_lang.addItem("日本語", userData="ja")
+        self.combo_llm_output_lang.setCurrentIndex(0)
+        self.combo_llm_output_lang.setToolTip(
+            "通常生成の LLMモードで生成されるフラグメント（1行ごとの短文）の言語を指定します。"
+        )
+        basic_grid.addWidget(self.combo_llm_output_lang, 4, 1, 1, 2)
 
         # モード切替時にカオス度バーの表示/非表示を更新
         self.radio_mode_db.toggled.connect(self._update_generate_mode_ui)
@@ -2707,6 +2736,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         container = getattr(self, "_llm_chaos_container", None)
         if container is not None:
             container.setVisible(is_llm)
+        lang_combo = getattr(self, "combo_llm_output_lang", None)
+        if lang_combo is not None:
+            lang_combo.setEnabled(is_llm)
 
     def handle_arrange_llm_and_copy(self):
         """アレンジ機能を実行し、結果をコピーする。"""
@@ -3236,13 +3268,26 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                     }
                 )
 
-        chaos_level = getattr(self, "slider_llm_chaos", None).value() if hasattr(self, "slider_llm_chaos") else 1
+        chaos_slider = getattr(self, "slider_llm_chaos", None)
+        if isinstance(chaos_slider, QtWidgets.QSlider):
+            chaos_level = chaos_slider.value()
+        else:
+            chaos_level = 1
+
+        output_language = "en"
+        lang_combo = getattr(self, "combo_llm_output_lang", None)
+        if isinstance(lang_combo, QtWidgets.QComboBox):
+            data = lang_combo.currentData()
+            if isinstance(data, str) and data in ("en", "ja"):
+                output_language = data
+
         worker = GeneratePromptLLMWorker(
             model=self.combo_llm_model.currentText(),
             total_lines=total_lines,
             attribute_conditions=attribute_conditions,
             exclusion_words=exclusion_words if self.check_exclusion.isChecked() else [],
             chaos_level=chaos_level,
+            output_language=output_language,
         )
         context = {
             "total_lines": total_lines,
@@ -3250,6 +3295,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             "exclusion_words": exclusion_words if self.check_exclusion.isChecked() else [],
             "attribute_conditions": attribute_conditions,
             "chaos_level": chaos_level,
+            "output_language": output_language,
         }
         if self._start_background_worker(worker, self._handle_generate_llm_success, self._handle_generate_llm_failure):
             self._llm_generate_context = context
@@ -3326,6 +3372,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 "deduplicate": dedup,
                 "exclusion_words": exclusion_words,
                 "chaos_level": chaos_level,
+                "output_language": context.get("output_language", "en"),
                 "attribute_condition_count": len(attr_conditions),
             },
         )
