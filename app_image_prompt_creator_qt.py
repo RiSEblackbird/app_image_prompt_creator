@@ -2929,8 +2929,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 "bgm": true,
                 "ambient_sound": true,
                 "dialogue": false,
-                "on_screen_spoken_dialogue_subtitles": true,
-                "on_screen_non_dialogue_text_overlays": false,
+                "on_screen_spoken_dialogue_subtitles": "On-screen subtitles display the spoken dialogue in this video.",
+                "on_screen_non_dialogue_text_overlays": "There are on-screen non-dialogue text overlays such as commentary captions, labels, or sound-effect text rendered as part of the image.",
                 "planned_cuts": 3,
                 "spoken_language": "ja"
             }
@@ -2938,8 +2938,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         
         narration / bgm / ambient_sound / dialogue は音声要素、
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグです。
-        on_screen_spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されているかどうか」を表します。
-        on_screen_non_dialogue_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイ」が存在するかどうかを表します。
+        on_screen_spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されている」ことを、英語の説明文として明示します。
+        on_screen_non_dialogue_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイが存在する」ことを、英語の説明文として明示します。
         planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6）を表します。
         spoken_language は「動画内で想定される主な話し言葉の言語」を表し、"ja" または "en" を取ります。
         (Auto) 選択時や未指定時は planned_cuts / spoken_language フィールド自体を省略します。
@@ -2956,11 +2956,23 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             "bgm": bool(self.check_tail_flag_bgm.isChecked()),
             "ambient_sound": bool(self.check_tail_flag_ambient.isChecked()),
             "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
-            # セリフそのものに対応した字幕（セリフ字幕）
-            "on_screen_spoken_dialogue_subtitles": bool(self.check_tail_flag_dialogue_subtitle.isChecked()),
-            # セリフとは異なる編集用テロップ/テキスト（ツッコミ・解説・効果音文字など）
-            "on_screen_non_dialogue_text_overlays": bool(self.check_tail_flag_telop.isChecked()),
         }
+
+        # セリフそのものに対応した字幕（セリフ字幕）が画面に出ている場合は、
+        # true/false ではなく、動画モデルに直接伝わる英文の説明文を value として埋め込む。
+        if self.check_tail_flag_dialogue_subtitle.isChecked():
+            flags["on_screen_spoken_dialogue_subtitles"] = (
+                "On-screen subtitles display the spoken dialogue in this video. "
+                "Subtitles are clearly visible and synchronized with the spoken voice."
+            )
+
+        # セリフとは異なる編集用テロップ/テキスト（ツッコミ・解説・効果音文字など）が映っている場合も、
+        # true/false ではなく、その存在を明示する英文の説明文を value として埋め込む。
+        if self.check_tail_flag_telop.isChecked():
+            flags["on_screen_non_dialogue_text_overlays"] = (
+                "There are on-screen non-dialogue text overlays such as commentary captions, "
+                "labels, or sound-effect text rendered as part of the image."
+            )
         # 構成カット数 (1〜6) を planned_cuts として追加 (Auto の場合は省略)
         cut_combo = getattr(self, "combo_tail_cut_count", None)
         if isinstance(cut_combo, QtWidgets.QComboBox):

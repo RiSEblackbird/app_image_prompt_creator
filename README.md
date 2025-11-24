@@ -168,12 +168,12 @@ setx OPENAI_API_KEY "sk-xxxxx"
   - 動画中の言語: `(Auto)` / `日本語` / `英語`
 - 出力される JSON 例:
   ```json
-  {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"on_screen_spoken_dialogue_subtitles":true,"on_screen_non_dialogue_text_overlays":true,"planned_cuts":3,"spoken_language":"ja"}}
+  {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"on_screen_spoken_dialogue_subtitles":"On-screen subtitles display the spoken dialogue in this video.","on_screen_non_dialogue_text_overlays":"There are on-screen non-dialogue text overlays such as commentary captions, labels, or sound-effect text rendered as part of the image.","planned_cuts":3,"spoken_language":"ja"}}
   ```
 - `narration` / `bgm` / `dialogue` / `ambient_sound` は音声要素、`person_present` は映像内に人物が映っているかどうかの真偽値を表します。
 - `ambient_sound` は風・水・街並み・機械音など「環境そのものから発生する音」が存在するかどうかを表します。
-- `on_screen_spoken_dialogue_subtitles` は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されているかどうか」を表します。
-- `on_screen_non_dialogue_text_overlays` は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイ」が存在するかどうかを表します。
+- `on_screen_spoken_dialogue_subtitles` は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されている」ことを、英語の説明文として value に直接書き込みます（ON のときのみ出力されます）。
+- `on_screen_non_dialogue_text_overlays` は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイが存在する」ことを、英語の説明文として value に直接書き込みます（ON のときのみ出力されます）。
 - `planned_cuts` は「作品全体をおおよそ何カットで構成するか」の目安を表し、`1-6` のいずれかを指定します。`(Auto)` 選択時は `planned_cuts` フィールド自体が省略され、モデルに任せる前提になります。
 - `spoken_language` は「動画内で想定される主な話し言葉の言語」を表し、`"ja"`（日本語） または `"en"`（英語）を取ります。`(Auto)` 選択時は `spoken_language` フィールド自体が省略されます。
 - 仕様:
