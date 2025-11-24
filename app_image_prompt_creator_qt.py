@@ -1622,7 +1622,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.check_tail_flags_enabled.stateChanged.connect(self.auto_update)
         tail2_layout.addWidget(self.check_tail_flags_enabled)
 
-        # 音声・人物・字幕フラグ
+        # 音声・人物・字幕/テロップ系フラグ
         flags_row = QtWidgets.QHBoxLayout()
         self.check_tail_flag_narration = QtWidgets.QCheckBox("ナレーション")
         self.check_tail_flag_character = QtWidgets.QCheckBox("人物")
@@ -1631,15 +1631,22 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.check_tail_flag_ambient = QtWidgets.QCheckBox("環境音")
         self.check_tail_flag_ambient.setToolTip("風・水・街並み・機械音など、環境そのものから発生する音があるかどうかを指定します。")
         self.check_tail_flag_dialogue = QtWidgets.QCheckBox("人物のセリフ")
-        self.check_tail_flag_subtitle = QtWidgets.QCheckBox("字幕")
-        self.check_tail_flag_subtitle.setToolTip("ONにすると、画面下部の字幕やテロップなど「文字によるセリフ/説明」が表示されているシーンとして扱います。")
+        self.check_tail_flag_dialogue_subtitle = QtWidgets.QCheckBox("セリフ字幕")
+        self.check_tail_flag_dialogue_subtitle.setToolTip(
+            "ONにすると、人物が話しているセリフそのものを文字として表示する字幕（セリフ字幕）があるシーンとして扱います。"
+        )
+        self.check_tail_flag_telop = QtWidgets.QCheckBox("テロップ/テキスト")
+        self.check_tail_flag_telop.setToolTip(
+            "ONにすると、ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイが画面上に存在するシーンとして扱います。"
+        )
         for chk in (
             self.check_tail_flag_narration,
             self.check_tail_flag_character,
             self.check_tail_flag_bgm,
             self.check_tail_flag_ambient,
             self.check_tail_flag_dialogue,
-            self.check_tail_flag_subtitle,
+            self.check_tail_flag_dialogue_subtitle,
+            self.check_tail_flag_telop,
         ):
             chk.stateChanged.connect(self.auto_update)
             flags_row.addWidget(chk)
@@ -2493,12 +2500,23 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         """末尾2(JSONフラグ)の現在値からJSON文字列を生成する。
 
         出力例:
-        {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"subtitle":true,"planned_cuts":3}}
-        
-        narration / bgm / dialogue / ambient_sound / subtitle は音声・字幕要素、
-        person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ。
-        ambient_sound は風・水・街並み・機械音など「環境そのものから発生する音」が存在するかどうかを表します。
-        subtitle は「画面上に字幕やテロップが表示されているかどうか」を表します。
+        {
+            "content_flags": {
+                "narration": true,
+                "person_present": false,
+                "bgm": true,
+                "ambient_sound": true,
+                "dialogue": false,
+                "spoken_dialogue_subtitles": true,
+                "editorial_text_overlays": false,
+                "planned_cuts": 3
+            }
+        }
+
+        narration / bgm / ambient_sound / dialogue は音声要素、
+        person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグです。
+        spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されているかどうか」を表します。
+        editorial_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイ」が存在するかどうかを表します。
         planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6）を表します。
         (Auto) 選択時や未指定時は planned_cuts フィールド自体を省略します。
         """
@@ -2514,7 +2532,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             "bgm": bool(self.check_tail_flag_bgm.isChecked()),
             "ambient_sound": bool(self.check_tail_flag_ambient.isChecked()),
             "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
-            "subtitle": bool(self.check_tail_flag_subtitle.isChecked()),
+            # セリフそのものに対応した字幕（セリフ字幕）
+            "spoken_dialogue_subtitles": bool(self.check_tail_flag_dialogue_subtitle.isChecked()),
+            # セリフとは異なる編集用テロップ/テキスト（ツッコミ・解説・効果音文字など）
+            "editorial_text_overlays": bool(self.check_tail_flag_telop.isChecked()),
         }
         # 構成カット数 (1〜6) を planned_cuts として追加 (Auto の場合は省略)
         cut_combo = getattr(self, "combo_tail_cut_count", None)
