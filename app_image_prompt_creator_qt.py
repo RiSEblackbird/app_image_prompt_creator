@@ -1107,6 +1107,89 @@ class MovieLLMWorker(QtCore.QObject):
         )
         return system_prompt, user_prompt
 
+
+class ChaosMixLLMWorker(QtCore.QObject):
+    """断片化したメインプロンプトを単一シーンへ強制結合するワーカー。"""
+
+    finished = QtCore.Signal(str)
+    failed = QtCore.Signal(str)
+
+    def __init__(self, text: str, fragments: List[str], model: str, length_limit: int = 0):
+        super().__init__()
+        self.text = text
+        self.fragments = fragments or []
+        self.model = model
+        self.length_limit = length_limit
+
+    @QtCore.Slot()
+    def run(self):
+        try:
+            api_key = os.getenv(OPENAI_API_KEY_ENV)
+            if not api_key:
+                self.failed.emit(f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
+                return
+            system_prompt, user_prompt = self._build_prompts()
+            content, finish_reason, _, retry_count, error_message, status_code = send_llm_request(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=LLM_TEMPERATURE,
+                max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                timeout=LLM_TIMEOUT,
+                model_name=self.model,
+                include_temperature=LLM_INCLUDE_TEMPERATURE,
+            )
+            if error_message:
+                self.failed.emit(f"{error_message} (リトライ回数: {retry_count}, ステータス: {status_code})")
+                return
+            if retry_count:
+                logging.info("Chaos mix succeeded after retries=%s", retry_count)
+            if finish_reason in LENGTH_LIMIT_REASONS:
+                self.failed.emit("LLM応答がトークン制限に達しました。短くして再試行してください。")
+                return
+            self.finished.emit((content or "").strip())
+        except Exception:
+            self.failed.emit(get_exception_trace())
+
+    def _build_prompts(self) -> Tuple[str, str]:
+        import uuid
+
+        limit_instruction = ""
+        if self.length_limit > 0:
+            limit_instruction = f"\nIMPORTANT: Keep the final description under {self.length_limit} characters."
+
+        detail_lines = "\n".join(f"- {sanitize_to_english(fragment)}" for fragment in self.fragments if fragment)
+        if not detail_lines:
+            detail_lines = "- (no sentence split detected)"
+
+        anchor_terms = _extract_anchor_terms(self.text, max_terms=8)
+        anchor_line = ", ".join(anchor_terms) if anchor_terms else "(none)"
+        nonce = uuid.uuid4().hex[:8]
+
+        system_prompt = _append_temperature_hint(
+            "You are a chaotic scene blender. Force every fragment from a Midjourney prompt to coexist in the same physical location and the same moment. "
+            "Describe the result as one vivid, continuous tableau packed with overlapping motifs, lighting, and props. "
+            "Keep syntax clean, keep it in English, and never drop the essential nouns from the source."
+            f"{limit_instruction}",
+            self.model,
+            LLM_TEMPERATURE,
+        )
+        user_prompt = (
+            "Task: Smash all fragments into a single overwhelming scene. Every subject must appear simultaneously; do NOT split into multiple shots.\n"
+            "- Mention the collisions and impossible overlaps explicitly.\n"
+            "- Keep anchor terms verbatim where possible.\n"
+            "- Treat lighting/atmosphere cues as happening together.\n"
+            "- Output exactly one paragraph in English.\n"
+            f"{limit_instruction}\n"
+            f"Nonce: {nonce}\n"
+            f"Original prompt body:\n{sanitize_to_english(self.text)}\n\n"
+            f"Sentence fragments:\n{detail_lines}\n"
+            f"Anchor terms: {anchor_line}\n"
+            "Output:"
+        )
+        return system_prompt, user_prompt
+
+
 def sanitize_to_english(text: str) -> str:
     """基本的に英語出力を維持するための軽いサニタイズ。"""
     replacements = {
@@ -1406,6 +1489,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.available_model_choices = list(AVAILABLE_LLM_MODELS)
         self._thread: Optional[QtCore.QThread] = None
         self._movie_llm_context: Optional[dict] = None
+        self._chaos_mix_context: Optional[dict] = None
         self._tail_presets_watcher: Optional[QtCore.QFileSystemWatcher] = None
         self._arrange_presets_watcher: Optional[QtCore.QFileSystemWatcher] = None
         self.font_scale_level = 0
@@ -1869,6 +1953,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         arrange_btn.setToolTip("選択したプリセットと強度でプロンプトを再構築し、結果をコピーします。")
         arrange_btn.clicked.connect(self.handle_arrange_llm_and_copy)
         adjust_layout.addWidget(arrange_btn)
+
+        chaos_mix_btn = QtWidgets.QPushButton("カオスミックス")
+        chaos_mix_btn.setToolTip("メインプロンプトの断片を一つのカオスな場面へ無理やり結合し、全文をコピーします。")
+        chaos_mix_btn.clicked.connect(self.handle_chaos_mix_and_copy)
+        adjust_layout.addWidget(chaos_mix_btn)
         
         adjust_layout.addStretch(1)
 
@@ -2428,6 +2517,26 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         
         self._start_arrange_llm_worker(src, preset_label, strength, guidance, length_adjust, length_limit)
 
+    def handle_chaos_mix_and_copy(self):
+        """断片的なメインプロンプトを一つのカオスシーンへ結合する。"""
+        prepared = self._prepare_movie_prompt_parts()
+        if not prepared:
+            return
+        main_text, options_tail, movie_tail = prepared
+        if not main_text.strip():
+            QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
+            return
+        fragments = self._extract_sentence_details(main_text)
+        limit_text = self.combo_length_limit_arrange.currentText()
+        length_limit = int(limit_text) if limit_text.isdigit() else 0
+        self._start_chaos_mix_llm_worker(
+            main_text=main_text,
+            fragments=fragments,
+            movie_tail=movie_tail,
+            options_tail=options_tail,
+            length_limit=length_limit,
+        )
+
     def _start_arrange_llm_worker(self, text, preset_label, strength, guidance, length_adjust, length_limit):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
@@ -2471,6 +2580,62 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         worker.deleteLater()
         self._thread = None
         QtWidgets.QMessageBox.critical(self, "エラー", f"アレンジ処理でエラーが発生しました:\n{error}")
+
+    def _start_chaos_mix_llm_worker(self, main_text: str, fragments: List[str], movie_tail: str, options_tail: str, length_limit: int):
+        if not LLM_ENABLED:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
+            return
+        worker = ChaosMixLLMWorker(
+            text=main_text,
+            fragments=fragments,
+            model=self.combo_llm_model.currentText(),
+            length_limit=length_limit,
+        )
+        context = {
+            "movie_tail": movie_tail,
+            "options_tail": options_tail,
+        }
+        if self._start_background_worker(worker, self._handle_chaos_mix_success, self._handle_chaos_mix_failure):
+            self._chaos_mix_context = context
+
+    def _handle_chaos_mix_success(self, thread: QtCore.QThread, worker: ChaosMixLLMWorker, result: str):
+        self._set_loading_state(False)
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        context = self._chaos_mix_context or {}
+        self._chaos_mix_context = None
+        if not result:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
+            return
+        movie_tail = (context.get("movie_tail") or "").strip()
+        options_tail = (context.get("options_tail") or "").strip()
+        flags_tail = self._make_tail_flags_json().strip()
+        parts: List[str] = []
+        core = result.strip()
+        if core:
+            parts.append(core)
+        if movie_tail:
+            parts.append(movie_tail)
+        if flags_tail:
+            parts.append(flags_tail)
+        if options_tail:
+            parts.append(options_tail)
+        combined = " ".join(segment for segment in parts if segment)
+        self.text_output.setPlainText(combined)
+        self._update_internal_prompt_from_text(combined)
+        QtGui.QGuiApplication.clipboard().setText(combined)
+        QtWidgets.QMessageBox.information(self, "コピー完了", "カオスミックス結果をコピーしました。")
+
+    def _handle_chaos_mix_failure(self, thread: QtCore.QThread, worker: ChaosMixLLMWorker, error: str):
+        self._set_loading_state(False)
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        self._chaos_mix_context = None
+        QtWidgets.QMessageBox.critical(self, "エラー", f"カオスミックス処理でエラーが発生しました:\n{error}")
 
 
     # =============================
