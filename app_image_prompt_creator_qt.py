@@ -1481,6 +1481,142 @@ class ArrangeLLMWorker(QtCore.QObject):
 
 
 
+class GeneratePromptLLMWorker(QtCore.QObject):
+    """通常生成をLLMでまとめて行うワーカー。行数と属性条件からプロンプト群を生成する。"""
+
+    finished = QtCore.Signal(str)
+    failed = QtCore.Signal(str)
+
+    def __init__(
+        self,
+        model: str,
+        total_lines: int,
+        attribute_conditions: List[dict],
+        exclusion_words: List[str],
+        chaos_level: int,
+    ):
+        super().__init__()
+        self.model = model
+        self.total_lines = max(1, int(total_lines) if total_lines else 1)
+        self.attribute_conditions = attribute_conditions or []
+        self.exclusion_words = exclusion_words or []
+        # カオス度スライダーの値（1〜10）を安全に正規化して保持する
+        try:
+            level = int(chaos_level)
+        except Exception:
+            level = 1
+        self.chaos_level = max(1, min(10, level))
+
+    def _effective_temperature(self) -> float:
+        """カオス度から、このワーカー専用の実効temperatureを算出する。"""
+
+        base = LLM_TEMPERATURE if LLM_TEMPERATURE is not None else 0.7
+        center_level = 5.0  # レベル5付近で base と同程度の温度
+        span = 0.6          # レベル差による最大±0.3程度の揺らぎ
+        delta = (self.chaos_level - center_level) / 9.0
+        temp = base + delta * span
+        return max(0.1, min(1.5, temp))
+
+    @QtCore.Slot()
+    def run(self):
+        try:
+            api_key = os.getenv(OPENAI_API_KEY_ENV)
+            if not api_key:
+                self.failed.emit(f"{OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
+                return
+            effective_temp = self._effective_temperature()
+            system_prompt, user_prompt = self._build_prompts(effective_temp)
+            content, finish_reason, _, retry_count, error_message, status_code = send_llm_request(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=effective_temp,
+                max_tokens=LLM_MAX_COMPLETION_TOKENS,
+                timeout=LLM_TIMEOUT,
+                model_name=self.model,
+                include_temperature=LLM_INCLUDE_TEMPERATURE,
+            )
+            if error_message:
+                self.failed.emit(f"{error_message} (リトライ回数: {retry_count}, ステータス: {status_code})")
+                return
+            if retry_count:
+                logging.info(
+                    "Prompt LLM generation succeeded after retries=%s (chaos_level=%s, effective_temp=%.3f)",
+                    retry_count,
+                    self.chaos_level,
+                    effective_temp,
+                )
+            if finish_reason in LENGTH_LIMIT_REASONS:
+                self.failed.emit("LLM応答がトークン制限に達しました。行数を減らすかプロンプトを短くして再試行してください。")
+                return
+            self.finished.emit((content or "").strip())
+        except Exception:
+            self.failed.emit(get_exception_trace())
+
+    def _build_prompts(self, temperature: float) -> Tuple[str, str]:
+        """通常生成用の属性条件と除外語句から、LLMへのプロンプトを構築する。"""
+
+        attr_lines: List[str] = []
+        for cond in self.attribute_conditions:
+            name = str(cond.get("attribute_name", "") or "")
+            detail = str(cond.get("detail", "") or "")
+            requested = cond.get("requested_count", 0) or 0
+            if requested > 0:
+                line = f"- {detail} (attribute: {name}, approx {requested} fragments)"
+            else:
+                line = f"- {detail} (attribute: {name})"
+            attr_lines.append(line)
+
+        if attr_lines:
+            attr_block = "\n".join(attr_lines)
+        else:
+            attr_block = "- (no specific attribute constraints; freely mix subjects, environments, materials and styles)"
+
+        if self.exclusion_words:
+            excl_block = ", ".join(sorted({w for w in self.exclusion_words if w}))
+        else:
+            excl_block = "(none)"
+
+        # カオス度に応じた説明テキスト（LLM側の挙動を人間が直感しやすいようにする）
+        if self.chaos_level <= 2:
+            chaos_desc = "very stable, low randomness"
+        elif self.chaos_level <= 4:
+            chaos_desc = "mild variation with mostly stable structure"
+        elif self.chaos_level <= 6:
+            chaos_desc = "noticeable creative variation without losing overall coherence"
+        elif self.chaos_level <= 8:
+            chaos_desc = "strongly varied, experimental compositions"
+        else:
+            chaos_desc = "maximum chaos: wild, highly unexpected compositions and mixtures"
+
+        system_prompt = _append_temperature_hint(
+            "You generate diverse, high-quality prompt fragments for image generation models like Midjourney. "
+            "Follow the requested attribute mix and avoid forbidden words while keeping outputs concise and visual.",
+            self.model,
+            temperature,
+        )
+        user_prompt = (
+            f"Generate {self.total_lines} distinct prompt fragments for image generation in English.\n"
+            "Formatting rules:\n"
+            "- Output exactly one fragment per line.\n"
+            "- Do NOT prepend numbers, bullets, or labels.\n"
+            "- Each fragment should be a single concise sentence, compatible with Midjourney-style prompts.\n"
+            "- Avoid producing identical fragments.\n\n"
+            "Chaos control:\n"
+            f"- Chaos level: {self.chaos_level} ({chaos_desc}).\n"
+            "- Lower levels (1-3) should keep structure and style relatively consistent across fragments.\n"
+            "- Medium levels (4-6) may change composition and style moderately, but keep subjects readable and not absurd.\n"
+            "- Higher levels (7-10) may aggressively remix subjects, environments and materials; allow unusual angles and combinations.\n"
+            "- At level 5 or above, ensure fragments feel clearly distinct and non-repetitive.\n\n"
+            "Attribute preferences (approximate distribution across the fragments):\n"
+            f"{attr_block}\n\n"
+            "Words or themes to avoid (if these substrings appear, treat it as a hard prohibition): "
+            f"{excl_block}\n\n"
+            "If no attributes are given, create a varied but coherent mix of subjects, environments, materials, and visual styles."
+        )
+        return system_prompt, user_prompt
+
+
 class PromptGeneratorWindow(QtWidgets.QMainWindow):
     """PySide6 版のメインウィンドウ。UIとイベントを集約。"""
 
@@ -1500,6 +1636,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._thread: Optional[QtCore.QThread] = None
         self._movie_llm_context: Optional[dict] = None
         self._chaos_mix_context: Optional[dict] = None
+        self._llm_generate_context: Optional[dict] = None
         self._tail_presets_watcher: Optional[QtCore.QFileSystemWatcher] = None
         self._arrange_presets_watcher: Optional[QtCore.QFileSystemWatcher] = None
         self.font_scale_level = 0
@@ -1665,6 +1802,45 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.check_dedup.setChecked(bool(DEDUPLICATE_PROMPTS))
         self.check_dedup.stateChanged.connect(self.auto_update)
         basic_grid.addWidget(self.check_dedup, 1, 0, 1, 2)
+
+        basic_grid.addWidget(QtWidgets.QLabel("生成方法:"), 2, 0)
+        mode_container = QtWidgets.QWidget()
+        mode_layout = QtWidgets.QHBoxLayout(mode_container)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        self.radio_mode_db = QtWidgets.QRadioButton("DB生成")
+        self.radio_mode_llm = QtWidgets.QRadioButton("LLM生成")
+        self.radio_mode_db.setChecked(True)
+        mode_layout.addWidget(self.radio_mode_db)
+        mode_layout.addWidget(self.radio_mode_llm)
+        mode_layout.addStretch(1)
+        basic_grid.addWidget(mode_container, 2, 1, 1, 2)
+
+        if not LLM_ENABLED:
+            self.radio_mode_llm.setEnabled(False)
+            self.radio_mode_llm.setToolTip("LLM生成を利用するには desktop_gui_settings.yaml の LLM_ENABLED を true に設定してください。")
+
+        # LLM生成時のみ有効になるカオス度スライダー（1〜10）
+        basic_grid.addWidget(QtWidgets.QLabel("カオス度(LLM):"), 3, 0)
+        self._llm_chaos_container = QtWidgets.QWidget()
+        chaos_layout = QtWidgets.QHBoxLayout(self._llm_chaos_container)
+        chaos_layout.setContentsMargins(0, 0, 0, 0)
+        self.slider_llm_chaos = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.slider_llm_chaos.setRange(1, 10)
+        self.slider_llm_chaos.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.slider_llm_chaos.setTickInterval(1)
+        self.slider_llm_chaos.setValue(1)
+        self.slider_llm_chaos.setToolTip("LLM生成時の創造性（カオス度）を1〜10で指定します。1は安定寄り、5で十分強い変化、10で最大限カオスなバリエーションを許容します。")
+        self.label_llm_chaos_val = QtWidgets.QLabel("1 (安定)")
+        self.slider_llm_chaos.valueChanged.connect(self._on_llm_chaos_change)
+        chaos_layout.addWidget(self.slider_llm_chaos, 1)
+        chaos_layout.addWidget(self.label_llm_chaos_val)
+        self._llm_chaos_container.setVisible(False)
+        basic_grid.addWidget(self._llm_chaos_container, 3, 1, 1, 2)
+
+        # モード切替時にカオス度バーの表示/非表示を更新
+        self.radio_mode_db.toggled.connect(self._update_generate_mode_ui)
+        self.radio_mode_llm.toggled.connect(self._update_generate_mode_ui)
+        self._update_generate_mode_ui()
 
         layout.addWidget(basic_group)
 
@@ -2509,6 +2685,29 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         labels = {0: "0 (微細)", 1: "1 (弱)", 2: "2 (標準)", 3: "3 (強)"}
         self.label_strength_val.setText(labels.get(value, str(value)))
 
+    def _on_llm_chaos_change(self, value: int):
+        """LLM生成用カオス度スライダーの表示ラベルを更新する。"""
+        if value <= 2:
+            label = f"{value} (安定寄り)"
+        elif value <= 4:
+            label = f"{value} (控えめ)"
+        elif value == 5:
+            label = "5 (強め)"
+        elif value <= 7:
+            label = f"{value} (かなりカオス)"
+        elif value <= 9:
+            label = f"{value} (高カオス)"
+        else:
+            label = "10 (最大)"
+        self.label_llm_chaos_val.setText(label)
+
+    def _update_generate_mode_ui(self):
+        """DB生成/LLM生成モード切替に応じてUIの表示を更新する。"""
+        is_llm = self._is_llm_generation_mode()
+        container = getattr(self, "_llm_chaos_container", None)
+        if container is not None:
+            container.setVisible(is_llm)
+
     def handle_arrange_llm_and_copy(self):
         """アレンジ機能を実行し、結果をコピーする。"""
         src = self.text_output.toPlainText().strip()
@@ -2752,7 +2951,35 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         # 上記条件を満たさない場合は、ユーザーの自由入力をそのまま利用する。
         return text
 
+    def _normalize_sentences(self, texts: Iterable[str]) -> List[str]:
+        """文末の句読点を軽く整形し、Midjourney向けの短文として扱いやすい形に揃える。"""
+        processed: List[str] = []
+        for raw in texts:
+            if raw is None:
+                continue
+            text = str(raw).strip()
+            if not text:
+                continue
+            if text.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
+                text = text[:-1] + "."
+            elif not text.endswith("."):
+                text += "."
+            processed.append(text)
+        return processed
+
+    def _is_llm_generation_mode(self) -> bool:
+        """現在の通常生成モードが LLM生成 かどうかを判定する。"""
+        radio = getattr(self, "radio_mode_llm", None)
+        return bool(radio and radio.isChecked())
+
     def generate_text(self):
+        """通常生成ボタンのエントリポイント。DB生成/LLM生成をモードに応じて切り替える。"""
+        if self._is_llm_generation_mode():
+            self._generate_text_via_llm()
+        else:
+            self._generate_text_via_db()
+
+    def _generate_text_via_db(self):
         db_path = self._get_db_path_or_warn()
         if not db_path:
             return
@@ -2789,7 +3016,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                             {
                                 "attribute_id": attr.id,
                                 "selected_detail_id": selected_detail_id,
-                                "caller": "generate_text",
+                                "caller": "generate_text_db",
                             },
                         )
                         continue
@@ -2877,14 +3104,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                     return
 
                 random.shuffle(selected_lines)
-                processed_lines = []
-                for line in selected_lines:
-                    text = line[1].strip()
-                    if text.endswith((",", "、", ";", ":", "；", "：", "!", "?", "\n")):
-                        text = text[:-1] + "."
-                    elif not text.endswith("."):
-                        text += "."
-                    processed_lines.append(text)
+                processed_lines = self._normalize_sentences((line[1] for line in selected_lines))
 
                 if not processed_lines:
                     self.main_prompt = ""
@@ -2905,11 +3125,150 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             log_structured(
                 logging.ERROR,
                 "db_connection_failed",
-                {"db_path": str(db_path), "error": str(exc), "caller": "generate_text"},
+                {"db_path": str(db_path), "error": str(exc), "caller": "generate_text_db"},
             )
             QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
         except Exception:
             QtWidgets.QMessageBox.critical(self, "エラー", f"エラーが発生しました: {get_exception_trace()}")
+
+    def _generate_text_via_llm(self):
+        """属性条件と行数に応じて、通常生成をLLMでまとめて実行する。"""
+        if not LLM_ENABLED:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "注意",
+                "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。",
+            )
+            return
+
+        total_lines = int(self.spin_row_num.value())
+        exclusion_words = [w.strip() for w in self.combo_exclusion.currentText().split(",") if w.strip()]
+        if self.check_exclusion.isChecked() and exclusion_words:
+            self._update_exclusion_words(exclusion_words)
+
+        attribute_conditions: List[dict] = []
+        for attr in self.attribute_types:
+            detail_combo = self.attribute_combo_map.get(attr.id)
+            count_combo = self.attribute_count_map.get(attr.id)
+            if not detail_combo or not count_combo:
+                continue
+            selected_detail_id = detail_combo.currentData()
+            count_text = count_combo.currentText()
+            if selected_detail_id is None or count_text == "-":
+                continue
+            try:
+                count_int = int(count_text)
+            except ValueError:
+                continue
+            if count_int <= 0:
+                continue
+            detail_obj = next((d for d in self.attribute_details if d.id == selected_detail_id), None)
+            if not detail_obj:
+                continue
+            attribute_conditions.append(
+                {
+                    "attribute_name": attr.attribute_name,
+                    "detail": detail_obj.description,
+                    "requested_count": count_int,
+                }
+            )
+
+        chaos_level = getattr(self, "slider_llm_chaos", None).value() if hasattr(self, "slider_llm_chaos") else 1
+        worker = GeneratePromptLLMWorker(
+            model=self.combo_llm_model.currentText(),
+            total_lines=total_lines,
+            attribute_conditions=attribute_conditions,
+            exclusion_words=exclusion_words if self.check_exclusion.isChecked() else [],
+            chaos_level=chaos_level,
+        )
+        context = {
+            "total_lines": total_lines,
+            "deduplicate": bool(self.check_dedup.isChecked()),
+            "exclusion_words": exclusion_words if self.check_exclusion.isChecked() else [],
+        }
+        if self._start_background_worker(worker, self._handle_generate_llm_success, self._handle_generate_llm_failure):
+            self._llm_generate_context = context
+
+    def _handle_generate_llm_success(self, thread: QtCore.QThread, worker: GeneratePromptLLMWorker, result: str):
+        self._set_loading_state(False)
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        context = self._llm_generate_context or {}
+        self._llm_generate_context = None
+
+        raw_output = (result or "").strip()
+        if not raw_output:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
+            return
+
+        target_total = int(context.get("total_lines") or self.spin_row_num.value() or 1)
+        dedup = bool(context.get("deduplicate"))
+        exclusion_words: List[str] = context.get("exclusion_words") or []
+
+        lines = [line.strip() for line in raw_output.splitlines() if line.strip()]
+        cleaned_lines: List[str] = []
+        for line in lines:
+            m = re.match(r"^\s*(\d+[\.\):\-]|[-*])\s+(.*)$", line)
+            if m:
+                cleaned_lines.append(m.group(2).strip())
+            else:
+                cleaned_lines.append(line)
+
+        if exclusion_words:
+            cleaned_lines = [
+                l for l in cleaned_lines
+                if not any(word for word in exclusion_words if word and word in l)
+            ]
+
+        if dedup:
+            seen: Set[str] = set()
+            uniq: List[str] = []
+            for l in cleaned_lines:
+                key = l.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                uniq.append(l)
+            cleaned_lines = uniq
+
+        if not cleaned_lines:
+            if raw_output:
+                cleaned_lines = [raw_output]
+            else:
+                QtWidgets.QMessageBox.warning(self, "注意", "LLM出力から有効な行を抽出できませんでした。")
+                return
+
+        if target_total > 0:
+            cleaned_lines = cleaned_lines[:target_total]
+
+        processed_lines = self._normalize_sentences(cleaned_lines)
+        if not processed_lines:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLM出力の整形に失敗しました。再試行してください。")
+            return
+
+        self.main_prompt = " ".join(processed_lines)
+        self.update_option()
+        log_structured(
+            logging.INFO,
+            "llm_generation_success",
+            {
+                "requested_lines": target_total,
+                "actual_fragments": len(processed_lines),
+                "deduplicate": dedup,
+                "exclusion_words": exclusion_words,
+            },
+        )
+
+    def _handle_generate_llm_failure(self, thread: QtCore.QThread, worker: GeneratePromptLLMWorker, error: str):
+        self._set_loading_state(False)
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        self._llm_generate_context = None
+        QtWidgets.QMessageBox.critical(self, "エラー", f"LLM生成処理でエラーが発生しました:\n{error}")
 
     def _show_no_result_warning(
         self,
