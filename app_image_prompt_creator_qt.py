@@ -2357,7 +2357,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
     def auto_update(self):
         if self.check_autofix.isChecked() and self.main_prompt:
-            self.update_option()
+            # 自動反映時は、現在の出力欄テキストを基準に main_prompt 等を同期してから末尾を再構成する。
+            self.update_option(sync_from_text=True)
 
     def _open_csv_import_dialog(self):
         dialog = QtWidgets.QDialog(self)
@@ -2825,6 +2826,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         flags_tail = self._make_tail_flags_json()
         clean = (base_without_flags or "").rstrip() + flags_tail
 
+        # アレンジ後の全文を内部状態の最新版として反映し、後続操作でメイン部が巻き戻らないようにする。
+        self._update_internal_prompt_from_text(clean)
         self.text_output.setPlainText(clean)
         QtGui.QGuiApplication.clipboard().setText(clean)
         QtWidgets.QMessageBox.information(self, "コピー完了", "アレンジ済みプロンプトをコピーしました。")
@@ -3167,7 +3170,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                         0,
                         dedup_removed,
                     )
-                    self.update_option()
+                    # 結果なしの場合も、内部状態を空にしたうえで末尾構成だけ再描画する
+                    self.update_option(sync_from_text=False)
                     return
 
                 random.shuffle(selected_lines)
@@ -3183,11 +3187,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                         len(processed_lines),
                         dedup_removed,
                     )
-                    self.update_option()
+                    self.update_option(sync_from_text=False)
                     return
 
                 self.main_prompt = " ".join(processed_lines)
-                self.update_option()
+                # DB生成で確定した main_prompt をそのまま採用し、末尾を再構成する
+                self.update_option(sync_from_text=False)
         except sqlite3.Error as exc:
             log_structured(
                 logging.ERROR,
@@ -3395,7 +3400,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             return
 
         self.main_prompt = " ".join(processed_lines)
-        self.update_option()
+        # LLM生成で確定した main_prompt をそのまま採用し、末尾を再構成する
+        self.update_option(sync_from_text=False)
         chaos_level = int(context.get("chaos_level") or 1)
         attr_conditions = context.get("attribute_conditions") or []
         log_structured(
@@ -3521,7 +3527,17 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         )
         QtWidgets.QMessageBox.warning(self, "データ不足", message)
 
-    def update_option(self):
+    def update_option(self, sync_from_text: bool = True):
+        """
+        末尾固定部とMJオプションを再構成して出力欄へ反映する。
+
+        - sync_from_text=True: 現在の出力欄テキストから main_prompt / option を逆算してから再構成
+        - sync_from_text=False: 直前に確定した main_prompt / option をそのまま使用（通常生成直後など）
+        """
+        if sync_from_text:
+            # 手動編集や他機能の結果を基準に、内部状態を最新テキストへ合わせてから再構成する。
+            self._update_internal_prompt_from_text(self.text_output.toPlainText())
+
         self.option_prompt = self._make_option_prompt()
         self.tail_free_texts = self._make_tail_text()
         tail_flags = self._make_tail_flags_json()
@@ -3529,6 +3545,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.text_output.setPlainText(result)
 
     def update_tail_free_texts(self):
+        """
+        「末尾固定部のみ更新」ボタンの処理。
+
+        現在の出力欄テキストをまず内部状態に取り込み、その上で末尾固定文と末尾2(JSONフラグ)だけを更新する。
+        これにより、LLMアレンジや手動編集の後でもメイン部が巻き戻らない。
+        """
+        self._update_internal_prompt_from_text(self.text_output.toPlainText())
         self.tail_free_texts = self._make_tail_text()
         tail_flags = self._make_tail_flags_json()
         result = f"{self.main_prompt}{self.tail_free_texts}{tail_flags}{self.option_prompt}"
@@ -3674,6 +3697,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         base_without_flags, _ = self._detach_content_flags_tail(merged)
         flags_tail = self._make_tail_flags_json()
         clean = (base_without_flags or "").rstrip() + flags_tail
+        # 文字数調整の結果も内部状態へ反映し、後続操作で旧テキストへ巻き戻らないようにする。
+        self._update_internal_prompt_from_text(clean)
         self.text_output.setPlainText(clean)
         QtGui.QGuiApplication.clipboard().setText(clean)
         QtWidgets.QMessageBox.information(self, "コピー完了", "LLMで調整したプロンプトをコピーしました。")
