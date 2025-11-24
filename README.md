@@ -163,18 +163,22 @@ setx OPENAI_API_KEY "sk-xxxxx"
 #### 末尾2(JSONフラグ)と content_flags
 - 左ペイン「スタイル・オプション」タブの `末尾2 (JSONフラグ)` グループでは、以下2段構成で映像メタ情報を JSON として末尾に付与できます。
   - `末尾2を反映` チェック: 末尾2の JSON を出力に含めるかどうかのマスタースイッチ。
-  - 個別フラグ: `ナレーション` / `人物` / `BGM` / `環境音` / `人物のセリフ` / `字幕`
+  - 個別フラグ: `ナレーション` / `人物` / `BGM` / `環境音` / `人物のセリフ` / `セリフ字幕` / `テロップ/テキスト`
   - 構成カット数: `(Auto)` / `1` / `2` / `3` / `4` / `5` / `6`
+  - 動画中の言語: `(Auto)` / `日本語` / `英語`
 - 出力される JSON 例:
   ```json
-  {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"planned_cuts":3}}
+  {"content_flags":{"narration":true,"person_present":false,"bgm":true,"ambient_sound":true,"dialogue":false,"on_screen_spoken_dialogue_subtitles":true,"on_screen_non_dialogue_text_overlays":true,"planned_cuts":3,"spoken_language":"ja"}}
   ```
 - `narration` / `bgm` / `dialogue` / `ambient_sound` は音声要素、`person_present` は映像内に人物が映っているかどうかの真偽値を表します。
 - `ambient_sound` は風・水・街並み・機械音など「環境そのものから発生する音」が存在するかどうかを表します。
+- `on_screen_spoken_dialogue_subtitles` は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されているかどうか」を表します。
+- `on_screen_non_dialogue_text_overlays` は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイ」が存在するかどうかを表します。
 - `planned_cuts` は「作品全体をおおよそ何カットで構成するか」の目安を表し、`1-6` のいずれかを指定します。`(Auto)` 選択時は `planned_cuts` フィールド自体が省略され、モデルに任せる前提になります。
+- `spoken_language` は「動画内で想定される主な話し言葉の言語」を表し、`"ja"`（日本語） または `"en"`（英語）を取ります。`(Auto)` 選択時は `spoken_language` フィールド自体が省略されます。
 - 仕様:
   - `末尾2を反映` が **OFF** の場合: フラグ状態に関わらず `content_flags` JSON は一切付与されません。
-  - `末尾2を反映` が **ON** の場合: 4つのフラグがすべて `false` であっても `{"content_flags":{...}}` JSON が必ず末尾に付与されます（「末尾固定部のみ更新」「オプションのみ更新」「動画用に整形(JSON)」など、末尾再構成のタイミングですべて反映されます）。
+  - `末尾2を反映` が **ON** の場合: フラグがすべて `false` であっても `{"content_flags":{...}}` JSON が必ず末尾に付与されます（「末尾固定部のみ更新」「オプションのみ更新」「動画用に整形(JSON)」など、末尾再構成のタイミングですべて反映されます）。
 - 正例: `末尾2を反映` をON → `ナレーション` と `BGM` のみチェック → 「構成カット数」を `3` に設定 → 生成結果末尾に `{"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false,"planned_cuts":3}}` が付与される。
 - 正例: `末尾2を反映` をON → 全フラグOFF / 構成カット数 `(Auto)` → 生成結果末尾に `{"content_flags":{"narration":false,"person_present":false,"bgm":false,"dialogue":false}}` が付与され、「音声・人物はすべて false、カット数はモデル任せ」であることをモデルに伝えられる。
 - 負例: 個別フラグだけONにして `末尾2を反映` をOFFのままにする → JSONが付与されず、音声・人物の有無がモデルに伝わらない。末尾2を使う場合は必ずマスターチェックをONにしてください。

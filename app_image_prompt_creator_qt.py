@@ -1962,6 +1962,21 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         cuts_row.addStretch(1)
         tail2_layout.addLayout(cuts_row)
 
+        # 動画中の主な言語 (Auto / 日本語 / 英語)
+        lang_row = QtWidgets.QHBoxLayout()
+        lang_row.addWidget(QtWidgets.QLabel("動画中の言語:"))
+        self.combo_tail_language = QtWidgets.QComboBox()
+        self.combo_tail_language.addItem("(Auto)", userData="")
+        self.combo_tail_language.addItem("日本語", userData="ja")
+        self.combo_tail_language.addItem("英語", userData="en")
+        self.combo_tail_language.setToolTip(
+            "動画内で想定される主な話し言葉の言語を指定します。(Auto) の場合は JSON に言語フィールドを含めません。"
+        )
+        self.combo_tail_language.currentIndexChanged.connect(self.auto_update)
+        lang_row.addWidget(self.combo_tail_language)
+        lang_row.addStretch(1)
+        tail2_layout.addLayout(lang_row)
+
         tail_form.addRow(tail2_group)
         style_layout.addLayout(tail_form)
 
@@ -2914,18 +2929,20 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 "bgm": true,
                 "ambient_sound": true,
                 "dialogue": false,
-                "spoken_dialogue_subtitles": true,
-                "editorial_text_overlays": false,
-                "planned_cuts": 3
+                "on_screen_spoken_dialogue_subtitles": true,
+                "on_screen_non_dialogue_text_overlays": false,
+                "planned_cuts": 3,
+                "spoken_language": "ja"
             }
         }
-
+        
         narration / bgm / ambient_sound / dialogue は音声要素、
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグです。
-        spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されているかどうか」を表します。
-        editorial_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイ」が存在するかどうかを表します。
+        on_screen_spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されているかどうか」を表します。
+        on_screen_non_dialogue_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイ」が存在するかどうかを表します。
         planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6）を表します。
-        (Auto) 選択時や未指定時は planned_cuts フィールド自体を省略します。
+        spoken_language は「動画内で想定される主な話し言葉の言語」を表し、"ja" または "en" を取ります。
+        (Auto) 選択時や未指定時は planned_cuts / spoken_language フィールド自体を省略します。
         """
 
         # マスターチェックがOFFなら、フラグの値に関わらず JSON は付与しない
@@ -2940,9 +2957,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             "ambient_sound": bool(self.check_tail_flag_ambient.isChecked()),
             "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
             # セリフそのものに対応した字幕（セリフ字幕）
-            "spoken_dialogue_subtitles": bool(self.check_tail_flag_dialogue_subtitle.isChecked()),
+            "on_screen_spoken_dialogue_subtitles": bool(self.check_tail_flag_dialogue_subtitle.isChecked()),
             # セリフとは異なる編集用テロップ/テキスト（ツッコミ・解説・効果音文字など）
-            "editorial_text_overlays": bool(self.check_tail_flag_telop.isChecked()),
+            "on_screen_non_dialogue_text_overlays": bool(self.check_tail_flag_telop.isChecked()),
         }
         # 構成カット数 (1〜6) を planned_cuts として追加 (Auto の場合は省略)
         cut_combo = getattr(self, "combo_tail_cut_count", None)
@@ -2955,6 +2972,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                         flags["planned_cuts"] = cuts
                 except ValueError:
                     pass
+        # 動画中の主な話し言葉の言語 ("ja" / "en") を spoken_language として追加 (Auto の場合は省略)
+        lang_combo = getattr(self, "combo_tail_language", None)
+        if isinstance(lang_combo, QtWidgets.QComboBox):
+            lang_code = lang_combo.currentData()
+            if isinstance(lang_code, str) and lang_code in ("ja", "en"):
+                flags["spoken_language"] = lang_code
         try:
             json_text = json.dumps({"content_flags": flags}, ensure_ascii=False)
         except Exception:
