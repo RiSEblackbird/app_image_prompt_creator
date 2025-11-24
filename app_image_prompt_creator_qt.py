@@ -47,6 +47,10 @@ AVAILABLE_LLM_MODELS = [
     "gpt-5.1",
 ]
 DEFAULT_LLM_MODEL = AVAILABLE_LLM_MODELS[0]
+LANGUAGE_COMBO_CHOICES = [
+    ("英語", "en"),
+    ("日本語", "ja"),
+]
 
 # 末尾プリセットのデフォルト定義。
 # YAML が欠損・パース失敗した場合にも既存挙動を維持できるよう、
@@ -227,6 +231,46 @@ def log_structured(level: int, event: str, context: Optional[dict] = None) -> No
         safe_context = {str(k): _coerce_json_safe(v) for k, v in context.items()}
         payload.update(safe_context)
     logging.log(level, json.dumps(payload, ensure_ascii=False))
+
+
+def _normalize_language_code(code: Optional[str]) -> str:
+    """UIなどから受け取った言語コードを 'en' / 'ja' のいずれかへ正規化する。"""
+
+    return "ja" if code == "ja" else "en"
+
+
+def _language_directives(code: Optional[str]) -> Tuple[str, str, str]:
+    """LLMプロンプトに埋め込む言語指定（コード/ラベル/指示文）をまとめて返す。"""
+
+    normalized = _normalize_language_code(code)
+    if normalized == "ja":
+        label = "Japanese"
+        instruction = (
+            "Output language: Japanese. Respond ONLY in Japanese sentences except for unavoidable proper nouns."
+        )
+    else:
+        label = "English"
+        instruction = "Output language: English. Respond ONLY in English sentences."
+    return normalized, label, instruction
+
+
+def _combo_language_code(combo: Optional[QtWidgets.QComboBox]) -> str:
+    """コンボボックスの userData から言語コードを取り出し、正規化して返す。"""
+
+    if combo is None:
+        return "en"
+    data = combo.currentData()
+    return _normalize_language_code(data if isinstance(data, str) else None)
+
+
+def _create_language_combo() -> QtWidgets.QComboBox:
+    """英語/日本語の2択を持つコンボボックスを生成する。"""
+
+    combo = QtWidgets.QComboBox()
+    for label, code in LANGUAGE_COMBO_CHOICES:
+        combo.addItem(label, userData=code)
+    combo.setCurrentIndex(0)
+    return combo
 
 
 def install_global_exception_logger():
@@ -958,12 +1002,13 @@ class LLMWorker(QtCore.QObject):
     finished = QtCore.Signal(str)
     failed = QtCore.Signal(str)
 
-    def __init__(self, text: str, model: str, length_hint: str, length_limit: int = 0):
+    def __init__(self, text: str, model: str, length_hint: str, length_limit: int = 0, output_language: str = "en"):
         super().__init__()
         self.text = text
         self.model = model
         self.length_hint = length_hint
         self.length_limit = length_limit
+        self.output_language = _normalize_language_code(output_language)
 
     @QtCore.Slot()
     def run(self):
@@ -976,14 +1021,18 @@ class LLMWorker(QtCore.QObject):
             limit_instruction = ""
             if self.length_limit > 0:
                 limit_instruction = f"\nIMPORTANT: Strictly limit the output to under {self.length_limit} characters."
+            _, language_label, language_sentence = _language_directives(self.output_language)
 
             user_prompt = (
                 f"Length adjustment request (target: {self.length_hint})\n"
                 f"Instruction: Adjust length ONLY. Preserve meaning, style, and technical parameters.\n"
+                f"{language_sentence}\n"
                 f"Text: {self.text}"
             )
             system_prompt = _append_temperature_hint(
-                "You are a text length adjustment specialist. Keep style but meet length hint." + limit_instruction,
+                "You are a text length adjustment specialist. Keep style but meet length hint."
+                + limit_instruction
+                + f"\nRespond strictly in {language_label}.",
                 self.model,
                 LLM_TEMPERATURE,
             )
@@ -1016,7 +1065,16 @@ class MovieLLMWorker(QtCore.QObject):
     finished = QtCore.Signal(str)
     failed = QtCore.Signal(str)
 
-    def __init__(self, text: str, model: str, mode: str, details: List[str], video_style: str = "", length_limit: int = 0):
+    def __init__(
+        self,
+        text: str,
+        model: str,
+        mode: str,
+        details: List[str],
+        video_style: str = "",
+        length_limit: int = 0,
+        output_language: str = "en",
+    ):
         super().__init__()
         self.text = text
         self.model = model
@@ -1024,6 +1082,7 @@ class MovieLLMWorker(QtCore.QObject):
         self.details = details or []
         self.video_style = video_style
         self.length_limit = length_limit
+        self.output_language = _normalize_language_code(output_language)
 
     @QtCore.Slot()
     def run(self):
@@ -1069,13 +1128,14 @@ class MovieLLMWorker(QtCore.QObject):
         limit_instruction = ""
         if self.length_limit > 0:
             limit_instruction = f"\nIMPORTANT: Strictly limit the output summary to under {self.length_limit} characters."
+        _, language_label, language_sentence = _language_directives(self.output_language)
 
         if self.mode == "world":
             system_prompt = _append_temperature_hint(
                 "You refine disjoint visual fragments into one coherent world description for a single 10-second cinematic clip. "
                 "Focus on the most impactful visual elements and atmosphere to fit the short duration. "
-                "Do not narrate events in sequence; describe one continuous world in natural English."
-                f"{limit_instruction}",
+                f"Do not narrate events in sequence; describe one continuous world in natural {language_label}."
+                f"{limit_instruction}\n{language_sentence}",
                 self.model,
                 LLM_TEMPERATURE,
             )
@@ -1085,6 +1145,7 @@ class MovieLLMWorker(QtCore.QObject):
                 f"{style_instruction}\n"
                 f"Source summary: {self.text}\n"
                 f"Fragments:\n{detail_lines}\n"
+                f"{language_sentence}\n"
                 f"Output one concise paragraph that links every fragment into one world.{limit_instruction}"
             )
             return system_prompt, user_prompt
@@ -1092,8 +1153,8 @@ class MovieLLMWorker(QtCore.QObject):
         system_prompt = _append_temperature_hint(
             "You craft a single continuous storyboard beat for a 10-second shot. "
             "Ensure actions and camera moves are simple enough to complete within 10 seconds, even if the pace is slightly fast. "
-            "Blend all elements into a flowing moment without hard scene cuts."
-            f"{limit_instruction}",
+            f"Blend all elements into a flowing moment without hard scene cuts while writing in natural {language_label}."
+            f"{limit_instruction}\n{language_sentence}",
             self.model,
             LLM_TEMPERATURE,
         )
@@ -1103,6 +1164,7 @@ class MovieLLMWorker(QtCore.QObject):
             f"{style_instruction}\n"
             f"Source summary: {self.text}\n"
             f"Fragments:\n{detail_lines}\n"
+            f"{language_sentence}\n"
             f"Describe a vivid, fast-paced but coherent sequence in one paragraph, focusing on visual continuity.{limit_instruction}"
         )
         return system_prompt, user_prompt
@@ -1114,13 +1176,22 @@ class ChaosMixLLMWorker(QtCore.QObject):
     finished = QtCore.Signal(str)
     failed = QtCore.Signal(str)
 
-    def __init__(self, text: str, fragments: List[str], model: str, video_style: str = "", length_limit: int = 0):
+    def __init__(
+        self,
+        text: str,
+        fragments: List[str],
+        model: str,
+        video_style: str = "",
+        length_limit: int = 0,
+        output_language: str = "en",
+    ):
         super().__init__()
         self.text = text
         self.fragments = fragments or []
         self.model = model
         self.video_style = video_style
         self.length_limit = length_limit
+        self.output_language = _normalize_language_code(output_language)
 
     @QtCore.Slot()
     def run(self):
@@ -1158,6 +1229,8 @@ class ChaosMixLLMWorker(QtCore.QObject):
         limit_instruction = ""
         if self.length_limit > 0:
             limit_instruction = f"\nIMPORTANT: Keep the final description under {self.length_limit} characters."
+        _, language_label, language_sentence = _language_directives(self.output_language)
+        language_block = f"\n{language_sentence}"
 
         detail_lines = "\n".join(f"- {sanitize_to_english(fragment)}" for fragment in self.fragments if fragment)
         if not detail_lines:
@@ -1178,8 +1251,8 @@ class ChaosMixLLMWorker(QtCore.QObject):
         system_prompt = _append_temperature_hint(
             "You are a chaotic scene blender. Force every fragment from a Midjourney prompt to coexist in the same physical location and the same moment. "
             "Describe the result as one vivid, continuous tableau packed with overlapping motifs, lighting, and props. "
-            "Keep syntax clean, keep it in English, and never drop the essential nouns from the source."
-            f"{limit_instruction}",
+            f"Keep syntax clean, keep it in {language_label}, and never drop the essential nouns from the source."
+            f"{limit_instruction}{language_block}",
             self.model,
             LLM_TEMPERATURE,
         )
@@ -1188,8 +1261,9 @@ class ChaosMixLLMWorker(QtCore.QObject):
             "- Mention the collisions and impossible overlaps explicitly.\n"
             "- Keep anchor terms verbatim where possible.\n"
             "- Treat lighting/atmosphere cues as happening together.\n"
-            "- Output exactly one paragraph in English.\n"
+            f"- Output exactly one paragraph in {language_label}.\n"
             f"{limit_instruction}\n"
+            f"{language_sentence}\n"
             f"Nonce: {nonce}\n"
             f"{style_instruction}\n"
             f"Original prompt body:\n{sanitize_to_english(self.text)}\n\n"
@@ -1347,7 +1421,8 @@ class ArrangeLLMWorker(QtCore.QObject):
         strength: int,
         guidance: str,
         length_adjust: str,
-        length_limit: int
+        length_limit: int,
+        output_language: str,
     ):
         super().__init__()
         self.text = text
@@ -1357,6 +1432,7 @@ class ArrangeLLMWorker(QtCore.QObject):
         self.guidance = guidance
         self.length_adjust = length_adjust
         self.length_limit = length_limit
+        self.output_language = _normalize_language_code(output_language)
 
     @QtCore.Slot()
     def run(self):
@@ -1402,6 +1478,8 @@ class ArrangeLLMWorker(QtCore.QObject):
             limit_instruction = ""
             if self.length_limit > 0:
                 limit_instruction = f"\nIMPORTANT: Strictly limit the output to under {self.length_limit} characters."
+            _, _, language_sentence = _language_directives(self.output_language)
+            language_block = f"\n{language_sentence}"
 
             # 強度3用のプロンプト
             if self.strength == 3:
@@ -1410,7 +1488,7 @@ class ArrangeLLMWorker(QtCore.QObject):
                     f"If guidance is provided, it SHOULD influence style but MUST BLEND with the original content. "
                     f"Do NOT eliminate original cultural/subject elements; preserve and merge them with the guidance. "
                     f"Be BOLD and CREATIVE - enhance the visual style with dramatic effects and vivid cinematic language. "
-                    f"Output only the transformed prompt.{limit_instruction}"
+                    f"Output only the transformed prompt.{limit_instruction}{language_block}"
                 )
                 user_prompt = (
                     f"Preset: {self.preset_label}, Strength: {self.strength} (MAXIMUM CREATIVITY)\n"
@@ -1422,6 +1500,7 @@ class ArrangeLLMWorker(QtCore.QObject):
                     + ("Hybridization suggestions: " + "; ".join(hybrid_cues) + "\n" if hybrid_cues else "") +
                     f"Length adjustment: {self.length_adjust} (target: ~{target_length} chars, original: {original_length} chars)\n"
                     f"CRITICAL: Make the output {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original\n"
+                    f"{language_sentence}\n"
                     f"Prompt: {self.text}{limit_instruction}"
                 )
             else:
@@ -1437,7 +1516,7 @@ class ArrangeLLMWorker(QtCore.QObject):
                 system_prompt = (
                     f"Rewrite Midjourney prompts with {strength_instruction}. "
                     f"{guidance_instruction} "
-                    f"Keep core content. Output only the prompt.{limit_instruction}"
+                    f"Keep core content. Output only the prompt.{limit_instruction}{language_block}"
                 )
                 user_prompt = (
                     f"Preset: {self.preset_label}, Strength: {self.strength} (0=minimal, 3=bold)\n"
@@ -1450,6 +1529,7 @@ class ArrangeLLMWorker(QtCore.QObject):
                     + ("Hybridization suggestions: " + "; ".join(hybrid_cues) + "\n" if hybrid_cues else "") +
                     f"Length adjustment: {self.length_adjust} (target: ~{target_length} chars, original: {original_length} chars)\n"
                     f"CRITICAL: Make the output {'shorter' if target_length < original_length else 'longer' if target_length > original_length else 'similar'} than the original\n"
+                    f"{language_sentence}\n"
                     f"Prompt: {self.text}{limit_instruction}"
                 )
 
@@ -2110,6 +2190,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         # デフォルトはOFFにしておく（ユーザーが意図的に選べるように）
         llm_row.addWidget(self.check_use_video_style)
 
+        llm_row.addWidget(QtWidgets.QLabel("出力言語:"))
+        self.combo_movie_output_lang = _create_language_combo()
+        self.combo_movie_output_lang.setToolTip(
+            "動画用LLM整形（世界観/ストーリー/カオスミックス）で生成される文章の言語を指定します。"
+        )
+        llm_row.addWidget(self.combo_movie_output_lang)
+
         llm_row.addWidget(QtWidgets.QLabel("上限:"))
         self.combo_movie_length_limit = QtWidgets.QComboBox()
         self.combo_movie_length_limit.addItems(["(制限なし)", "250", "500", "750", "1000", "1250"])
@@ -2143,6 +2230,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.combo_length_adjust.addItems(["半分", "2割減", "同程度", "2割増", "倍"])
         self.combo_length_adjust.setCurrentText("同程度")
         length_group.addWidget(self.combo_length_adjust)
+
+        length_group.addWidget(QtWidgets.QLabel("出力言語:"))
+        self.combo_arrange_output_lang = _create_language_combo()
+        self.combo_arrange_output_lang.setToolTip("LLMアレンジや文字数調整で生成されるプロンプトの言語を指定します。")
+        length_group.addWidget(self.combo_arrange_output_lang)
 
         length_group.addWidget(QtWidgets.QLabel("上限:"))
         self.combo_length_limit_arrange = QtWidgets.QComboBox()
@@ -2770,8 +2862,17 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         
         limit_text = self.combo_length_limit_arrange.currentText()
         length_limit = int(limit_text) if limit_text.isdigit() else 0
+        output_language = _combo_language_code(getattr(self, "combo_arrange_output_lang", None))
         
-        self._start_arrange_llm_worker(src, preset_label, strength, guidance, length_adjust, length_limit)
+        self._start_arrange_llm_worker(
+            src,
+            preset_label,
+            strength,
+            guidance,
+            length_adjust,
+            length_limit,
+            output_language=output_language,
+        )
 
     def handle_chaos_mix_and_copy(self):
         """断片的なメインプロンプトを一つのカオスシーンへ結合する。"""
@@ -2785,6 +2886,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         fragments = self._extract_sentence_details(main_text)
         video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
         length_limit = self._get_selected_movie_length_limit()
+        output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_chaos_mix_llm_worker(
             main_text=main_text,
             fragments=fragments,
@@ -2792,9 +2894,19 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             options_tail=options_tail,
             video_style_context=video_style_arg,
             length_limit=length_limit,
+            output_language=output_language,
         )
 
-    def _start_arrange_llm_worker(self, text, preset_label, strength, guidance, length_adjust, length_limit):
+    def _start_arrange_llm_worker(
+        self,
+        text,
+        preset_label,
+        strength,
+        guidance,
+        length_adjust,
+        length_limit,
+        output_language: str,
+    ):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
@@ -2806,7 +2918,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             strength=strength,
             guidance=guidance,
             length_adjust=length_adjust,
-            length_limit=length_limit
+            length_limit=length_limit,
+            output_language=output_language,
         )
         self._start_background_worker(worker, self._handle_arrange_llm_success, self._handle_arrange_llm_failure)
 
@@ -2840,7 +2953,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._thread = None
         QtWidgets.QMessageBox.critical(self, "エラー", f"アレンジ処理でエラーが発生しました:\n{error}")
 
-    def _start_chaos_mix_llm_worker(self, main_text: str, fragments: List[str], movie_tail: str, options_tail: str, video_style_context: str, length_limit: int):
+    def _start_chaos_mix_llm_worker(
+        self,
+        main_text: str,
+        fragments: List[str],
+        movie_tail: str,
+        options_tail: str,
+        video_style_context: str,
+        length_limit: int,
+        output_language: str,
+    ):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
@@ -2850,6 +2972,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             model=self.combo_llm_model.currentText(),
             video_style=video_style_context,
             length_limit=length_limit,
+            output_language=output_language,
         )
         context = {
             "movie_tail": movie_tail,
@@ -3600,7 +3723,17 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         
         video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
         length_limit = self._get_selected_movie_length_limit()
-        self._start_movie_llm_transformation("world", main_text, details, movie_tail, options_tail, video_style_arg, length_limit)
+        output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
+        self._start_movie_llm_transformation(
+            "world",
+            main_text,
+            details,
+            movie_tail,
+            options_tail,
+            video_style_arg,
+            length_limit,
+            output_language=output_language,
+        )
 
     def handle_movie_storyboard(self):
         prepared = self._prepare_movie_prompt_parts()
@@ -3611,7 +3744,17 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         
         video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
         length_limit = self._get_selected_movie_length_limit()
-        self._start_movie_llm_transformation("storyboard", main_text, details, movie_tail, options_tail, video_style_arg, length_limit)
+        output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
+        self._start_movie_llm_transformation(
+            "storyboard",
+            main_text,
+            details,
+            movie_tail,
+            options_tail,
+            video_style_arg,
+            length_limit,
+            output_language=output_language,
+        )
 
     def _get_selected_movie_length_limit(self) -> int:
         text = self.combo_movie_length_limit.currentText()
@@ -3629,7 +3772,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         limit_text = self.combo_length_limit_arrange.currentText()
         length_limit = int(limit_text) if limit_text.isdigit() else 0
         
-        self._start_llm_worker(src, target, length_limit)
+        output_language = _combo_language_code(getattr(self, "combo_arrange_output_lang", None))
+        self._start_llm_worker(src, target, length_limit, output_language)
 
     def _start_background_worker(self, worker: QtCore.QObject, success_handler, failure_handler):
         if self._thread and self._thread.isRunning():
@@ -3655,15 +3799,29 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self._thread = thread
         return True
 
-    def _start_llm_worker(self, text: str, length_hint: str, length_limit: int = 0):
+    def _start_llm_worker(self, text: str, length_hint: str, length_limit: int = 0, output_language: str = "en"):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
-        worker = LLMWorker(text=text, model=self.combo_llm_model.currentText(), length_hint=length_hint, length_limit=length_limit)
+        worker = LLMWorker(
+            text=text,
+            model=self.combo_llm_model.currentText(),
+            length_hint=length_hint,
+            length_limit=length_limit,
+            output_language=output_language,
+        )
         self._start_background_worker(worker, self._handle_llm_success, self._handle_llm_failure)
 
     def _start_movie_llm_transformation(
-        self, mode: str, main_text: str, details: List[str], movie_tail: str, options_tail: str, video_style_context: str = "", length_limit: int = 0
+        self,
+        mode: str,
+        main_text: str,
+        details: List[str],
+        movie_tail: str,
+        options_tail: str,
+        video_style_context: str = "",
+        length_limit: int = 0,
+        output_language: str = "en",
     ):
         if not LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
@@ -3674,7 +3832,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             mode=mode,
             details=details,
             video_style=video_style_context,
-            length_limit=length_limit
+            length_limit=length_limit,
+            output_language=output_language,
         )
         context = {
             "mode": mode,
