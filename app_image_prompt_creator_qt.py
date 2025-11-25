@@ -1072,6 +1072,7 @@ class MovieLLMWorker(QtCore.QObject):
         mode: str,
         details: List[str],
         video_style: str = "",
+        content_flags: str = "",
         length_limit: int = 0,
         output_language: str = "en",
     ):
@@ -1081,6 +1082,7 @@ class MovieLLMWorker(QtCore.QObject):
         self.mode = mode
         self.details = details or []
         self.video_style = video_style
+        self.content_flags = content_flags
         self.length_limit = length_limit
         self.output_language = _normalize_language_code(output_language)
 
@@ -1124,6 +1126,15 @@ class MovieLLMWorker(QtCore.QObject):
                 "IMPORTANT: Adapt the visual description (lighting, camera movement, atmosphere) "
                 "to strictly match the parameters defined in the Target Video Style above."
             )
+        content_flags_instruction = ""
+        if self.content_flags:
+            content_flags_instruction = (
+                f"\n\n[Content Flags]\n{self.content_flags}\n"
+                "IMPORTANT: Reflect these audio/subtitle/text overlay indicators explicitly in the rewritten description."
+            )
+        style_context_block = ""
+        if style_instruction or content_flags_instruction:
+            style_context_block = f"{style_instruction}{content_flags_instruction}\n"
 
         limit_instruction = ""
         if self.length_limit > 0:
@@ -1142,7 +1153,7 @@ class MovieLLMWorker(QtCore.QObject):
             user_prompt = (
                 "Convert the following fragments into a single connected world description that fits a 10-second video.\n"
                 "Omit minor details to keep it concise and impactful.\n"
-                f"{style_instruction}\n"
+                f"{style_context_block}"
                 f"Source summary: {self.text}\n"
                 f"Fragments:\n{detail_lines}\n"
                 f"{language_sentence}\n"
@@ -1161,7 +1172,7 @@ class MovieLLMWorker(QtCore.QObject):
         user_prompt = (
             "Turn the fragments into a 10-second single-shot storyboard.\n"
             "Condense the sequence to fit the time limit, merging or simplifying transitions where necessary.\n"
-            f"{style_instruction}\n"
+                f"{style_context_block}"
             f"Source summary: {self.text}\n"
             f"Fragments:\n{detail_lines}\n"
             f"{language_sentence}\n"
@@ -1182,6 +1193,7 @@ class ChaosMixLLMWorker(QtCore.QObject):
         fragments: List[str],
         model: str,
         video_style: str = "",
+        content_flags: str = "",
         length_limit: int = 0,
         output_language: str = "en",
     ):
@@ -1190,6 +1202,7 @@ class ChaosMixLLMWorker(QtCore.QObject):
         self.fragments = fragments or []
         self.model = model
         self.video_style = video_style
+        self.content_flags = content_flags
         self.length_limit = length_limit
         self.output_language = _normalize_language_code(output_language)
 
@@ -1247,6 +1260,15 @@ class ChaosMixLLMWorker(QtCore.QObject):
                 "IMPORTANT: Even though this is a chaotic blended scene, camera work, lighting and atmosphere\n"
                 "must still follow the Target Video Style above."
             )
+        content_flags_instruction = ""
+        if self.content_flags:
+            content_flags_instruction = (
+                f"\n\n[Content Flags]\n{self.content_flags}\n"
+                "IMPORTANT: Preserve these audio/subtitle/text overlay requirements within the chaotic blended scene."
+            )
+        style_context_block = ""
+        if style_instruction or content_flags_instruction:
+            style_context_block = f"{style_instruction}{content_flags_instruction}\n"
 
         system_prompt = _append_temperature_hint(
             "You are a chaotic scene blender. Force every fragment from a Midjourney prompt to coexist in the same physical location and the same moment. "
@@ -1265,7 +1287,7 @@ class ChaosMixLLMWorker(QtCore.QObject):
             f"{limit_instruction}\n"
             f"{language_sentence}\n"
             f"Nonce: {nonce}\n"
-            f"{style_instruction}\n"
+            f"{style_context_block}"
             f"Original prompt body:\n{sanitize_to_english(self.text)}\n\n"
             f"Sentence fragments:\n{detail_lines}\n"
             f"Anchor terms: {anchor_line}\n"
@@ -2897,12 +2919,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         prepared = self._prepare_movie_prompt_parts()
         if not prepared:
             return
-        main_text, options_tail, movie_tail = prepared
+        main_text, options_tail, movie_tail, content_flags_tail = prepared
         if not main_text.strip():
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
             return
         fragments = self._extract_sentence_details(main_text)
-        video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
+        video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
         length_limit = self._get_selected_movie_length_limit()
         output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_chaos_mix_llm_worker(
@@ -2911,6 +2933,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             movie_tail=movie_tail,
             options_tail=options_tail,
             video_style_context=video_style_arg,
+            content_flags_context=content_flags_arg,
             length_limit=length_limit,
             output_language=output_language,
         )
@@ -2978,6 +3001,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         movie_tail: str,
         options_tail: str,
         video_style_context: str,
+        content_flags_context: str,
         length_limit: int,
         output_language: str,
     ):
@@ -2989,6 +3013,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             fragments=fragments,
             model=self.combo_llm_model.currentText(),
             video_style=video_style_context,
+            content_flags=content_flags_context,
             length_limit=length_limit,
             output_language=output_language,
         )
@@ -3741,7 +3766,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             prepared = self._prepare_movie_prompt_parts()
             if not prepared:
                 return
-            main_text, options_tail, movie_tail = prepared
+            main_text, options_tail, movie_tail, _ = prepared
             details = self._extract_sentence_details(main_text)
             world_json = self._build_movie_json_payload(
                 summary=main_text.strip(),
@@ -3762,10 +3787,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         prepared = self._prepare_movie_prompt_parts()
         if not prepared:
             return
-        main_text, options_tail, movie_tail = prepared
+        main_text, options_tail, movie_tail, content_flags_tail = prepared
         details = self._extract_sentence_details(main_text)
-        
-        video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
+        video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
         length_limit = self._get_selected_movie_length_limit()
         output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_movie_llm_transformation(
@@ -3775,6 +3799,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             movie_tail,
             options_tail,
             video_style_arg,
+            content_flags_arg,
             length_limit,
             output_language=output_language,
         )
@@ -3783,10 +3808,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         prepared = self._prepare_movie_prompt_parts()
         if not prepared:
             return
-        main_text, options_tail, movie_tail = prepared
+        main_text, options_tail, movie_tail, content_flags_tail = prepared
         details = self._extract_sentence_details(main_text)
-        
-        video_style_arg = movie_tail if self.check_use_video_style.isChecked() else ""
+        video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
         length_limit = self._get_selected_movie_length_limit()
         output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_movie_llm_transformation(
@@ -3796,6 +3820,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             movie_tail,
             options_tail,
             video_style_arg,
+            content_flags_arg,
             length_limit,
             output_language=output_language,
         )
@@ -3864,6 +3889,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         movie_tail: str,
         options_tail: str,
         video_style_context: str = "",
+        content_flags_context: str = "",
         length_limit: int = 0,
         output_language: str = "en",
     ):
@@ -3876,6 +3902,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             mode=mode,
             details=details,
             video_style=video_style_context,
+            content_flags=content_flags_context,
             length_limit=length_limit,
             output_language=output_language,
         )
@@ -3973,20 +4000,31 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     # =============================
     # オプション整形系ヘルパー
     # =============================
-    def _prepare_movie_prompt_parts(self) -> Optional[Tuple[str, str, str]]:
-        """動画用整形で共通となる入力分解を行い、メインテキストと末尾要素を返す。"""
+    def _prepare_movie_prompt_parts(self) -> Optional[Tuple[str, str, str, str]]:
+        """動画用整形で共通となる入力分解を行い、メインテキストと末尾要素（末尾2含む）を返す。"""
         src = self.text_output.toPlainText().strip()
         if not src:
             QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
             return None
         # 末尾2(JSONフラグ)はLLM用のメインテキストからは除外する
-        core_without_flags, _ = self._detach_content_flags_tail(src)
+        core_without_flags, flags_tail = self._detach_content_flags_tail(src)
         core_without_movie, movie_tail = self._detach_movie_tail_for_llm(core_without_flags)
         main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
         if not main_text:
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
             return None
-        return main_text, options_tail, movie_tail
+        return main_text, options_tail, movie_tail, flags_tail
+
+    def _resolve_style_reflection_contexts(self, movie_tail: str, content_flags_tail: str) -> Tuple[str, str]:
+        """スタイル反映ON時にLLMへ渡す video_style / content_flags を同時に解決する。"""
+        checkbox = getattr(self, "check_use_video_style", None)
+        if not checkbox or not checkbox.isChecked():
+            return "", ""
+        video_style = (movie_tail or "").strip()
+        content_flags = (content_flags_tail or "").strip()
+        if not content_flags:
+            content_flags = self._make_tail_flags_json().strip()
+        return video_style, content_flags
 
     def _extract_sentence_details(self, text: str) -> List[str]:
         """文末の句読点で区切り、世界観説明に使う細部の配列を作る。"""
