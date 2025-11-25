@@ -2004,8 +2004,6 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         # 音声・人物・字幕/テロップ系フラグ
         flags_row = QtWidgets.QHBoxLayout()
         self.check_tail_flag_narration = QtWidgets.QCheckBox("ナレーション")
-        self.check_tail_flag_character = QtWidgets.QCheckBox("人物")
-        self.check_tail_flag_character.setToolTip("映像内に人物（人間）が映っているかどうかを指定します。")
         self.check_tail_flag_bgm = QtWidgets.QCheckBox("BGM")
         self.check_tail_flag_ambient = QtWidgets.QCheckBox("環境音")
         self.check_tail_flag_ambient.setToolTip("風・水・街並み・機械音など、環境そのものから発生する音があるかどうかを指定します。")
@@ -2020,7 +2018,6 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         )
         for chk in (
             self.check_tail_flag_narration,
-            self.check_tail_flag_character,
             self.check_tail_flag_bgm,
             self.check_tail_flag_ambient,
             self.check_tail_flag_dialogue,
@@ -2030,6 +2027,27 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             chk.stateChanged.connect(self.auto_update)
             flags_row.addWidget(chk)
         tail2_layout.addLayout(flags_row)
+
+        # 登場人物の人数選択（なし / 1人以上 / 1人 / 2人 / 3人 / 4人）
+        person_row = QtWidgets.QHBoxLayout()
+        person_row.addWidget(QtWidgets.QLabel("登場人物:"))
+        self.combo_tail_person_count = QtWidgets.QComboBox()
+        self.combo_tail_person_count.addItem("(なし)", userData=None)
+        self.combo_tail_person_count.addItem("1人以上", userData="1+")
+        self.combo_tail_person_count.addItem("1人", userData=1)
+        self.combo_tail_person_count.addItem("2人", userData=2)
+        self.combo_tail_person_count.addItem("3人", userData=3)
+        self.combo_tail_person_count.addItem("4人", userData=4)
+        self.combo_tail_person_count.setToolTip(
+            "映像内に登場する人物（人間）の人数を指定します。\n"
+            "「(なし)」: 人物なし\n"
+            "「1人以上」: 人数を限定しない（1人以上いることだけを指定）\n"
+            "「1人」〜「4人」: 具体的な人数を指定"
+        )
+        self.combo_tail_person_count.currentIndexChanged.connect(self.auto_update)
+        person_row.addWidget(self.combo_tail_person_count)
+        person_row.addStretch(1)
+        tail2_layout.addLayout(person_row)
 
         # 構成カット数 (Auto / 1-6)
         cuts_row = QtWidgets.QHBoxLayout()
@@ -3051,7 +3069,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         {
             "content_flags": {
                 "narration": true,
-                "person_present": false,
+                "person_present": true,
+                "person_count": 2,
                 "bgm": true,
                 "ambient_sound": true,
                 "dialogue": false,
@@ -3062,8 +3081,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             }
         }
         
-        narration / bgm / ambient_sound / dialogue は音声要素、
-        person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグです。
+        narration / bgm / ambient_sound / dialogue は音声要素。
+        person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ（true/false）。
+        person_count は人数指定で、"1+"（1人以上）または具体的な人数（1〜4の整数）を取る。
+          - 「(なし)」選択時: person_present=false, person_count は省略
+          - 「1人以上」選択時: person_present=true, person_count="1+"
+          - 「1人」〜「4人」選択時: person_present=true, person_count=N
         on_screen_spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されている」ことを、英語の説明文として明示します。
         on_screen_non_dialogue_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイが存在する」ことを、英語の説明文として明示します。
         planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6）を表します。
@@ -3077,12 +3100,33 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
         flags = {
             "narration": bool(self.check_tail_flag_narration.isChecked()),
-            # 「人物」は「映像内に人物が映っているかどうか」の真偽値を表す
-            "person_present": bool(self.check_tail_flag_character.isChecked()),
             "bgm": bool(self.check_tail_flag_bgm.isChecked()),
             "ambient_sound": bool(self.check_tail_flag_ambient.isChecked()),
             "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
         }
+
+        # 登場人物の人数を person_present / person_count として設定
+        # - "(なし)" → person_present: false のみ
+        # - "1人以上" → person_present: true, person_count: "1+"
+        # - "1人"〜"4人" → person_present: true, person_count: N
+        person_combo = getattr(self, "combo_tail_person_count", None)
+        if isinstance(person_combo, QtWidgets.QComboBox):
+            person_data = person_combo.currentData()
+            if person_data is None:
+                # (なし) の場合: 人物なし
+                flags["person_present"] = False
+            elif person_data == "1+":
+                # 1人以上の場合: 人数を限定しない
+                flags["person_present"] = True
+                flags["person_count"] = "1+"
+            elif isinstance(person_data, int) and person_data >= 1:
+                # 具体的な人数指定
+                flags["person_present"] = True
+                flags["person_count"] = person_data
+            else:
+                flags["person_present"] = False
+        else:
+            flags["person_present"] = False
 
         # セリフそのものに対応した字幕（セリフ字幕）が画面に出ている場合は、
         # true/false ではなく、動画モデルに直接伝わる英文の説明文を value として埋め込む。
