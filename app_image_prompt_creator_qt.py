@@ -2060,24 +2060,32 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         self.combo_tail_person_count.addItem("2人", userData=2)
         self.combo_tail_person_count.addItem("3人", userData=3)
         self.combo_tail_person_count.addItem("4人", userData=4)
+        self.combo_tail_person_count.addItem("とても多い", userData="many")
         self.combo_tail_person_count.setToolTip(
             "映像内に登場する人物（人間）の人数を指定します。\n"
             "「(なし)」: 人物なし\n"
             "「1人以上」: 人数を限定しない（1人以上いることだけを指定）\n"
-            "「1人」〜「4人」: 具体的な人数を指定"
+            "「1人」〜「4人」: 具体的な人数を指定\n"
+            "「とても多い」: 群衆・5人以上の大人数を想定"
         )
         self.combo_tail_person_count.currentIndexChanged.connect(self.auto_update)
         person_row.addWidget(self.combo_tail_person_count)
         person_row.addStretch(1)
         tail2_layout.addLayout(person_row)
 
-        # 構成カット数 (Auto / 1-6)
+        # 構成カット数 (Auto / 1-6 / とても多い)
         cuts_row = QtWidgets.QHBoxLayout()
         cuts_row.addWidget(QtWidgets.QLabel("構成カット数:"))
         self.combo_tail_cut_count = QtWidgets.QComboBox()
-        self.combo_tail_cut_count.addItems(["(Auto)", "1", "2", "3", "4", "5", "6"])
-        self.combo_tail_cut_count.setToolTip("動画全体を何カット程度で構成するかの目安です。(Auto) はモデル任せ。")
-        self.combo_tail_cut_count.currentTextChanged.connect(self.auto_update)
+        self.combo_tail_cut_count.addItem("(Auto)", userData=None)
+        for cuts in range(1, 7):
+            self.combo_tail_cut_count.addItem(str(cuts), userData=cuts)
+        self.combo_tail_cut_count.addItem("とても多い", userData="many")
+        self.combo_tail_cut_count.setToolTip(
+            "動画全体を何カット程度で構成するかの目安です。(Auto) はモデル任せ。\n"
+            "「とても多い」は 7 カット以上の密な編集（モンタージュや高速カット）を想定します。"
+        )
+        self.combo_tail_cut_count.currentIndexChanged.connect(self.auto_update)
         cuts_row.addWidget(self.combo_tail_cut_count)
         cuts_row.addStretch(1)
         tail2_layout.addLayout(cuts_row)
@@ -3108,13 +3116,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         
         narration / bgm / ambient_sound / dialogue は音声要素。
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ（true/false）。
-        person_count は人数指定で、"1+"（1人以上）または具体的な人数（1〜4の整数）を取る。
+        person_count は人数指定で、"1+"（1人以上）/ "many"（群衆・5人以上）または具体的な人数（1〜4の整数）を取る。
           - 「(なし)」選択時: person_present=false, person_count は省略
           - 「1人以上」選択時: person_present=true, person_count="1+"
           - 「1人」〜「4人」選択時: person_present=true, person_count=N
+          - 「とても多い」選択時: person_present=true, person_count="many"
         on_screen_spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されている」ことを、英語の説明文として明示します。
         on_screen_non_dialogue_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイが存在する」ことを、英語の説明文として明示します。
-        planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6）を表します。
+        planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6 または "many"）を表します。
         spoken_language は「動画内で想定される主な話し言葉の言語」を表し、"ja" または "en" を取ります。
         (Auto) 選択時や未指定時は planned_cuts / spoken_language フィールド自体を省略します。
         """
@@ -3134,6 +3143,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         # - "(なし)" → person_present: false のみ
         # - "1人以上" → person_present: true, person_count: "1+"
         # - "1人"〜"4人" → person_present: true, person_count: N
+        # - "とても多い" → person_present: true, person_count: "many"
         person_combo = getattr(self, "combo_tail_person_count", None)
         if isinstance(person_combo, QtWidgets.QComboBox):
             person_data = person_combo.currentData()
@@ -3144,6 +3154,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 # 1人以上の場合: 人数を限定しない
                 flags["person_present"] = True
                 flags["person_count"] = "1+"
+            elif person_data == "many":
+                # 群衆など大人数のカット
+                flags["person_present"] = True
+                flags["person_count"] = "many"
             elif isinstance(person_data, int) and person_data >= 1:
                 # 具体的な人数指定
                 flags["person_present"] = True
@@ -3168,17 +3182,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
                 "There are on-screen non-dialogue text overlays such as commentary captions, "
                 "labels, or sound-effect text rendered as part of the image."
             )
-        # 構成カット数 (1〜6) を planned_cuts として追加 (Auto の場合は省略)
+        # 構成カット数 (1〜6 / "many") を planned_cuts として追加 (Auto の場合は省略)
         cut_combo = getattr(self, "combo_tail_cut_count", None)
         if isinstance(cut_combo, QtWidgets.QComboBox):
-            text = (cut_combo.currentText() or "").strip()
-            if text and text != "(Auto)" and text.isdigit():
-                try:
-                    cuts = int(text)
-                    if 1 <= cuts <= 6:
-                        flags["planned_cuts"] = cuts
-                except ValueError:
-                    pass
+            data = cut_combo.currentData()
+            if isinstance(data, int) and 1 <= data <= 6:
+                flags["planned_cuts"] = data
+            elif data == "many":
+                flags["planned_cuts"] = "many"
         # 動画中の主な話し言葉の言語 ("ja" / "en") を spoken_language として追加 (Auto の場合は省略)
         lang_combo = getattr(self, "combo_tail_language", None)
         if isinstance(lang_combo, QtWidgets.QComboBox):
