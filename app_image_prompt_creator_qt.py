@@ -2176,6 +2176,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     def _build_right_pane_content(self, layout):
         # 1. Output Area (Top)
         self.text_output = QtWidgets.QTextEdit()
+        # 外部のリッチテキストをそのまま持ち込まないようにし、常に本アプリのフォント設定で表示する
+        self.text_output.setAcceptRichText(False)
         self.text_output.setPlaceholderText("ここに生成結果が表示されます")
         layout.addWidget(self.text_output, 1)  # Stretch factor 1
 
