@@ -42,14 +42,14 @@ from modules.logging_utils import (
     log_structured,
     setup_logging,
 )
-from modules.export_loader import load_export_module
 from modules.prompt_data import (
     AttributeDetail,
     AttributeType,
     load_arrange_presets_from_yaml,
-    load_exclusion_words,
     load_tail_presets_from_yaml,
 )
+from modules.prompt_data_mixins import PromptDataMixin
+from modules.prompt_ui_mixins import PromptUIMixin
 from modules.settings_loader import (
     initialize_settings,
     load_yaml_settings,
@@ -66,7 +66,7 @@ from modules.prompt_text_utils import (
     split_prompt_and_options,
     strip_all_options,
 )
-from modules.ui_helpers import combo_language_code, create_language_combo
+from modules.ui_helpers import combo_language_code
 
 setup_logging()
 
@@ -78,10 +78,7 @@ def __getattr__(name: str):
     raise AttributeError(f"{__name__} has no attribute {name}")
 
 
-MJImage = load_export_module()
-
-
-class PromptGeneratorWindow(QtWidgets.QMainWindow):
+class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixin):
     """PySide6 版のメインウィンドウ。UIとイベントを集約。"""
 
     _worker_success = QtCore.Signal(object, object, object, object)
@@ -167,638 +164,35 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     # =============================
     # UI 構築
     # =============================
-    def _build_ui(self):
-        central = QtWidgets.QWidget()
-        self.setCentralWidget(central)
-
-        # モダンなスタイリング（初期適用は _apply_font_scale に任せるため、ここでは構造のみ）
-        # _apply_font_scale() が後で呼ばれてスタイルシートを設定する
-        
-        main_layout = QtWidgets.QVBoxLayout(central)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
-
-        # 1. Header
-        self._build_header(main_layout)
-
-        # 2. Main Splitter (Left / Right)
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        main_layout.addWidget(splitter, 1)
-
-        # Left Pane Container
-        left_widget = QtWidgets.QWidget()
-        left_layout = QtWidgets.QVBoxLayout(left_widget)
-        left_layout.setContentsMargins(0, 0, 5, 0)
-        left_layout.setSpacing(10)
-        self._build_left_pane_content(left_layout)
-        splitter.addWidget(left_widget)
-
-        # Right Pane Container
-        right_widget = QtWidgets.QWidget()
-        right_layout = QtWidgets.QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(5, 0, 0, 0)
-        right_layout.setSpacing(10)
-        self._build_right_pane_content(right_layout)
-        splitter.addWidget(right_widget)
-
-        # Splitter Initial Ratio (Approx 4:6)
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 6)
-
-        # Status Bar (Loading Indicator)
-        self.status_bar = self.statusBar()
-        self.loading_progress = QtWidgets.QProgressBar()
-        self.loading_progress.setRange(0, 0)  # Indeterminate (Marquee)
-        self.loading_progress.setTextVisible(False)
-        self.loading_progress.setFixedWidth(200)
-        self.loading_progress.setMaximumHeight(15)
-        self.loading_progress.setVisible(False)
-        self.status_bar.addPermanentWidget(self.loading_progress)
-
-    def _set_loading_state(self, is_loading: bool, message: str = ""):
-        """LLM処理中のローディング表示を制御する。"""
-        if is_loading:
-            self.loading_progress.setVisible(True)
-            self.status_bar.showMessage(message)
-        else:
-            self.loading_progress.setVisible(False)
-            self.status_bar.clearMessage()
-
-    def _build_header(self, parent_layout):
-        header_layout = QtWidgets.QHBoxLayout()
-        parent_layout.addLayout(header_layout)
-
-        # LLMモデル選択
-        header_layout.addWidget(QtWidgets.QLabel("LLMモデル:"))
-        self.combo_llm_model = QtWidgets.QComboBox()
-        self.combo_llm_model.addItems(self.available_model_choices)
-        header_layout.addWidget(self.combo_llm_model)
-        self.label_current_model = QtWidgets.QLabel(f"選択中: {self.combo_llm_model.currentText()}")
-        header_layout.addWidget(self.label_current_model)
-        self.combo_llm_model.currentTextChanged.connect(self._on_model_change)
-        self._ensure_model_choice_alignment()
-
-        header_layout.addStretch(1)
-
-        # フォント切替
-        self.button_font_scale = QtWidgets.QPushButton("フォント: 標準")
-        self.button_font_scale.setToolTip("UI全体のフォントサイズを段階的に切り替えます。")
-        self.button_font_scale.clicked.connect(self.cycle_font_scale)
-        header_layout.addWidget(self.button_font_scale)
-
     def _build_left_pane_content(self, layout):
-        # --- 1. Basic Settings (Compact Grid) ---
-        basic_group = QtWidgets.QGroupBox("基本設定")
-        basic_grid = QtWidgets.QGridLayout(basic_group)
-        
-        basic_grid.addWidget(QtWidgets.QLabel("行数:"), 0, 0)
-        self.spin_row_num = QtWidgets.QSpinBox()
-        self.spin_row_num.setMinimum(1)
-        self.spin_row_num.setMaximum(999)
-        self.spin_row_num.setValue(DEFAULT_ROW_NUM)
-        basic_grid.addWidget(self.spin_row_num, 0, 1)
-
-        self.check_autofix = QtWidgets.QCheckBox("自動反映")
-        basic_grid.addWidget(self.check_autofix, 0, 2)
-
-        self.check_dedup = QtWidgets.QCheckBox("重複除外")
-        self.check_dedup.setChecked(bool(DEDUPLICATE_PROMPTS))
-        self.check_dedup.stateChanged.connect(self.auto_update)
-        basic_grid.addWidget(self.check_dedup, 1, 0, 1, 2)
-
-        basic_grid.addWidget(QtWidgets.QLabel("生成方法:"), 2, 0)
-        mode_container = QtWidgets.QWidget()
-        mode_layout = QtWidgets.QHBoxLayout(mode_container)
-        mode_layout.setContentsMargins(0, 0, 0, 0)
-        self.radio_mode_db = QtWidgets.QRadioButton("DB生成")
-        self.radio_mode_llm = QtWidgets.QRadioButton("LLM生成")
-        self.radio_mode_db.setChecked(True)
-        mode_layout.addWidget(self.radio_mode_db)
-        mode_layout.addWidget(self.radio_mode_llm)
-        mode_layout.addStretch(1)
-        basic_grid.addWidget(mode_container, 2, 1, 1, 2)
-
-        if not LLM_ENABLED:
-            self.radio_mode_llm.setEnabled(False)
-            self.radio_mode_llm.setToolTip("LLM生成を利用するには desktop_gui_settings.yaml の LLM_ENABLED を true に設定してください。")
-
-        # LLM生成時のみ有効になるカオス度スライダー（1〜10）
-        basic_grid.addWidget(QtWidgets.QLabel("カオス度(LLM):"), 3, 0)
-        self._llm_chaos_container = QtWidgets.QWidget()
-        chaos_layout = QtWidgets.QHBoxLayout(self._llm_chaos_container)
-        chaos_layout.setContentsMargins(0, 0, 0, 0)
-        self.slider_llm_chaos = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self.slider_llm_chaos.setRange(1, 10)
-        self.slider_llm_chaos.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.slider_llm_chaos.setTickInterval(1)
-        self.slider_llm_chaos.setValue(1)
-        self.slider_llm_chaos.setToolTip("LLM生成時の創造性（カオス度）を1〜10で指定します。1は安定寄り、5で十分強い変化、10で最大限カオスなバリエーションを許容します。")
-        self.label_llm_chaos_val = QtWidgets.QLabel("1 (安定)")
-        self.slider_llm_chaos.valueChanged.connect(self._on_llm_chaos_change)
-        chaos_layout.addWidget(self.slider_llm_chaos, 1)
-        chaos_layout.addWidget(self.label_llm_chaos_val)
-        self._llm_chaos_container.setVisible(False)
-        basic_grid.addWidget(self._llm_chaos_container, 3, 1, 1, 2)
-
-        # LLM生成時の出力言語選択（英語 / 日本語）
-        basic_grid.addWidget(QtWidgets.QLabel("LLM生成言語:"), 4, 0)
-        self.combo_llm_output_lang = QtWidgets.QComboBox()
-        self.combo_llm_output_lang.addItem("英語", userData="en")
-        self.combo_llm_output_lang.addItem("日本語", userData="ja")
-        self.combo_llm_output_lang.setCurrentIndex(0)
-        self.combo_llm_output_lang.setToolTip(
-            "通常生成の LLMモードで生成されるフラグメント（1行ごとの短文）の言語を指定します。"
-        )
-        basic_grid.addWidget(self.combo_llm_output_lang, 4, 1, 1, 2)
-
-        # モード切替時にカオス度バーの表示/非表示を更新
-        self.radio_mode_db.toggled.connect(self._update_generate_mode_ui)
-        self.radio_mode_llm.toggled.connect(self._update_generate_mode_ui)
-        self._update_generate_mode_ui()
-
-        layout.addWidget(basic_group)
-
-        # --- 2. Attributes Selection (Main Scroll Area) ---
-        attr_group = QtWidgets.QGroupBox("属性選択")
-        attr_layout = QtWidgets.QVBoxLayout(attr_group)
-        self.attribute_area = QtWidgets.QScrollArea()
-        self.attribute_area.setWidgetResizable(True)
-        self.attribute_container = QtWidgets.QWidget()
-        self.attribute_layout = QtWidgets.QFormLayout(self.attribute_container)
-        self.attribute_area.setWidget(self.attribute_container)
-        attr_layout.addWidget(self.attribute_area)
-        layout.addWidget(attr_group, 1)  # Stretch to fill available vertical space
-
-        # --- 3. Options Tab (Bottom of Left Pane) ---
-        tabs = QtWidgets.QTabWidget()
-        layout.addWidget(tabs)
-
-        # Tab 1: Style & Presets
-        style_tab = QtWidgets.QWidget()
-        style_layout = QtWidgets.QVBoxLayout(style_tab)
-        style_layout.setContentsMargins(5, 5, 5, 5)
-
-        # Tail Settings
-        tail_form = QtWidgets.QFormLayout()
-        self.combo_tail_media_type = QtWidgets.QComboBox()
-        self.combo_tail_media_type.addItems(list(TAIL_PRESETS.keys()))
-        self.combo_tail_media_type.currentTextChanged.connect(self._on_tail_media_type_change)
-        tail_form.addRow("末尾プリセット用途:", self.combo_tail_media_type)
-
-        tail_row = QtWidgets.QHBoxLayout()
-        self.check_tail_free = QtWidgets.QCheckBox("末尾1:")
-        self.combo_tail_free = QtWidgets.QComboBox()
-        self.combo_tail_free.setEditable(True)
-        self.combo_tail_free.setToolTip("末尾固定文を選択または編集できます。")
-        tail_row.addWidget(self.check_tail_free)
-        tail_row.addWidget(self.combo_tail_free, 1)
-        tail_form.addRow(tail_row)
-
-        # Tail JSON Flags (末尾2)
-        tail2_group = QtWidgets.QGroupBox("末尾2 (JSONフラグ)")
-        tail2_layout = QtWidgets.QVBoxLayout(tail2_group)
-
-        # 末尾2を出力に反映するかどうかのマスターチェック
-        self.check_tail_flags_enabled = QtWidgets.QCheckBox("末尾2を反映")
-        self.check_tail_flags_enabled.setToolTip(
-            "ONにすると content_flags JSON を末尾に付与します。すべてのフラグが OFF でも JSON 自体が付きます。"
-        )
-        self.check_tail_flags_enabled.stateChanged.connect(self.auto_update)
-        tail2_layout.addWidget(self.check_tail_flags_enabled)
-
-        # 音声・人物・字幕/テロップ系フラグ
-        flags_row = QtWidgets.QHBoxLayout()
-        self.check_tail_flag_narration = QtWidgets.QCheckBox("ナレーション")
-        self.check_tail_flag_bgm = QtWidgets.QCheckBox("BGM")
-        self.check_tail_flag_ambient = QtWidgets.QCheckBox("環境音")
-        self.check_tail_flag_ambient.setToolTip("風・水・街並み・機械音など、環境そのものから発生する音があるかどうかを指定します。")
-        self.check_tail_flag_dialogue = QtWidgets.QCheckBox("人物のセリフ")
-        self.check_tail_flag_dialogue_subtitle = QtWidgets.QCheckBox("セリフ字幕")
-        self.check_tail_flag_dialogue_subtitle.setToolTip(
-            "ONにすると、人物が話しているセリフそのものを文字として表示する字幕（セリフ字幕）があるシーンとして扱います。"
-        )
-        self.check_tail_flag_telop = QtWidgets.QCheckBox("テロップ/テキスト")
-        self.check_tail_flag_telop.setToolTip(
-            "ONにすると、ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイが画面上に存在するシーンとして扱います。"
-        )
-        for chk in (
-            self.check_tail_flag_narration,
-            self.check_tail_flag_bgm,
-            self.check_tail_flag_ambient,
-            self.check_tail_flag_dialogue,
-            self.check_tail_flag_dialogue_subtitle,
-            self.check_tail_flag_telop,
-        ):
-            chk.stateChanged.connect(self.auto_update)
-            flags_row.addWidget(chk)
-        tail2_layout.addLayout(flags_row)
-
-        # 登場人物の人数選択（なし / 1人以上 / 1人 / 2人 / 3人 / 4人）
-        person_row = QtWidgets.QHBoxLayout()
-        person_row.addWidget(QtWidgets.QLabel("登場人物:"))
-        self.combo_tail_person_count = QtWidgets.QComboBox()
-        self.combo_tail_person_count.addItem("(なし)", userData=None)
-        self.combo_tail_person_count.addItem("1人以上", userData="1+")
-        self.combo_tail_person_count.addItem("1人", userData=1)
-        self.combo_tail_person_count.addItem("2人", userData=2)
-        self.combo_tail_person_count.addItem("3人", userData=3)
-        self.combo_tail_person_count.addItem("4人", userData=4)
-        self.combo_tail_person_count.addItem("とても多い", userData="many")
-        self.combo_tail_person_count.setToolTip(
-            "映像内に登場する人物（人間）の人数を指定します。\n"
-            "「(なし)」: 人物なし\n"
-            "「1人以上」: 人数を限定しない（1人以上いることだけを指定）\n"
-            "「1人」〜「4人」: 具体的な人数を指定\n"
-            "「とても多い」: 群衆・5人以上の大人数を想定"
-        )
-        self.combo_tail_person_count.currentIndexChanged.connect(self.auto_update)
-        person_row.addWidget(self.combo_tail_person_count)
-        person_row.addStretch(1)
-        tail2_layout.addLayout(person_row)
-
-        # 構成カット数 (Auto / 1-6 / とても多い)
-        cuts_row = QtWidgets.QHBoxLayout()
-        cuts_row.addWidget(QtWidgets.QLabel("構成カット数:"))
-        self.combo_tail_cut_count = QtWidgets.QComboBox()
-        self.combo_tail_cut_count.addItem("(Auto)", userData=None)
-        for cuts in range(1, 7):
-            self.combo_tail_cut_count.addItem(str(cuts), userData=cuts)
-        self.combo_tail_cut_count.addItem("とても多い", userData="many")
-        self.combo_tail_cut_count.setToolTip(
-            "動画全体を何カット程度で構成するかの目安です。(Auto) はモデル任せ。\n"
-            "「とても多い」は 7 カット以上の密な編集（モンタージュや高速カット）を想定します。"
-        )
-        self.combo_tail_cut_count.currentIndexChanged.connect(self.auto_update)
-        cuts_row.addWidget(self.combo_tail_cut_count)
-        cuts_row.addStretch(1)
-        tail2_layout.addLayout(cuts_row)
-
-        # 動画中の主な言語 (Auto / 日本語 / 英語)
-        lang_row = QtWidgets.QHBoxLayout()
-        lang_row.addWidget(QtWidgets.QLabel("動画中の言語:"))
-        self.combo_tail_language = QtWidgets.QComboBox()
-        self.combo_tail_language.addItem("(Auto)", userData="")
-        self.combo_tail_language.addItem("日本語", userData="ja")
-        self.combo_tail_language.addItem("英語", userData="en")
-        self.combo_tail_language.setToolTip(
-            "動画内で想定される主な話し言葉の言語を指定します。(Auto) の場合は JSON に言語フィールドを含めません。"
-        )
-        self.combo_tail_language.currentIndexChanged.connect(self.auto_update)
-        lang_row.addWidget(self.combo_tail_language)
-        lang_row.addStretch(1)
-        tail2_layout.addLayout(lang_row)
-
-        tail_form.addRow(tail2_group)
-        style_layout.addLayout(tail_form)
-
-        # MJ Options Grid
-        mj_group = QtWidgets.QGroupBox("オプション")
-        mj_grid = QtWidgets.QGridLayout(mj_group)
-        self.combo_tail_ar = self._add_option_cell(mj_grid, 0, "ar オプション:", AR_OPTIONS)
-        self.combo_tail_s = self._add_option_cell(mj_grid, 1, "s オプション:", S_OPTIONS)
-        self.combo_tail_chaos = self._add_option_cell(mj_grid, 2, "chaos オプション:", CHAOS_OPTIONS)
-        self.combo_tail_q = self._add_option_cell(mj_grid, 3, "q オプション:", Q_OPTIONS)
-        self.combo_tail_weird = self._add_option_cell(mj_grid, 4, "weird オプション:", WEIRD_OPTIONS)
-        style_layout.addWidget(mj_group)
-        
-        style_layout.addStretch(1)
-        tabs.addTab(style_tab, "スタイル・オプション")
-
-        # Tab 2: Data Management
-        data_tab = QtWidgets.QWidget()
-        data_layout = QtWidgets.QVBoxLayout(data_tab)
-        data_layout.setContentsMargins(5, 5, 5, 5)
-        
-        # Exclusion
-        excl_group = QtWidgets.QGroupBox("除外設定")
-        excl_layout = QtWidgets.QVBoxLayout(excl_group)
-        excl_row = QtWidgets.QHBoxLayout()
-        excl_row.addWidget(QtWidgets.QLabel(LABEL_EXCLUSION_WORDS))
-        self.check_exclusion = QtWidgets.QCheckBox()
-        excl_row.addWidget(self.check_exclusion)
-        self.combo_exclusion = QtWidgets.QComboBox()
-        self.combo_exclusion.setEditable(True)
-        self.combo_exclusion.addItems(load_exclusion_words())
-        excl_row.addWidget(self.combo_exclusion, 1)
-        excl_layout.addLayout(excl_row)
-        
-        open_exclusion_btn = QtWidgets.QPushButton("除外語句CSVを開く")
-        open_exclusion_btn.clicked.connect(self._open_exclusion_csv)
-        excl_layout.addWidget(open_exclusion_btn)
-        data_layout.addWidget(excl_group)
-
-        # CSV DB
-        db_group = QtWidgets.QGroupBox("DB管理")
-        db_layout = QtWidgets.QHBoxLayout(db_group)
-        csv_import_btn = QtWidgets.QPushButton("CSVをDBに投入")
-        csv_import_btn.clicked.connect(self._open_csv_import_dialog)
-        db_layout.addWidget(csv_import_btn)
-        csv_export_btn = QtWidgets.QPushButton("(DB確認用CSV出力)")
-        csv_export_btn.clicked.connect(self._export_csv)
-        db_layout.addWidget(csv_export_btn)
-        data_layout.addWidget(db_group)
-
-        data_layout.addStretch(1)
-        tabs.addTab(data_tab, "データ管理")
+        return PromptUIMixin._build_left_pane_content(self, layout)
 
     def _add_option_cell(self, grid: QtWidgets.QGridLayout, row: int, label: str, values: Iterable[str]) -> QtWidgets.QComboBox:
-        """グリッドレイアウトにオプション項目を追加するヘルパー"""
-        grid.addWidget(QtWidgets.QLabel(label), row, 0)
-        checkbox = QtWidgets.QCheckBox()
-        grid.addWidget(checkbox, row, 1)
-        combo = QtWidgets.QComboBox()
-        combo.addItems([str(v) for v in values])
-        combo.setEditable(True)
-        combo.setProperty("toggle", checkbox)
-        grid.addWidget(combo, row, 2)
-        
-        combo.currentTextChanged.connect(self.auto_update)
-        checkbox.stateChanged.connect(self.auto_update)
-        return combo
+        return PromptUIMixin._add_option_cell(self, grid, row, label, values)
 
     def _build_right_pane_content(self, layout):
-        # 1. Output Area (Top)
-        self.text_output = QtWidgets.QTextEdit()
-        # 外部のリッチテキストをそのまま持ち込まないようにし、常に本アプリのフォント設定で表示する
-        self.text_output.setAcceptRichText(False)
-        self.text_output.setPlaceholderText("ここに生成結果が表示されます")
-        layout.addWidget(self.text_output, 1)  # Stretch factor 1
-
-        # 2. Primary Actions (Prominent)
-        action_layout = QtWidgets.QHBoxLayout()
-        
-        generate_btn = QtWidgets.QPushButton("生成")
-        generate_btn.setObjectName("BigAction")
-        generate_btn.setMinimumHeight(45)
-        generate_btn.clicked.connect(self.generate_text)
-        action_layout.addWidget(generate_btn, 1)
-
-        generate_copy_btn = QtWidgets.QPushButton("生成とコピー（全文）")
-        generate_copy_btn.setObjectName("BigAction")
-        generate_copy_btn.setMinimumHeight(45)
-        generate_copy_btn.clicked.connect(self.generate_and_copy)
-        action_layout.addWidget(generate_copy_btn, 1)
-        
-        layout.addLayout(action_layout)
-
-        # 3. Secondary Actions
-        sub_action_layout = QtWidgets.QHBoxLayout()
-        
-        copy_btn = QtWidgets.QPushButton("クリップボードにコピー(全文)")
-        copy_btn.clicked.connect(self.copy_all_to_clipboard)
-        sub_action_layout.addWidget(copy_btn)
-
-        update_tail_btn = QtWidgets.QPushButton("末尾固定部のみ更新")
-        update_tail_btn.clicked.connect(self.update_tail_free_texts)
-        sub_action_layout.addWidget(update_tail_btn)
-
-        update_option_btn = QtWidgets.QPushButton("オプションのみ更新")
-        update_option_btn.clicked.connect(self.update_option)
-        sub_action_layout.addWidget(update_option_btn)
-
-        layout.addLayout(sub_action_layout)
-
-        # 4. Advanced Tools (Tabs)
-        tools_tabs = QtWidgets.QTabWidget()
-        # 高さを現在の2倍程度（320px）かつ可変（Maximum制限なし）に変更
-        tools_tabs.setMinimumHeight(320)
-        layout.addWidget(tools_tabs)
-
-        # Movie Tool Tab
-        movie_tab = QtWidgets.QWidget()
-        movie_layout = QtWidgets.QVBoxLayout(movie_tab)
-        
-        simple_row = QtWidgets.QHBoxLayout()
-        simple_row.addWidget(QtWidgets.QLabel("簡易整形(LLMなし):"))
-        format_movie_btn = QtWidgets.QPushButton("JSONデータ化")
-        format_movie_btn.clicked.connect(self.handle_format_for_movie_json)
-        simple_row.addWidget(format_movie_btn)
-        movie_layout.addLayout(simple_row)
-
-        llm_row = QtWidgets.QHBoxLayout()
-        llm_row.addWidget(QtWidgets.QLabel("LLM改良:"))
-        
-        self.check_use_video_style = QtWidgets.QCheckBox("スタイル反映")
-        self.check_use_video_style.setToolTip("ONにすると、末尾の video_style 定義(カメラ・照明・雰囲気など)をLLMへ伝え、それに沿った描写になるよう補正します。")
-        # デフォルトはOFFにしておく（ユーザーが意図的に選べるように）
-        llm_row.addWidget(self.check_use_video_style)
-
-        llm_row.addWidget(QtWidgets.QLabel("出力言語:"))
-        self.combo_movie_output_lang = create_language_combo()
-        self.combo_movie_output_lang.setToolTip(
-            "動画用LLM整形（世界観/ストーリー/カオスミックス）で生成される文章の言語を指定します。"
-        )
-        llm_row.addWidget(self.combo_movie_output_lang)
-
-        llm_row.addWidget(QtWidgets.QLabel("上限:"))
-        self.combo_movie_length_limit = QtWidgets.QComboBox()
-        self.combo_movie_length_limit.addItems(["(制限なし)", "250", "500", "750", "1000", "1250"])
-        self.combo_movie_length_limit.setToolTip("出力される summary の文字数上限を指定します。\nLLMへの指示として扱われるため、厳密な保証ではありません。")
-        llm_row.addWidget(self.combo_movie_length_limit)
-
-        world_btn = QtWidgets.QPushButton("世界観整形")
-        world_btn.clicked.connect(self.handle_movie_worldbuilding)
-        llm_row.addWidget(world_btn)
-        story_btn = QtWidgets.QPushButton("ストーリー構築")
-        story_btn.clicked.connect(self.handle_movie_storyboard)
-        llm_row.addWidget(story_btn)
-        chaos_mix_btn = QtWidgets.QPushButton("カオスミックス")
-        chaos_mix_btn.setToolTip("メインプロンプト断片を1つの場面に無理やり押し込み、全文をコピーします。")
-        chaos_mix_btn.clicked.connect(self.handle_chaos_mix_and_copy)
-        llm_row.addWidget(chaos_mix_btn)
-        movie_layout.addLayout(llm_row)
-        movie_layout.addStretch(1)
-        
-        tools_tabs.addTab(movie_tab, "動画用に整形(JSON)")
-
-        # LLM Adjust Tab
-        adjust_tab = QtWidgets.QWidget()
-        adjust_layout = QtWidgets.QVBoxLayout(adjust_tab)
-        adjust_layout.setContentsMargins(5, 5, 5, 5)
-
-        # 1. 文字数設定 (簡易・アレンジ共通)
-        length_group = QtWidgets.QHBoxLayout()
-        length_group.addWidget(QtWidgets.QLabel("文字数目標:"))
-        self.combo_length_adjust = QtWidgets.QComboBox()
-        self.combo_length_adjust.addItems(["半分", "2割減", "同程度", "2割増", "倍"])
-        self.combo_length_adjust.setCurrentText("同程度")
-        length_group.addWidget(self.combo_length_adjust)
-
-        length_group.addWidget(QtWidgets.QLabel("出力言語:"))
-        self.combo_arrange_output_lang = create_language_combo()
-        self.combo_arrange_output_lang.setToolTip("LLMアレンジや文字数調整で生成されるプロンプトの言語を指定します。")
-        length_group.addWidget(self.combo_arrange_output_lang)
-
-        length_group.addWidget(QtWidgets.QLabel("上限:"))
-        self.combo_length_limit_arrange = QtWidgets.QComboBox()
-        self.combo_length_limit_arrange.addItems(["(制限なし)", "250", "500", "750", "1000", "1250"])
-        length_group.addWidget(self.combo_length_limit_arrange)
-        
-        simple_adjust_btn = QtWidgets.QPushButton("文字数のみ調整")
-        simple_adjust_btn.setToolTip("スタイル変更を行わず、現在のプロンプトの長さを調整します。")
-        simple_adjust_btn.clicked.connect(self.handle_length_adjust_and_copy)
-        length_group.addWidget(simple_adjust_btn)
-        adjust_layout.addLayout(length_group)
-
-        # 2. アレンジ設定
-        arrange_form = QtWidgets.QFormLayout()
-        
-        self.combo_arrange_preset = QtWidgets.QComboBox()
-        self._update_arrange_preset_choices()
-        self.combo_arrange_preset.currentTextChanged.connect(self._on_arrange_preset_change)
-        arrange_form.addRow("プリセット:", self.combo_arrange_preset)
-        
-        strength_row = QtWidgets.QHBoxLayout()
-        self.slider_strength = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self.slider_strength.setRange(0, 3)
-        self.slider_strength.setValue(2)
-        self.slider_strength.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.slider_strength.setTickInterval(1)
-        self.slider_strength.setFixedWidth(150)
-        self.label_strength_val = QtWidgets.QLabel("2 (標準)")
-        self.slider_strength.valueChanged.connect(self._on_strength_change)
-        strength_row.addWidget(self.slider_strength)
-        strength_row.addWidget(self.label_strength_val)
-        strength_row.addStretch(1)
-        arrange_form.addRow("強度:", strength_row)
-        
-        self.entry_arrange_guidance = QtWidgets.QLineEdit()
-        self.entry_arrange_guidance.setPlaceholderText("追加ガイダンス (任意)")
-        arrange_form.addRow("ガイダンス:", self.entry_arrange_guidance)
-        
-        adjust_layout.addLayout(arrange_form)
-        
-        arrange_btn = QtWidgets.QPushButton("アレンジしてコピー")
-        arrange_btn.setToolTip("選択したプリセットと強度でプロンプトを再構築し、結果をコピーします。")
-        arrange_btn.clicked.connect(self.handle_arrange_llm_and_copy)
-        adjust_layout.addWidget(arrange_btn)
-        
-        adjust_layout.addStretch(1)
-
-        tools_tabs.addTab(adjust_tab, "LLM アレンジ")
+        return PromptUIMixin._build_right_pane_content(self, layout)
 
     def _get_db_path_or_warn(self) -> Optional[Path]:
-        """DBパスの存在をチェックし、欠損時はセットアップ手順を案内する。"""
-
-        db_path = Path(config.DEFAULT_DB_PATH)
-        log_structured(logging.INFO, "db_path_check", {"db_path": str(db_path)})
-        if db_path.exists():
-            return db_path
-        self._show_db_missing_dialog(db_path)
-        return None
+        return PromptDataMixin._get_db_path_or_warn(self)
 
     def _connect_with_foreign_keys(self, db_path: Path) -> sqlite3.Connection:
-        """外部キー制約を確実に有効化した SQLite 接続を返す。"""
-
-        log_structured(logging.INFO, "sqlite_connect_attempt", {"db_path": str(db_path)})
-        conn = sqlite3.connect(db_path)
-        # 参照整合性を SQLite 側で強制し、欠損 ID の混入を初期段階で防ぐ。
-        conn.execute("PRAGMA foreign_keys = ON;")
-        log_structured(logging.INFO, "sqlite_connect_ready", {"db_path": str(db_path)})
-        return conn
+        return PromptDataMixin._connect_with_foreign_keys(self, db_path)
 
     def _build_db_missing_message(self, db_path: Path) -> str:
-        """初回セットアップを明示した案内文を生成する。"""
-
-        return (
-            "データベースファイルが見つかりませんでした。\n"
-            f"想定パス: {db_path}\n\n"
-            "セットアップ例:\n"
-            "1) `python export_prompts_to_csv.py` を実行して初期DBを生成する\n"
-            "2) アプリ内の『CSVをDBに投入』からCSVを登録する\n"
-            "3) ファイルを配置後、アプリを再起動する"
-        )
+        return PromptDataMixin._build_db_missing_message(self, db_path)
 
     def _show_db_missing_dialog(self, db_path: Path) -> None:
-        """DB欠損時のダイアログ表示をまとめ、利用者に具体的な復旧手順を提示する。"""
-
-        log_structured(logging.ERROR, "db_missing", {"db_path": str(db_path)})
-        QtWidgets.QMessageBox.critical(self, "DB未検出", self._build_db_missing_message(db_path))
+        return PromptDataMixin._show_db_missing_dialog(self, db_path)
 
     # =============================
     # データロード
     # =============================
     def load_attribute_data(self):
-        self.attribute_types.clear()
-        self.attribute_details.clear()
-        db_path = self._get_db_path_or_warn()
-        if not db_path:
-            log_structured(
-                logging.WARNING,
-                "db_attribute_load_skipped",
-                {"reason": "db_path_missing"},
-            )
-            return
-
-        try:
-            with closing(self._connect_with_foreign_keys(db_path)) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, attribute_name, description FROM attribute_types")
-                for row in cursor.fetchall():
-                    self.attribute_types.append(AttributeType(*row))
-                cursor.execute(
-                    """
-                    SELECT ad.id, ad.attribute_type_id, ad.description, ad.value, COUNT(DISTINCT pad.prompt_id) as content_count
-                    FROM attribute_details ad
-                    LEFT JOIN prompt_attribute_details pad ON ad.id = pad.attribute_detail_id
-                    GROUP BY ad.id
-                    """
-                )
-                for row in cursor.fetchall():
-                    self.attribute_details.append(AttributeDetail(*row))
-        except sqlite3.Error as exc:
-            log_structured(
-                logging.ERROR,
-                "db_connection_failed",
-                {"db_path": str(db_path), "error": str(exc), "caller": "load_attribute_data"},
-            )
-            QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
-            return
-        log_structured(
-            logging.INFO,
-            "db_attribute_load_success",
-            {
-                "attribute_type_count": len(self.attribute_types),
-                "attribute_detail_count": len(self.attribute_details),
-            },
-        )
+        return PromptDataMixin.load_attribute_data(self)
 
     def update_attribute_ui_choices(self):
-        # 既存フォームをクリア
-        while self.attribute_layout.count():
-            item = self.attribute_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
-
-        self.attribute_combo_map = {}
-        self.attribute_count_map = {}
-        for attr in self.attribute_types:
-            detail_combo = QtWidgets.QComboBox()
-            detail_combo.addItem("-", userData=None)
-            for detail in self.attribute_details:
-                if detail.attribute_type_id != attr.id or detail.content_count <= 0:
-                    continue
-                # 同一説明文があっても attribute_detail.id で一意に識別できるよう、ID を userData に格納する。
-                display_text = f"{detail.description} ({detail.content_count})"
-                detail_combo.addItem(display_text, userData=detail.id)
-            detail_combo.setCurrentIndex(0)
-            detail_combo.currentTextChanged.connect(self.auto_update)
-
-            count_combo = QtWidgets.QComboBox()
-            count_combo.addItems(["-"] + [str(i) for i in range(11)])
-            count_combo.setCurrentText("0")
-            count_combo.currentTextChanged.connect(self.auto_update)
-
-            line_widget = QtWidgets.QWidget()
-            line_layout = QtWidgets.QHBoxLayout(line_widget)
-            line_layout.setContentsMargins(0, 0, 0, 0)
-            line_layout.addWidget(detail_combo, 8)
-            line_layout.addWidget(count_combo, 2)
-            self.attribute_layout.addRow(QtWidgets.QLabel(attr.description), line_widget)
-
-            self.attribute_combo_map[attr.id] = detail_combo
-            self.attribute_count_map[attr.id] = count_combo
+        return PromptDataMixin.update_attribute_ui_choices(self)
 
     # =============================
     # UI イベント
@@ -808,37 +202,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         print(f"[LLM] 現在のモデル: {value} (changed via UI)")
 
     def _on_tail_media_type_change(self, value: str):
-        self._update_tail_free_text_choices(reset_selection=True)
-        self.auto_update()
+        return PromptDataMixin._on_tail_media_type_change(self, value)
 
     def _update_tail_free_text_choices(self, reset_selection: bool):
-        """メディア種別に応じた末尾プリセット候補をコンボボックスへ反映する。
-
-        UI には日本語 description を表示し、実際のプロンプト文字列は userData に保持する。
-        """
-
-        media_type = self.combo_tail_media_type.currentText() or DEFAULT_TAIL_MEDIA_TYPE
-        presets = TAIL_PRESETS.get(media_type, TAIL_PRESETS.get(DEFAULT_TAIL_MEDIA_TYPE, []))
-
-        # 以前の選択肢をプロンプト文字列として記憶し、可能であれば再選択する。
-        previous_prompt = self._resolve_tail_free_prompt()
-
-        self.combo_tail_free.blockSignals(True)
-        self.combo_tail_free.clear()
-        for preset in presets:
-            description = str(preset.get("description_ja", ""))
-            prompt = str(preset.get("prompt", ""))
-            self.combo_tail_free.addItem(description, userData=prompt)
-
-        target_index = 0
-        if not reset_selection and previous_prompt:
-            for i in range(self.combo_tail_free.count()):
-                data = self.combo_tail_free.itemData(i)
-                if isinstance(data, str) and data == previous_prompt:
-                    target_index = i
-                    break
-        self.combo_tail_free.setCurrentIndex(target_index)
-        self.combo_tail_free.blockSignals(False)
+        return PromptDataMixin._update_tail_free_text_choices(self, reset_selection)
 
     def auto_update(self):
         if self.check_autofix.isChecked() and self.main_prompt:
@@ -846,366 +213,45 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             self.update_option(sync_from_text=True)
 
     def _open_csv_import_dialog(self):
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("CSV Import")
-        layout = QtWidgets.QVBoxLayout(dialog)
-        layout.addWidget(QtWidgets.QLabel("CSV データを貼り付けてください"))
-        text_edit = QtWidgets.QTextEdit()
-        layout.addWidget(text_edit)
-        button_row = QtWidgets.QHBoxLayout()
-        layout.addLayout(button_row)
-
-        sample_button = QtWidgets.QPushButton("サンプル行を貼り付け")
-        sample_button.setToolTip("attribute_details テーブルから拾った ID を用いて、投入例となるCSV行を自動生成します。")
-        button_row.addWidget(sample_button)
-
-        button = QtWidgets.QPushButton("投入")
-        button_row.addWidget(button)
-
-        def handle_import():
-            content = text_edit.toPlainText().strip()
-            if not content:
-                QtWidgets.QMessageBox.critical(self, "エラー", "CSVデータを入力してください。")
-                return
-            try:
-                inserted, failed_rows, export_path = self._process_csv(content)
-                if failed_rows:
-                    failure_lines = "\n".join(
-                        f"{row_number}: {reason} | {raw}" for row_number, raw, reason in failed_rows
-                    )
-                    detail_message = (
-                        f"有効行: {inserted} 件、失敗: {len(failed_rows)} 件\n"
-                        f"詳細:\n{failure_lines}"
-                    )
-                    if export_path:
-                        detail_message += f"\n失敗行を書き出しました: {export_path}"
-                    QtWidgets.QMessageBox.warning(
-                        self,
-                        "一部パースに失敗しました",
-                        detail_message,
-                    )
-                else:
-                    QtWidgets.QMessageBox.information(
-                        self, "成功", f"CSVデータを処理しました（{inserted} 件）。"
-                    )
-                self.load_attribute_data()
-                self.update_attribute_ui_choices()
-                dialog.accept()
-            except Exception:
-                QtWidgets.QMessageBox.critical(self, "エラー", f"CSVの処理中にエラーが発生しました: {get_exception_trace()}")
-
-        button.clicked.connect(handle_import)
-        sample_button.clicked.connect(lambda: self._populate_sample_csv_rows(text_edit))
-        dialog.exec()
+        return PromptDataMixin._open_csv_import_dialog(self)
 
     def _populate_sample_csv_rows(self, text_edit: QtWidgets.QTextEdit) -> None:
-        """attribute_details から取得した ID を使って、投入用のサンプル行を挿入する。"""
-
-        db_path = self._get_db_path_or_warn()
-        if not db_path:
-            return
-
-        try:
-            with closing(self._connect_with_foreign_keys(db_path)) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT id, description FROM attribute_details ORDER BY id LIMIT 5"
-                )
-                samples = cursor.fetchall()
-        except sqlite3.Error as exc:
-            log_structured(
-                logging.ERROR,
-                "sample_csv_fetch_failed",
-                {"db_path": str(db_path), "error": str(exc)},
-            )
-            QtWidgets.QMessageBox.warning(
-                self, "サンプル取得失敗", f"attribute_details の読み込みに失敗しました。\n{exc}"
-            )
-            return
-
-        if not samples:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "サンプル取得失敗",
-                "attribute_details が空です。CSVを投入してから再試行してください。",
-            )
-            return
-
-        attribute_ids = [str(row[0]) for row in samples]
-        attribute_labels = [row[1].replace("\"", "'") if row[1] else "attribute" for row in samples]
-        sample_lines = [
-            f'"{attribute_labels[0]} / vivid detail","{attribute_ids[0]}"'
-        ]
-        if len(attribute_ids) >= 2:
-            sample_lines.append(
-                f'"Layered mix: {attribute_labels[0]} + {attribute_labels[1]}","{attribute_ids[0]},{attribute_ids[1]}"'
-            )
-        if len(attribute_ids) >= 3:
-            sample_lines.append(
-                f'"Cinematic trio featuring {attribute_labels[0]} / {attribute_labels[1]} / {attribute_labels[2]}","{attribute_ids[0]},{attribute_ids[1]},{attribute_ids[2]}"'
-            )
-
-        text_edit.setPlainText("\n".join(sample_lines))
-        log_structured(
-            logging.INFO,
-            "sample_csv_inserted",
-            {"attribute_ids": attribute_ids[:3], "caller": "_open_csv_import_dialog"},
-        )
-        QtWidgets.QMessageBox.information(
-            self,
-            "サンプルを挿入しました",
-            "attribute_details のIDを使ったサンプル行を入力欄に貼り付けました。必要に応じて編集してから投入してください。",
-        )
+        return PromptDataMixin._populate_sample_csv_rows(self, text_edit)
 
     def _process_csv(self, csv_content: str) -> Tuple[int, List[Tuple[int, str, str]], Optional[Path]]:
-        """CSV文字列をパースし、DBへ投入する。失敗行はユーザーに見せるため返却・エクスポートする。"""
-
-        db_path = self._get_db_path_or_warn()
-        if not db_path:
-            return 0, [], None
-
-        failed_rows: List[Tuple[int, str, str]] = []
-        cleaned_lines: List[Tuple[int, str]] = []
-
-        for line_number, raw_line in enumerate(csv_content.splitlines(), start=1):
-            if "citation[oaicite" in raw_line or "```" in raw_line:
-                continue
-            normalized = raw_line.replace('"""', '"').strip()
-            if not normalized:
-                continue
-            cleaned_lines.append((line_number, normalized))
-
-        if not cleaned_lines:
-            raise ValueError("有効なCSV行が見つかりませんでした。空行や不要な記法を除去して再試行してください。")
-
-        inserted = 0
-        failed_export_path: Optional[Path] = None
-
-        try:
-            with closing(self._connect_with_foreign_keys(db_path)) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS prompts (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        content TEXT
-                    )
-                    """
-                )
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS prompt_attribute_details (
-                        prompt_id INTEGER,
-                        attribute_detail_id INTEGER,
-                        FOREIGN KEY (prompt_id) REFERENCES prompts (id),
-                        FOREIGN KEY (attribute_detail_id) REFERENCES attribute_details (id)
-                    )
-                    """
-                )
-
-                # with conn: により例外発生時は自動ロールバック。成功時のみコミットされる。
-                with conn:
-                    csv_rows = [row for _, row in cleaned_lines]
-                    for (line_number, raw_line), row in zip(cleaned_lines, csv.reader(csv_rows)):
-                        if len(row) != 2:
-                            failed_rows.append((line_number, raw_line, "列数が2列ではありません"))
-                            continue
-
-                        content, id_column = row
-                        content = content.strip()
-                        id_tokens = [token.strip() for token in id_column.split(",") if token.strip()]
-
-                        if not content:
-                            failed_rows.append((line_number, raw_line, "content が空です"))
-                            continue
-
-                        if not id_tokens:
-                            failed_rows.append((line_number, raw_line, "attribute_detail_id が空です"))
-                            continue
-
-                        try:
-                            attribute_detail_ids = [int(token) for token in id_tokens]
-                        except ValueError:
-                            failed_rows.append((line_number, raw_line, "attribute_detail_id は数値で入力してください"))
-                            continue
-
-                        # attribute_detail_id がDBに存在するかを事前検証し、不整合行は即座に弾く。
-                        missing_ids: List[int] = []
-                        for attribute_detail_id in attribute_detail_ids:
-                            cursor.execute(
-                                "SELECT 1 FROM attribute_details WHERE id = ?", (attribute_detail_id,)
-                            )
-                            if cursor.fetchone() is None:
-                                missing_ids.append(attribute_detail_id)
-
-                        if missing_ids:
-                            missing_summary = ", ".join(str(id_) for id_ in missing_ids)
-                            log_structured(
-                                logging.WARNING,
-                                "csv_row_missing_attribute_detail",
-                                {
-                                    "line_number": line_number,
-                                    "missing_attribute_detail_ids": missing_ids,
-                                    "caller": "_process_csv",
-                                },
-                            )
-                            failed_rows.append(
-                                (
-                                    line_number,
-                                    raw_line,
-                                    f"存在しない attribute_detail_id: {missing_summary}",
-                                )
-                            )
-                            continue
-
-                        cursor.execute('INSERT INTO prompts (content) VALUES (?)', (content,))
-                        prompt_id = cursor.lastrowid
-                        for attribute_detail_id in attribute_detail_ids:
-                            cursor.execute(
-                                'INSERT INTO prompt_attribute_details (prompt_id, attribute_detail_id) VALUES (?, ?)',
-                                (prompt_id, attribute_detail_id),
-                            )
-                        inserted += 1
-
-            if failed_rows:
-                failed_export_path = self._export_failed_rows(failed_rows)
-                log_structured(
-                    logging.WARNING,
-                    "csv_rows_failed_to_parse",
-                    {
-                        "db_path": str(db_path),
-                        "failed_count": len(failed_rows),
-                        "export_path": str(failed_export_path) if failed_export_path else None,
-                    },
-                )
-        except sqlite3.Error as exc:
-            log_structured(
-                logging.ERROR,
-                "db_connection_failed",
-                {"db_path": str(db_path), "error": str(exc), "caller": "_process_csv"},
-            )
-            QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"CSV投入用DB処理に失敗しました。\n{exc}")
-            return 0, failed_rows, failed_export_path
-
-        return inserted, failed_rows, failed_export_path
+        return PromptDataMixin._process_csv(self, csv_content)
 
     def _export_failed_rows(self, failed_rows: List[Tuple[int, str, str]]) -> Path:
-        """パース失敗した行をCSVで書き出し、再投入しやすくする。"""
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        export_path = SCRIPT_DIR / f"failed_csv_rows_{timestamp}.csv"
-        with export_path.open("w", encoding="utf-8", newline="") as fp:
-            writer = csv.writer(fp)
-            writer.writerow(["line_number", "original", "error"])
-            for line_number, raw_line, reason in failed_rows:
-                writer.writerow([line_number, raw_line, reason])
-        return export_path
+        return PromptDataMixin._export_failed_rows(self, failed_rows)
 
     def _export_csv(self):
-        MJImage().run()
+        return PromptDataMixin._export_csv(self)
 
     def _open_exclusion_csv(self):
-        try:
-            if os.name == "nt":
-                subprocess.Popen(["notepad.exe", EXCLUSION_CSV])
-            elif sys.platform == "darwin":
-                subprocess.call(["open", "-a", "TextEdit", EXCLUSION_CSV])
-            else:
-                subprocess.call(["xdg-open", EXCLUSION_CSV])
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "エラー", f"CSVファイルを開けませんでした: {e}")
+        return PromptDataMixin._open_exclusion_csv(self)
 
     def _setup_tail_presets_watcher(self) -> None:
-        """末尾プリセット YAML の変更を監視し、プルダウン候補へ自動反映する。"""
-
-        path = Path(TAIL_PRESETS_YAML)
-        if not path.exists():
-            return
-
-        watcher = QtCore.QFileSystemWatcher(self)
-        watcher.addPath(str(path))
-        watcher.fileChanged.connect(self._on_tail_presets_file_changed)
-        self._tail_presets_watcher = watcher
+        return PromptDataMixin._setup_tail_presets_watcher(self)
 
     @QtCore.Slot(str)
     def _on_tail_presets_file_changed(self, changed_path: str) -> None:
-        """YAML 編集完了後にプリセットを再読込し、現在のコンボボックスに反映する。"""
-
-        # 一部エディタは一時ファイルの差し替えを行うため、少し待ってから読みに行く。
-        QtCore.QTimer.singleShot(300, self._reload_tail_presets_and_refresh_ui)
+        return PromptDataMixin._on_tail_presets_file_changed(self, changed_path)
 
     def _reload_tail_presets_and_refresh_ui(self) -> None:
-        """tail_presets.yaml を再読込し、media_type / tail_free 両コンボを最新状態に更新する。"""
-
-        previous_media_type = self.combo_tail_media_type.currentText() or DEFAULT_TAIL_MEDIA_TYPE
-        previous_prompt = self._resolve_tail_free_prompt()
-
-        load_tail_presets_from_yaml()
-
-        media_types = list(TAIL_PRESETS.keys())
-        if not media_types:
-            return
-
-        self.combo_tail_media_type.blockSignals(True)
-        self.combo_tail_media_type.clear()
-        self.combo_tail_media_type.addItems(media_types)
-
-        # 可能なら以前のメディア種別を維持し、なければデフォルトへフォールバック
-        if previous_media_type in media_types:
-            self.combo_tail_media_type.setCurrentText(previous_media_type)
-        elif DEFAULT_TAIL_MEDIA_TYPE in media_types:
-            self.combo_tail_media_type.setCurrentText(DEFAULT_TAIL_MEDIA_TYPE)
-        else:
-            self.combo_tail_media_type.setCurrentIndex(0)
-        self.combo_tail_media_type.blockSignals(False)
-
-        # メディア種別に応じて末尾プリセットを更新し、同じ prompt があれば再選択を試みる
-        self._update_tail_free_text_choices(reset_selection=True)
-        if previous_prompt:
-            for i in range(self.combo_tail_free.count()):
-                data = self.combo_tail_free.itemData(i)
-                if isinstance(data, str) and data == previous_prompt:
-                    self.combo_tail_free.setCurrentIndex(i)
-                    break
+        return PromptDataMixin._reload_tail_presets_and_refresh_ui(self)
 
     def _setup_arrange_presets_watcher(self) -> None:
-        """アレンジプリセット YAML の変更を監視し、内部定義を自動更新する。"""
-
-        path = Path(ARRANGE_PRESETS_YAML)
-        if not path.exists():
-            return
-
-        watcher = QtCore.QFileSystemWatcher(self)
-        watcher.addPath(str(path))
-        watcher.fileChanged.connect(self._on_arrange_presets_file_changed)
-        self._arrange_presets_watcher = watcher
+        return PromptDataMixin._setup_arrange_presets_watcher(self)
 
     @QtCore.Slot(str)
     def _on_arrange_presets_file_changed(self, changed_path: str) -> None:
-        """アレンジプリセット YAML 編集完了後に再読込を行う。"""
-
-        QtCore.QTimer.singleShot(300, self._reload_arrange_presets)
+        return PromptDataMixin._on_arrange_presets_file_changed(self, changed_path)
 
     def _reload_arrange_presets(self) -> None:
-        """arrange_presets.yaml を再読込し、ARRANGE_PRESETS を最新状態に更新する。"""
-
-        load_arrange_presets_from_yaml()
-        self._update_arrange_preset_choices()
+        return PromptDataMixin._reload_arrange_presets(self)
 
     def _update_arrange_preset_choices(self):
-        """アレンジプリセットの選択肢を更新する。"""
-        current = self.combo_arrange_preset.currentText()
-        self.combo_arrange_preset.blockSignals(True)
-        self.combo_arrange_preset.clear()
-        for p in ARRANGE_PRESETS:
-            self.combo_arrange_preset.addItem(p["label"], userData=p)
-        
-        if current:
-            index = self.combo_arrange_preset.findText(current)
-            if index >= 0:
-                self.combo_arrange_preset.setCurrentIndex(index)
-        self.combo_arrange_preset.blockSignals(False)
-        self._on_arrange_preset_change(self.combo_arrange_preset.currentText())
+        return PromptDataMixin._update_arrange_preset_choices(self)
 
     def _on_arrange_preset_change(self, text):
         """プリセット変更時にガイダンスのプレースホルダーなどを更新する（必要に応じて実装）。"""
@@ -1301,7 +347,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         length_limit,
         output_language: str,
     ):
-        if not LLM_ENABLED:
+        if not config.LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
         
@@ -1358,7 +404,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         length_limit: int,
         output_language: str,
     ):
-        if not LLM_ENABLED:
+        if not config.LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
         worker = ChaosMixLLMWorker(
@@ -1758,7 +804,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         - 「-」かつ数値のみ指定された属性: 対応するプルダウン候補からランダムに詳細を選定して数ぶん展開
         - 行数に対して合計requested_countが不足している場合: すべての属性プルダウン候補から不足分だけランダムに詳細を追加
         """
-        if not LLM_ENABLED:
+        if not config.LLM_ENABLED:
             QtWidgets.QMessageBox.warning(
                 self,
                 "注意",
@@ -2225,7 +1271,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         return True
 
     def _start_llm_worker(self, text: str, length_hint: str, length_limit: int = 0, output_language: str = "en"):
-        if not LLM_ENABLED:
+        if not config.LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
         worker = LLMWorker(
@@ -2249,7 +1295,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         length_limit: int = 0,
         output_language: str = "en",
     ):
-        if not LLM_ENABLED:
+        if not config.LLM_ENABLED:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。")
             return
         worker = MovieLLMWorker(
@@ -2341,17 +1387,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         handler(thread, worker, payload)
 
     def _update_exclusion_words(self, new_words: List[str]):
-        new_words = sorted([w for w in new_words if w])
-        new_phrase = ", ".join(new_words)
-        current_words = load_exclusion_words()
-        if new_phrase and new_phrase not in current_words:
-            with open(EXCLUSION_CSV, "a", encoding="utf-8", newline="") as file:
-                writer = csv.writer(file, quotechar='"', quoting=csv.QUOTE_ALL)
-                writer.writerow([new_phrase])
-            updated = load_exclusion_words()
-            self.combo_exclusion.clear()
-            self.combo_exclusion.addItems(updated)
-            self.combo_exclusion.setCurrentText(new_phrase)
+        return PromptDataMixin._update_exclusion_words(self, new_words)
 
     # =============================
     # オプション整形系ヘルパー
@@ -2484,72 +1520,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     # フォント制御
     # =============================
     def cycle_font_scale(self):
-        """UI全体のフォントプリセットを巡回させる。"""
-        if not FONT_SCALE_PRESETS:
-            return
-        self.font_scale_level = (self.font_scale_level + 1) % len(FONT_SCALE_PRESETS)
-        self._apply_font_scale()
+        return PromptUIMixin.cycle_font_scale(self)
 
     def _apply_font_scale(self):
-        """現在のプリセットを QApplication とウィンドウ自身へ適用する。"""
-        if not FONT_SCALE_PRESETS:
-            return
-        preset = FONT_SCALE_PRESETS[self.font_scale_level]
-        base_size = preset["pt"]
-        base_family = self._ui_font_family or self.font().family()
-        new_font = QtGui.QFont(base_family, base_size)
-        
-        app = QtWidgets.QApplication.instance()
-        if app is not None:
-            app.setFont(new_font)
-        self.setFont(new_font)
-        
-        # text_output エリアは常に +2pt 大きくする（可読性向上のため）
-        if hasattr(self, 'text_output') and self.text_output is not None:
-            output_font = QtGui.QFont(base_family, base_size + 2)
-            self.text_output.setFont(output_font)
-        
-        # スタイルシートの動的更新 (BigActionボタンなどを強調するため)
-        # QGroupBox のタイトルサイズなどをベース+1程度に調整
-        big_action_size = base_size + 2
-        group_title_size = base_size
-        
-        self.centralWidget().setStyleSheet(f"""
-            QGroupBox {{
-                font-weight: bold;
-                font-size: {group_title_size}pt;
-                border: 1px solid #ccc;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 3px;
-            }}
-            QPushButton {{
-                padding: 5px 10px;
-            }}
-            QPushButton#BigAction {{
-                font-weight: bold;
-                font-size: {big_action_size}pt;
-                padding: 8px 16px;
-                background-color: #0078d4;
-                color: white;
-                border-radius: 4px;
-            }}
-            QPushButton#BigAction:hover {{
-                background-color: #2b88d8;
-            }}
-        """)
-        
-        self._update_font_button_label(preset["label"])
+        return PromptUIMixin._apply_font_scale(self)
 
     def _update_font_button_label(self, label: str):
-        """フォント切替ボタンのラベルを最新状態に揃える。"""
-        if self.button_font_scale:
-            self.button_font_scale.setText(f"フォント: {label}")
+        return PromptUIMixin._update_font_button_label(self, label)
 
 
 def main():
