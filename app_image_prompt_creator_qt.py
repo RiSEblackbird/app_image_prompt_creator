@@ -11,7 +11,6 @@ Tkinter 実装から移行し、QMainWindow/QWidget ベースのUIへ再設計�
 from __future__ import annotations
 
 import csv
-import importlib
 import json
 import logging
 import os
@@ -35,7 +34,6 @@ from modules.llm import (
     GeneratePromptLLMWorker,
     LLMWorker,
     MovieLLMWorker,
-    _normalize_language_code,
 )
 from modules.logging_utils import (
     get_exception_trace,
@@ -44,6 +42,7 @@ from modules.logging_utils import (
     log_structured,
     setup_logging,
 )
+from modules.export_loader import load_export_module
 from modules.prompt_data import (
     AttributeDetail,
     AttributeType,
@@ -57,6 +56,17 @@ from modules.settings_loader import (
     resolve_path,
     show_deferred_settings_notes,
 )
+from modules.prompt_text_utils import (
+    build_movie_json_payload,
+    compose_movie_prompt,
+    detach_content_flags_tail,
+    detach_movie_tail_for_llm,
+    extract_sentence_details,
+    inherit_options_if_present,
+    split_prompt_and_options,
+    strip_all_options,
+)
+from modules.ui_helpers import combo_language_code, create_language_combo
 
 setup_logging()
 
@@ -68,117 +78,7 @@ def __getattr__(name: str):
     raise AttributeError(f"{__name__} has no attribute {name}")
 
 
-def _combo_language_code(combo: Optional[QtWidgets.QComboBox]) -> str:
-    """コンボボックスの userData から言語コードを取り出し、正規化して返す。"""
-
-    if combo is None:
-        return "en"
-    data = combo.currentData()
-    return _normalize_language_code(data if isinstance(data, str) else None)
-
-
-def _create_language_combo() -> QtWidgets.QComboBox:
-    """英語/日本語の2択を持つコンボボックスを生成する。"""
-
-    combo = QtWidgets.QComboBox()
-    for label, code in LANGUAGE_COMBO_CHOICES:
-        combo.addItem(label, userData=code)
-    combo.setCurrentIndex(0)
-    return combo
-
-
-def _show_missing_export_module_dialog() -> None:
-    """CSVエクスポートモジュール欠損時の案内をダイアログで提示する。"""
-
-    instruction = (
-        "CSVエクスポート用モジュール export_prompts_to_csv.py が見つかりません。\n\n"
-        "復旧手順:\n"
-        "1) リポジトリ直下に export_prompts_to_csv.py を配置する\n"
-        "2) `git checkout -- export_prompts_to_csv.py` を実行して取得する\n"
-        "3) 別リポジトリで管理している場合は README の案内や pip インストール手順を参照する"
-    )
-    try:
-        QtWidgets.QMessageBox.critical(None, "CSVエクスポートモジュール未検出", instruction)
-    except Exception:
-        logging.error("export_prompts_to_csv.py が見つかりません: %s", instruction)
-
-
-def _load_export_module():
-    """MJImage の実体を起動時にロードし、欠損時は代替を返す。"""
-
-    try:
-        module = importlib.import_module("export_prompts_to_csv")
-        return module.MJImage
-    except Exception as exc:
-        log_structured(logging.ERROR, "export_module_missing", {"error": str(exc)})
-        _show_missing_export_module_dialog()
-
-        class _MissingMJImage:
-            """欠損時でもボタン押下で案内を出せるプレースホルダー。"""
-
-            def run(self):
-                _show_missing_export_module_dialog()
-
-        return _MissingMJImage
-
-
-MJImage = _load_export_module()
-
-
-def sanitize_to_english(text: str) -> str:
-    """基本的に英語出力を維持するための軽いサニタイズ。"""
-    replacements = {
-        "和風": "Japanese style",
-        "浮世絵": "ukiyo-e",
-        "侍": "samurai",
-        "忍者": "ninja",
-        "アール・デコ": "Art Deco",
-        "アール・ヌーヴォー": "Art Nouveau",
-        "水彩画": "watercolor",
-        "漫画": "manga",
-        "アニメ": "anime",
-        "ノワール": "noir",
-        "ヴェイパーウェーブ": "vaporwave",
-    }
-    out = text
-    for k, v in replacements.items():
-        out = out.replace(k, v)
-    return out
-
-
-def _extract_anchor_terms(text: str, max_terms: int = 8) -> List[str]:
-    """原文から保持すべきアンカー語句（名詞・象徴語）を抽出する。"""
-    try:
-        cleaned = re.sub(r"[^A-Za-z0-9\-\s]", " ", text)
-        tokens = [t.strip('-') for t in cleaned.split()]
-        tokens = [t for t in tokens if len(t) >= 3]
-        priority = {
-            'cherry', 'blossom', 'blossoms', 'lantern', 'lanterns', 'temple', 'shrine', 'garden',
-            'tea', 'bamboo', 'maple', 'zen', 'wabi', 'sabi', 'imperfection', 'architecture', 'wood', 'paper',
-            'stone', 'bridge', 'pond', 'kimono', 'tatami', 'shoji', 'bonsai'
-        }
-        scored = []
-        for t in tokens:
-            score = 1
-            lt = t.lower()
-            if lt in priority:
-                score += 3
-            if any(k in lt for k in ['garden', 'temple', 'shrine', 'lantern', 'blossom', 'bamboo', 'maple', 'tea', 'zen']):
-                score += 1
-            scored.append((score, t))
-        scored.sort(reverse=True)
-        anchors = []
-        seen = set()
-        for _, w in scored:
-            lw = w.lower()
-            if lw not in seen:
-                anchors.append(w)
-                seen.add(lw)
-            if len(anchors) >= max_terms:
-                break
-        return anchors
-    except Exception:
-        return []
+MJImage = load_export_module()
 
 
 class PromptGeneratorWindow(QtWidgets.QMainWindow):
@@ -684,7 +584,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         llm_row.addWidget(self.check_use_video_style)
 
         llm_row.addWidget(QtWidgets.QLabel("出力言語:"))
-        self.combo_movie_output_lang = _create_language_combo()
+        self.combo_movie_output_lang = create_language_combo()
         self.combo_movie_output_lang.setToolTip(
             "動画用LLM整形（世界観/ストーリー/カオスミックス）で生成される文章の言語を指定します。"
         )
@@ -725,7 +625,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         length_group.addWidget(self.combo_length_adjust)
 
         length_group.addWidget(QtWidgets.QLabel("出力言語:"))
-        self.combo_arrange_output_lang = _create_language_combo()
+        self.combo_arrange_output_lang = create_language_combo()
         self.combo_arrange_output_lang.setToolTip("LLMアレンジや文字数調整で生成されるプロンプトの言語を指定します。")
         length_group.addWidget(self.combo_arrange_output_lang)
 
@@ -1355,7 +1255,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         
         limit_text = self.combo_length_limit_arrange.currentText()
         length_limit = int(limit_text) if limit_text.isdigit() else 0
-        output_language = _combo_language_code(getattr(self, "combo_arrange_output_lang", None))
+        output_language = combo_language_code(getattr(self, "combo_arrange_output_lang", None))
         
         self._start_arrange_llm_worker(
             src,
@@ -1376,10 +1276,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not main_text.strip():
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
             return
-        fragments = self._extract_sentence_details(main_text)
+        fragments = extract_sentence_details(main_text)
         video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
         length_limit = self._get_selected_movie_length_limit()
-        output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
+        output_language = combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_chaos_mix_llm_worker(
             main_text=main_text,
             fragments=fragments,
@@ -1428,8 +1328,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
             return
         # オプション継承処理 + 末尾2(content_flags)の再付与
-        merged = self._inherit_options_if_present(self.text_output.toPlainText(), result)
-        base_without_flags, _ = self._detach_content_flags_tail(merged)
+        merged = inherit_options_if_present(self.text_output.toPlainText(), result)
+        base_without_flags, _ = detach_content_flags_tail(merged)
         flags_tail = self._make_tail_flags_json()
         clean = (base_without_flags or "").rstrip() + flags_tail
 
@@ -1493,14 +1393,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         flags_tail = self._make_tail_flags_json()
 
         # カオスミックス結果も world_description JSON としてデータ化する
-        details = self._extract_sentence_details(result)
-        chaos_json = self._build_movie_json_payload(
+        details = extract_sentence_details(result)
+        chaos_json = build_movie_json_payload(
             summary=result.strip(),
             details=details,
             scope="single_chaotic_scene",
             key="world_description",
         )
-        combined = self._compose_movie_prompt(chaos_json, movie_tail, flags_tail, options_tail)
+        combined = compose_movie_prompt(chaos_json, movie_tail, flags_tail, options_tail)
 
         self.text_output.setPlainText(combined)
         self._update_internal_prompt_from_text(combined)
@@ -2223,15 +2123,15 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             if not prepared:
                 return
             main_text, options_tail, movie_tail, _ = prepared
-            details = self._extract_sentence_details(main_text)
-            world_json = self._build_movie_json_payload(
+            details = extract_sentence_details(main_text)
+            world_json = build_movie_json_payload(
                 summary=main_text.strip(),
                 details=details,
                 scope="single_continuous_world",
                 key="world_description",
             )
             flags_tail = self._make_tail_flags_json()
-            result = self._compose_movie_prompt(world_json, movie_tail, flags_tail, options_tail)
+            result = compose_movie_prompt(world_json, movie_tail, flags_tail, options_tail)
             self.text_output.setPlainText(result)
             self._update_internal_prompt_from_text(result)
             QtGui.QGuiApplication.clipboard().setText(result)
@@ -2244,10 +2144,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not prepared:
             return
         main_text, options_tail, movie_tail, content_flags_tail = prepared
-        details = self._extract_sentence_details(main_text)
+        details = extract_sentence_details(main_text)
         video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
         length_limit = self._get_selected_movie_length_limit()
-        output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
+        output_language = combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_movie_llm_transformation(
             "world",
             main_text,
@@ -2265,10 +2165,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not prepared:
             return
         main_text, options_tail, movie_tail, content_flags_tail = prepared
-        details = self._extract_sentence_details(main_text)
+        details = extract_sentence_details(main_text)
         video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
         length_limit = self._get_selected_movie_length_limit()
-        output_language = _combo_language_code(getattr(self, "combo_movie_output_lang", None))
+        output_language = combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_movie_llm_transformation(
             "storyboard",
             main_text,
@@ -2297,7 +2197,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         limit_text = self.combo_length_limit_arrange.currentText()
         length_limit = int(limit_text) if limit_text.isdigit() else 0
         
-        output_language = _combo_language_code(getattr(self, "combo_arrange_output_lang", None))
+        output_language = combo_language_code(getattr(self, "combo_arrange_output_lang", None))
         self._start_llm_worker(src, target, length_limit, output_language)
 
     def _start_background_worker(self, worker: QtCore.QObject, success_handler, failure_handler):
@@ -2379,8 +2279,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         if not result:
             QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
             return
-        merged = self._inherit_options_if_present(self.text_output.toPlainText(), result)
-        base_without_flags, _ = self._detach_content_flags_tail(merged)
+        merged = inherit_options_if_present(self.text_output.toPlainText(), result)
+        base_without_flags, _ = detach_content_flags_tail(merged)
         flags_tail = self._make_tail_flags_json()
         clean = (base_without_flags or "").rstrip() + flags_tail
         # 文字数調整の結果も内部状態へ反映し、後続操作で旧テキストへ巻き戻らないようにする。
@@ -2405,10 +2305,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         options_tail = context.get("options_tail", "")
         scope = "single_continuous_world" if mode == "world" else "single_shot_storyboard"
         json_key = "world_description" if mode == "world" else "storyboard"
-        details = self._extract_sentence_details(result)
-        world_json = self._build_movie_json_payload(result, details, scope=scope, key=json_key)
+        details = extract_sentence_details(result)
+        world_json = build_movie_json_payload(result, details, scope=scope, key=json_key)
         flags_tail = self._make_tail_flags_json()
-        combined = self._compose_movie_prompt(world_json, movie_tail, flags_tail, options_tail)
+        combined = compose_movie_prompt(world_json, movie_tail, flags_tail, options_tail)
         self.text_output.setPlainText(combined)
         self._update_internal_prompt_from_text(combined)
         QtGui.QGuiApplication.clipboard().setText(combined)
@@ -2463,9 +2363,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
             return None
         # 末尾2(JSONフラグ)はLLM用のメインテキストからは除外する
-        core_without_flags, flags_tail = self._detach_content_flags_tail(src)
-        core_without_movie, movie_tail = self._detach_movie_tail_for_llm(core_without_flags)
-        main_text, options_tail, _ = self._split_prompt_and_options(core_without_movie)
+        core_without_flags, flags_tail = detach_content_flags_tail(src)
+        core_without_movie, movie_tail = detach_movie_tail_for_llm(core_without_flags)
+        main_text, options_tail, _ = split_prompt_and_options(core_without_movie)
         if not main_text:
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
             return None
@@ -2482,39 +2382,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             content_flags = self._make_tail_flags_json().strip()
         return video_style, content_flags
 
-    def _extract_sentence_details(self, text: str) -> List[str]:
-        """文末の句読点で区切り、世界観説明に使う細部の配列を作る。"""
-        sentence_candidates = re.split(r"[。\.]\s*", text or "")
-        details = [s.strip(" .　") for s in sentence_candidates if s.strip(" .　")]
-        return details or [text.strip()]
-
-    def _build_movie_json_payload(self, summary: str, details: List[str], scope: str, key: str) -> str:
-        """world_description もしくは storyboard としてJSON文字列を生成する。"""
-        payload = {
-            key: {
-                "scope": scope,
-                "summary": (summary or "").strip()
-            }
-        }
-        return json.dumps(payload, ensure_ascii=False)
-
-    def _compose_movie_prompt(self, core_json: str, movie_tail: str, flags_tail: str, options_tail: str) -> str:
-        """生成したJSONと末尾要素（動画スタイル・末尾2フラグ・MJオプション）を安全に連結する。"""
-        parts = [core_json]
-        if movie_tail:
-            parts.append(movie_tail.strip())
-        if flags_tail:
-            parts.append(flags_tail.strip())
-        if options_tail:
-            parts.append(options_tail.strip())
-        return " ".join(p for p in parts if p)
-
     def _detach_content_flags_tail(self, text: str) -> Tuple[str, str]:
-        """
-        テキスト末尾付近から content_flags を含む JSON ブロック({...})を抽出する。
-        例: {"content_flags":{"narration":true,"person_present":false,"bgm":true,"dialogue":false}}
-        """
-        text = (text or "").strip()
+        return detach_content_flags_tail(text)
         search_end = len(text) - 1
 
         while search_end >= 0:
@@ -2549,11 +2418,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         return text, ""
 
     def _detach_movie_tail_for_llm(self, text: str) -> Tuple[str, str]:
-        """
-        テキスト内から video_style を含む JSON ブロック({...}) を抽出する。
-        単純な split() では JSON 内のスペースで分割されてしまうため、括弧の対応関係を用いて抽出する。
-        """
-        text = (text or "").strip()
+        return detach_movie_tail_for_llm(text)
         search_end = len(text) - 1
         
         while search_end >= 0:
@@ -2595,64 +2460,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
         return text, ""
 
     def _split_prompt_and_options(self, text: str):
-        try:
-            tokens = (text or "").strip().split()
-            if not tokens:
-                return "", "", False
-            allowed = {"--ar", "--s", "--chaos", "--q", "--weird"}
-            start_idx = None
-            i = len(tokens) - 1
-            while i >= 0:
-                if tokens[i] in allowed:
-                    start_idx = i
-                    i -= 1
-                    if i >= 0 and tokens[i] not in allowed and not tokens[i].startswith("--"):
-                        i -= 1
-                    while i >= 0:
-                        if tokens[i] in allowed:
-                            i -= 1
-                            if i >= 0 and tokens[i] not in allowed and not tokens[i].startswith("--"):
-                                i -= 1
-                        else:
-                            break
-                    start_idx = i + 1
-                    break
-                else:
-                    i -= 1
-            if start_idx is not None and 0 <= start_idx < len(tokens):
-                j = start_idx
-                ok = True
-                while j < len(tokens):
-                    if tokens[j] in allowed:
-                        j += 1
-                        if j < len(tokens) and not tokens[j].startswith("--"):
-                            j += 1
-                    else:
-                        ok = False
-                        break
-                if ok:
-                    main_text = " ".join(tokens[:start_idx]).rstrip()
-                    options_tail = (" " + " ".join(tokens[start_idx:])) if start_idx < len(tokens) else ""
-                    return main_text, options_tail, True
-            return (text or "").strip(), "", False
-        except Exception:
-            return (text or "").strip(), "", False
+        return split_prompt_and_options(text)
 
     def _inherit_options_if_present(self, original_text: str, new_text: str) -> str:
-        orig_main, orig_opts, has_opts = self._split_prompt_and_options(original_text)
-        if has_opts:
-            new_main, _, _ = self._split_prompt_and_options(new_text)
-            return new_main + orig_opts
-        return self._strip_all_options(new_text)
+        return inherit_options_if_present(original_text, new_text)
 
     def _strip_all_options(self, text: str) -> str:
-        try:
-            pattern = r"(?:(?<=\s)|^)--(?:ar|s|chaos|q|weird)(?:\s+(?!-)[^\s]+)?"
-            cleaned = re.sub(pattern, "", text)
-            cleaned = re.sub(r"\s+", " ", cleaned).strip()
-            return cleaned
-        except Exception:
-            return (text or "").strip()
+        return strip_all_options(text)
 
     def _update_internal_prompt_from_text(self, full_text: str):
         normalized = (full_text or "").strip()
