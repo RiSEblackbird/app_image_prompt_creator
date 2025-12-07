@@ -11,204 +11,48 @@ Tkinter 実装から移行し、QMainWindow/QWidget ベースのUIへ再設計�
 from __future__ import annotations
 
 import csv
-import faulthandler
 import importlib
 import json
 import logging
 import os
-import platform
 import random
 import re
-import socket
 import sqlite3
 import subprocess
 import sys
-import traceback
+import time
 from contextlib import closing
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-import time
 from typing import Iterable, List, Optional, Set, Tuple
 
 import requests
 from PySide6 import QtCore, QtGui, QtWidgets
 
-# =============================
-# 設定・定数
-# =============================
-WINDOW_TITLE = "画像プロンプトランダム生成ツール (PySide6)"
-DEFAULT_ROW_NUM = 10
-DEFAULT_TAIL_MEDIA_TYPE = "image"
-AVAILABLE_LLM_MODELS = [
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-5.1",
-]
-DEFAULT_LLM_MODEL = AVAILABLE_LLM_MODELS[0]
-LANGUAGE_COMBO_CHOICES = [
-    ("英語", "en"),
-    ("日本語", "ja"),
-]
-
-# 末尾プリセットのデフォルト定義。
-# YAML が欠損・パース失敗した場合にも既存挙動を維持できるよう、
-# ここに「英語/JSON の実プロンプト」と「日本語 description（UI 表示専用）」の両方を持たせる。
-DEFAULT_TAIL_PRESETS = {
-    "image": [
-        {"description_ja": "（なし）", "prompt": ""},
-        {
-            "description_ja": "超高解像度写真 (8K)",
-            "prompt": "A high resolution photograph. Very high resolution. 8K photo",
-        },
-        {
-            "description_ja": "日本画・墨絵スタイル",
-            "prompt": "a Japanese ink painting. Zen painting",
-        },
-        {
-            "description_ja": "中世ヨーロッパ絵画スタイル",
-            "prompt": "a Medieval European painting.",
-        },
-    ],
-    "movie": [
-        {"description_ja": "（なし）", "prompt": ""},
-        {
-            "description_ja": "70mmフィルムのシネマティック全編",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film\",\"look\":\"dramatic lighting\"}}",
-        },
-        {
-            "description_ja": "4K HDR の高精細トラッキングショット",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"dynamic tracking shot captured as ultra high fidelity footage\",\"format\":\"4K HDR\"}}",
-        },
-        {
-            "description_ja": "ムーディーなアートハウス短編",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"moody arthouse short film\",\"camera\":\"deliberate movement\"}}",
-        },
-        {
-            "description_ja": "モダンな映画予告編風の高速モンタージュ",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"fast-paced montage cut like a modern movie trailer\",\"grade\":\"Dolby Vision\"}}",
-        },
-        {
-            "description_ja": "タイトなシネマティックショット (4K)",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tight cinematic shot with controlled, fluid camera motion\",\"format\":\"4K\"}}",
-        },
-        {
-            "description_ja": "1960年代フィルムプリント風の雰囲気カット",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"atmospheric sequence graded like a 1960s film print\",\"grade\":\"film emulation\"}}",
-        },
-        {
-            "description_ja": "スタジオライティングの高コントラストショット",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"crisp studio-lit shot with high contrast and clean composition\",\"look\":\"studio lighting\"}}",
-        },
-        {
-            "description_ja": "ハンドヘルド撮影の自然なモーションブラー",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"handheld cinematic shot with subtle motion blur and natural grain\",\"camera\":\"handheld\"}}",
-        },
-        {
-            "description_ja": "8K マスターのスムーズな編集シネマティック",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"cinematic shot mastered in 8K with smooth editing rhythm\",\"format\":\"8K\"}}",
-        },
-        {
-            "description_ja": "ドローンによるワンテイク空撮",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"continuous one-take aerial drone footage flying smoothly through the scene\",\"camera\":\"drone one-shot\"}}",
-        },
-        {
-            "description_ja": "サスペンスドラマ風の緊張感あるシーン",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"tense, dramatic scene from a suspense TV drama with moody lighting and framing\",\"genre\":\"suspense drama\"}}",
-        },
-        {
-            "description_ja": "ワンショット・ドキュメンタリー調の現実的トーン",
-            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"single-take documentary-style shot that follows this world in a realistic tone\",\"style\":\"one-shot documentary\"}}",
-        },
-    ],
-}
-
-# 実際に UI/生成で利用する末尾プリセット（起動時に YAML から上書き）
-TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
-
-# アレンジプリセット（LLMスタイル用）は Tk 版と同じ YAML (`arrange_presets.yaml`) を共有する。
-# Qt 版では現時点で UI バインディングのみ未実装だが、データ層としてプリセットの読込とホットリロードに対応しておく。
-DEFAULT_ARRANGE_PRESETS = [
-    {"id": "auto", "label": "auto", "guidance": ""},
-]
-ARRANGE_PRESETS: List[dict] = deepcopy(DEFAULT_ARRANGE_PRESETS)
-S_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "300", "400", "500", "600", "700", "800", "900", "1000"]
-AR_OPTIONS = ["", "16:9", "9:16", "4:3", "3:4"]
-CHAOS_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]
-Q_OPTIONS = ["", "1", "2"]
-WEIRD_OPTIONS = ["", "0", "10", "20", "30", "40", "50", "100", "150", "200", "250", "500", "750", "1000", "1250", "1500", "1750", "2000", "2250", "2500", "2750", "3000"]
-LABEL_EXCLUSION_WORDS = "除外語句："
-CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
-RESPONSES_API_URL = "https://api.openai.com/v1/responses"
-RESPONSES_MODEL_PREFIXES = ("gpt-5",)
-LENGTH_LIMIT_REASONS = {"length", "max_output_tokens"}
-HOSTNAME = socket.gethostname()
-SCRIPT_DIR = Path(__file__).resolve().parent
-
-LOG_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
-LOG_FORMAT = (
-    "%(asctime)s.%(msecs)03d\t%(levelname)s\t%(hostname)s\t"
-    "pid=%(process)d\tthread=%(threadName)s\t%(name)s:%(lineno)d\t%(message)s"
+from modules import config
+from modules.logging_utils import (
+    get_exception_trace,
+    install_global_exception_logger,
+    log_startup_environment,
+    log_structured,
+    setup_logging,
 )
-logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt=LOG_DATETIME_FORMAT)
-try:
-    faulthandler.enable()
-except Exception:
-    logging.getLogger(__name__).warning("Failed to enable faulthandler; native crashes may lack stack traces.")
+from modules.settings_loader import (
+    initialize_settings,
+    load_yaml_settings,
+    resolve_path,
+    show_deferred_settings_notes,
+)
+
+setup_logging()
 
 
-class _HostnameContextFilter(logging.Filter):
-    """ターミナル出力でホスト名を常に表示し、障害発生環境を即時判別できるようにする。"""
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.hostname = HOSTNAME
-        return True
-
-
-logging.getLogger().addFilter(_HostnameContextFilter())
-
-FONT_SCALE_PRESETS = [
-    {"label": "標準", "pt": 11},
-    {"label": "大", "pt": 13},
-    {"label": "特大", "pt": 16},
-    {"label": "4K", "pt": 20},
-]
-
-# 設定ファイルが欠損した場合も動かせるよう、サンプル相当のデフォルト値を持っておく。
-DEFAULT_APP_SETTINGS = {
-    "POSITION_FILE": "window_position_app_image_prompt_creator.txt",
-    "BASE_FOLDER": ".",
-    "DEFAULT_TXT_PATH": "image_prompt_parts.txt",
-    "DEFAULT_DB_PATH": "image_prompt_parts.db",
-    "EXCLUSION_CSV": "exclusion_targets.csv",
-    "ARRANGE_PRESETS_YAML": "arrange_presets.yaml",
-    "TAIL_PRESETS_YAML": "tail_presets.yaml",
-    "DEDUPLICATE_PROMPTS": True,
-    "LLM_ENABLED": False,
-    "LLM_MODEL": DEFAULT_LLM_MODEL,
-    "LLM_MAX_COMPLETION_TOKENS": 4500,
-    "LLM_TIMEOUT": 30,
-    "OPENAI_API_KEY_ENV": "OPENAI_API_KEY",
-    "LLM_INCLUDE_TEMPERATURE": False,
-    "LLM_TEMPERATURE": 0.7,
-}
-
-SETTINGS_SNAPSHOT_KEYS = [
-    "BASE_FOLDER",
-    "DEFAULT_DB_PATH",
-    "EXCLUSION_CSV",
-    "ARRANGE_PRESETS_YAML",
-    "TAIL_PRESETS_YAML",
-    "LLM_ENABLED",
-    "LLM_MODEL",
-    "LLM_MAX_COMPLETION_TOKENS",
-    "LLM_TIMEOUT",
-    "LLM_INCLUDE_TEMPERATURE",
-]
-
-# 設定読み込み中の警告やフォールバック内容を貯めて、ウィンドウ生成後にまとめて案内する。
-SETTINGS_LOAD_NOTES: List[str] = []
+def __getattr__(name: str):
+    """設定・定数を modules.config から遅延取得するためのフォールバック。"""
+    if hasattr(config, name):
+        return getattr(config, name)
+    raise AttributeError(f"{__name__} has no attribute {name}")
 
 
 def _coerce_json_safe(value):
@@ -273,72 +117,6 @@ def _create_language_combo() -> QtWidgets.QComboBox:
     return combo
 
 
-def install_global_exception_logger():
-    """未捕捉例外やQtメッセージを構造化ログに流し、ターミナル調査を容易にする。"""
-
-    if getattr(install_global_exception_logger, "_installed", False):
-        return
-
-    def _handle_exception(exc_type, exc_value, exc_traceback):
-        if issubclass(exc_type, KeyboardInterrupt):
-            sys.__excepthook__(exc_type, exc_value, exc_traceback)
-            return
-        trace = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-        log_structured(
-            logging.CRITICAL,
-            "unhandled_exception",
-            {
-                "exception_type": exc_type.__name__,
-                "message": str(exc_value),
-                "traceback": trace,
-            },
-        )
-
-    sys.excepthook = _handle_exception
-
-    def _qt_message_handler(mode, context, message):
-        level_map = {
-            QtCore.QtDebugMsg: logging.DEBUG,
-            QtCore.QtInfoMsg: logging.INFO,
-            QtCore.QtWarningMsg: logging.WARNING,
-            QtCore.QtCriticalMsg: logging.ERROR,
-            QtCore.QtFatalMsg: logging.CRITICAL,
-        }
-        payload = {
-            "category": getattr(context, "category", ""),
-            "file": getattr(context, "file", ""),
-            "line": getattr(context, "line", 0),
-            "function": getattr(context, "function", ""),
-            "message": message,
-        }
-        log_structured(level_map.get(mode, logging.INFO), "qt_message", payload)
-        if mode == QtCore.QtFatalMsg:
-            raise SystemExit(1)
-
-    try:
-        QtCore.qInstallMessageHandler(_qt_message_handler)
-    except Exception:
-        logging.getLogger(__name__).debug("Qt message handler installation skipped.", exc_info=True)
-
-    install_global_exception_logger._installed = True
-
-
-def log_startup_environment():
-    """アプリ起動直後の実行環境を計測し、障害再現を容易にする。"""
-
-    payload = {
-        "python_version": platform.python_version(),
-        "executable": sys.executable,
-        "cwd": os.getcwd(),
-        "script_dir": str(SCRIPT_DIR),
-        "default_db_path": DEFAULT_DB_PATH,
-        "settings_path": str(_resolve_path("desktop_gui_settings.yaml")),
-        "qt_version": QtCore.qVersion(),
-        "hostname": HOSTNAME,
-    }
-    log_structured(logging.INFO, "startup_environment", payload)
-
-
 def _show_missing_export_module_dialog() -> None:
     """CSVエクスポートモジュール欠損時の案内をダイアログで提示する。"""
 
@@ -377,256 +155,15 @@ def _load_export_module():
 MJImage = _load_export_module()
 
 
-def _resolve_path(path_value, base_dir=SCRIPT_DIR):
-    if path_value is None:
-        return base_dir
-    if isinstance(path_value, Path):
-        path = path_value
-    else:
-        path = Path(str(path_value))
-    if path.is_absolute():
-        return path
-    return base_dir / path
-
-
-def _prompt_settings_path(parent: Optional[QtWidgets.QWidget], resolved_path: Path) -> Optional[Path]:
-    """設定ファイル欠損時に、ユーザーへパス確認/再指定を促すダイアログを表示。"""
-
-    app = QtWidgets.QApplication.instance()
-    if app is None:
-        SETTINGS_LOAD_NOTES.append(
-            f"設定ファイルが見つからないためデフォルト設定を使用しました: {resolved_path}"
-        )
-        return None
-
-    dialog = QtWidgets.QMessageBox(parent)
-    dialog.setWindowTitle("設定ファイルが見つかりません")
-    dialog.setText("設定ファイル desktop_gui_settings.yaml が見つかりませんでした。")
-    dialog.setInformativeText(
-        "デフォルト設定で続行するか、正しいYAMLファイルを選択してください。"
-    )
-    use_default_button = dialog.addButton("デフォルト設定を使う", QtWidgets.QMessageBox.AcceptRole)
-    choose_file_button = dialog.addButton("ファイルを選択", QtWidgets.QMessageBox.ActionRole)
-    dialog.exec()
-
-    if dialog.clickedButton() == choose_file_button:
-        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            parent,
-            "設定ファイルを選択",
-            str(resolved_path.parent),
-            "YAML Files (*.yaml *.yml);;All Files (*)",
-        )
-        if file_path:
-            return Path(file_path)
-    elif dialog.clickedButton() != use_default_button:
-        SETTINGS_LOAD_NOTES.append(
-            "設定ファイルの選択をキャンセルしたため、デフォルト設定で続行しました。"
-        )
-    return None
-
-
-def _handle_yaml_error(parent: Optional[QtWidgets.QWidget], resolved_path: Path, error: Exception):
-    """YAML構文エラーを要約し、再試行手順を案内する。"""
-
-    error_summary = str(error)
-    location_hint = ""
-    if hasattr(error, "problem_mark") and getattr(error, "problem_mark"):
-        mark = error.problem_mark
-        location_hint = f" (行 {mark.line + 1}, 列 {mark.column + 1})"
-
-    message = (
-        f"設定ファイルの構文エラーを検出しました: {resolved_path}{location_hint}\n"
-        "ファイルを修正するか、別の設定ファイルを選択して再試行してください。"
-    )
-    SETTINGS_LOAD_NOTES.append(message)
-
-    app = QtWidgets.QApplication.instance()
-    if app is None:
-        return None
-
-    dialog = QtWidgets.QMessageBox(parent)
-    dialog.setWindowTitle("設定ファイルの読み込みに失敗")
-    dialog.setText("YAMLの構文エラーが発生しました。")
-    dialog.setInformativeText(message)
-    dialog.setDetailedText(error_summary)
-    dialog.setStandardButtons(QtWidgets.QMessageBox.Retry | QtWidgets.QMessageBox.Cancel)
-    retry_path_button = dialog.addButton("別のファイルを選ぶ", QtWidgets.QMessageBox.ActionRole)
-    dialog.exec()
-
-    if dialog.clickedButton() == retry_path_button:
-        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            parent,
-            "設定ファイルを選択",
-            str(resolved_path.parent),
-            "YAML Files (*.yaml *.yml);;All Files (*)",
-        )
-        if file_path:
-            return Path(file_path)
-    elif dialog.standardButton(dialog.clickedButton()) == QtWidgets.QMessageBox.Retry:
-        return resolved_path
-    return None
-
-
-def load_yaml_settings(file_path, parent: Optional[QtWidgets.QWidget] = None):
-    """YAML設定のロードを安全に行い、失敗時はフォールバックや再選択を提示する。"""
-
-    resolved_path = _resolve_path(file_path)
-    log_structured(logging.INFO, "yaml_settings_load_start", {"path": str(resolved_path)})
-    try:
-        with open(resolved_path, "r", encoding="utf-8") as file:
-            settings = yaml.safe_load(file) or {}
-        log_structured(
-            logging.INFO,
-            "yaml_settings_load_success",
-            {
-                "path": str(resolved_path),
-                "section_keys": sorted(settings.keys()) if isinstance(settings, dict) else [],
-            },
-        )
-        return settings
-    except FileNotFoundError:
-        log_structured(logging.WARNING, "yaml_settings_missing", {"path": str(resolved_path)})
-        alternative = _prompt_settings_path(parent, resolved_path)
-        if alternative:
-            return load_yaml_settings(alternative, parent)
-    except yaml.YAMLError as error:
-        log_structured(
-            logging.ERROR,
-            "yaml_settings_parse_error",
-            {
-                "path": str(resolved_path),
-                "error": str(error),
-            },
-        )
-        retry_target = _handle_yaml_error(parent, resolved_path, error)
-        if retry_target:
-            return load_yaml_settings(retry_target, parent)
-    log_structured(logging.INFO, "yaml_settings_fallback_default", {"path": str(resolved_path)})
-    return deepcopy({"app_image_prompt_creator": DEFAULT_APP_SETTINGS})
-
-
-# YAML設定の読込（Tk版と互換性維持）
 import yaml
-
-yaml_settings_path = _resolve_path("desktop_gui_settings.yaml")
-settings = {"app_image_prompt_creator": deepcopy(DEFAULT_APP_SETTINGS)}
-BASE_FOLDER = DEFAULT_APP_SETTINGS["BASE_FOLDER"]
-DEFAULT_TXT_PATH = DEFAULT_APP_SETTINGS["DEFAULT_TXT_PATH"]
-DEFAULT_DB_PATH = DEFAULT_APP_SETTINGS["DEFAULT_DB_PATH"]
-POSITION_FILE = DEFAULT_APP_SETTINGS["POSITION_FILE"]
-EXCLUSION_CSV = DEFAULT_APP_SETTINGS["EXCLUSION_CSV"]
-DEDUPLICATE_PROMPTS = DEFAULT_APP_SETTINGS["DEDUPLICATE_PROMPTS"]
-LLM_ENABLED = DEFAULT_APP_SETTINGS["LLM_ENABLED"]
-LLM_MODEL = DEFAULT_APP_SETTINGS["LLM_MODEL"]
-LLM_TEMPERATURE = DEFAULT_APP_SETTINGS["LLM_TEMPERATURE"]
-LLM_MAX_COMPLETION_TOKENS = DEFAULT_APP_SETTINGS["LLM_MAX_COMPLETION_TOKENS"]
-LLM_TIMEOUT = DEFAULT_APP_SETTINGS["LLM_TIMEOUT"]
-OPENAI_API_KEY_ENV = DEFAULT_APP_SETTINGS["OPENAI_API_KEY_ENV"]
-ARRANGE_PRESETS_YAML = str(_resolve_path(DEFAULT_APP_SETTINGS["ARRANGE_PRESETS_YAML"]))
-TAIL_PRESETS_YAML = str(_resolve_path(DEFAULT_APP_SETTINGS["TAIL_PRESETS_YAML"]))
-LLM_INCLUDE_TEMPERATURE = DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
-
-
-def _merge_app_settings(raw_settings: dict) -> dict:
-    """読み込んだ設定をデフォルトにマージして欠損値を補完する。"""
-
-    merged = {"app_image_prompt_creator": deepcopy(DEFAULT_APP_SETTINGS)}
-    if isinstance(raw_settings, dict):
-        merged_app = raw_settings.get("app_image_prompt_creator") or {}
-        merged["app_image_prompt_creator"].update(merged_app)
-    return merged
-
-
-def _normalize_llm_model(model_name: Optional[str]) -> str:
-    """設定値のモデル名を検証し、無効なら最初の有効モデルへフォールバックする。"""
-
-    if model_name in AVAILABLE_LLM_MODELS:
-        return model_name
-
-    fallback_model = AVAILABLE_LLM_MODELS[0]
-    SETTINGS_LOAD_NOTES.append(
-        f"無効なLLMモデル '{model_name}' を検出したため '{fallback_model}' へフォールバックしました。"
-    )
-    log_structured(
-        logging.WARNING,
-        "llm_model_invalid_fallback",
-        {
-            "invalid_model": model_name,
-            "fallback_model": fallback_model,
-        },
-    )
-    return fallback_model
-
-
-def _apply_app_settings(app_settings: dict):
-    """マージ済み設定をグローバル変数へ適用する。"""
-
-    global BASE_FOLDER, DEFAULT_TXT_PATH, DEFAULT_DB_PATH, POSITION_FILE, EXCLUSION_CSV, DEDUPLICATE_PROMPTS
-    global LLM_ENABLED, LLM_MODEL, LLM_TEMPERATURE, LLM_MAX_COMPLETION_TOKENS
-    global LLM_TIMEOUT, OPENAI_API_KEY_ENV, ARRANGE_PRESETS_YAML, TAIL_PRESETS_YAML, LLM_INCLUDE_TEMPERATURE, settings
-
-    settings = {"app_image_prompt_creator": deepcopy(app_settings)}
-    BASE_FOLDER = str(_resolve_path(app_settings.get("BASE_FOLDER", DEFAULT_APP_SETTINGS["BASE_FOLDER"])))
-    DEFAULT_TXT_PATH = str(_resolve_path(app_settings.get("DEFAULT_TXT_PATH", DEFAULT_APP_SETTINGS["DEFAULT_TXT_PATH"])))
-    DEFAULT_DB_PATH = str(_resolve_path(app_settings.get("DEFAULT_DB_PATH", DEFAULT_APP_SETTINGS["DEFAULT_DB_PATH"])))
-    POSITION_FILE = str(_resolve_path(app_settings.get("POSITION_FILE", DEFAULT_APP_SETTINGS["POSITION_FILE"])))
-    EXCLUSION_CSV = str(_resolve_path(app_settings.get("EXCLUSION_CSV", DEFAULT_APP_SETTINGS["EXCLUSION_CSV"])))
-    DEDUPLICATE_PROMPTS = app_settings.get("DEDUPLICATE_PROMPTS", DEFAULT_APP_SETTINGS["DEDUPLICATE_PROMPTS"])
-    LLM_ENABLED = app_settings.get("LLM_ENABLED", DEFAULT_APP_SETTINGS["LLM_ENABLED"])
-    LLM_MODEL = _normalize_llm_model(app_settings.get("LLM_MODEL", DEFAULT_APP_SETTINGS["LLM_MODEL"]))
-    LLM_TEMPERATURE = app_settings.get("LLM_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_TEMPERATURE"])
-    LLM_MAX_COMPLETION_TOKENS = app_settings.get(
-        "LLM_MAX_COMPLETION_TOKENS", DEFAULT_APP_SETTINGS["LLM_MAX_COMPLETION_TOKENS"]
-    )
-    LLM_TIMEOUT = app_settings.get("LLM_TIMEOUT", DEFAULT_APP_SETTINGS["LLM_TIMEOUT"])
-    OPENAI_API_KEY_ENV = app_settings.get("OPENAI_API_KEY_ENV", DEFAULT_APP_SETTINGS["OPENAI_API_KEY_ENV"])
-    ARRANGE_PRESETS_YAML = str(
-        _resolve_path(app_settings.get("ARRANGE_PRESETS_YAML", DEFAULT_APP_SETTINGS["ARRANGE_PRESETS_YAML"]))
-    )
-    TAIL_PRESETS_YAML = str(
-        _resolve_path(app_settings.get("TAIL_PRESETS_YAML", DEFAULT_APP_SETTINGS["TAIL_PRESETS_YAML"]))
-    )
-    LLM_INCLUDE_TEMPERATURE = app_settings.get(
-        "LLM_INCLUDE_TEMPERATURE", DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
-    )
-    settings["app_image_prompt_creator"]["LLM_MODEL"] = LLM_MODEL
-    snapshot = {k.lower(): app_settings.get(k) for k in SETTINGS_SNAPSHOT_KEYS if k in app_settings}
-    log_structured(logging.INFO, "app_settings_applied", snapshot)
-
-
-def initialize_settings(parent: Optional[QtWidgets.QWidget] = None):
-    """設定ファイルを読み込み、フォールバック結果を反映する初期化関数。"""
-
-    raw_settings = load_yaml_settings(yaml_settings_path, parent)
-    merged_settings = _merge_app_settings(raw_settings)
-    _apply_app_settings(merged_settings["app_image_prompt_creator"])
-
-
-def show_deferred_settings_notes(parent: Optional[QtWidgets.QWidget]):
-    """アプリ起動後にまとめて設定読み込み時の警告を表示する。"""
-
-    if not SETTINGS_LOAD_NOTES:
-        return
-    QtWidgets.QMessageBox.information(
-        parent,
-        "設定ファイルの確認",
-        "\n\n".join(SETTINGS_LOAD_NOTES),
-    )
-    SETTINGS_LOAD_NOTES.clear()
 
 
 # =============================
 # ユーティリティ
 # =============================
-def get_exception_trace() -> str:
-    t, v, tb = sys.exc_info()
-    trace = traceback.format_exception(t, v, tb)
-    return "".join(trace)
-
-
 def load_exclusion_words() -> List[str]:
     try:
-        with open(EXCLUSION_CSV, "r", encoding="utf-8", newline="") as file:
+        with open(config.EXCLUSION_CSV, "r", encoding="utf-8", newline="") as file:
             reader = csv.reader(file, quotechar='"', quoting=csv.QUOTE_ALL)
             return [""] + [row[0] for row in reader if row]
     except FileNotFoundError:
@@ -640,9 +177,7 @@ def load_arrange_presets_from_yaml() -> None:
     読み込みに失敗した場合は DEFAULT_ARRANGE_PRESETS を使用する。
     """
 
-    global ARRANGE_PRESETS
-
-    path = Path(ARRANGE_PRESETS_YAML)
+    path = Path(config.ARRANGE_PRESETS_YAML)
     try:
         with path.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
@@ -661,11 +196,11 @@ def load_arrange_presets_from_yaml() -> None:
                     "guidance": p.get("guidance") or "",
                 }
             )
-        ARRANGE_PRESETS = normalized or deepcopy(DEFAULT_ARRANGE_PRESETS)
+        config.ARRANGE_PRESETS = normalized or deepcopy(config.DEFAULT_ARRANGE_PRESETS)
         log_structured(
             logging.INFO,
             "arrange_presets_yaml_loaded",
-            {"path": str(path), "count": len(ARRANGE_PRESETS)},
+            {"path": str(path), "count": len(config.ARRANGE_PRESETS)},
         )
     except FileNotFoundError:
         log_structured(
@@ -673,14 +208,14 @@ def load_arrange_presets_from_yaml() -> None:
             "arrange_presets_yaml_missing",
             {"path": str(path)},
         )
-        ARRANGE_PRESETS = deepcopy(DEFAULT_ARRANGE_PRESETS)
+        config.ARRANGE_PRESETS = deepcopy(config.DEFAULT_ARRANGE_PRESETS)
     except Exception as error:
         log_structured(
             logging.ERROR,
             "arrange_presets_yaml_error",
             {"path": str(path), "error": str(error)},
         )
-        ARRANGE_PRESETS = deepcopy(DEFAULT_ARRANGE_PRESETS)
+        config.ARRANGE_PRESETS = deepcopy(config.DEFAULT_ARRANGE_PRESETS)
 
 
 def _normalize_tail_presets(raw_presets: dict) -> dict:
@@ -691,7 +226,7 @@ def _normalize_tail_presets(raw_presets: dict) -> dict:
     """
 
     if not isinstance(raw_presets, dict):
-        return deepcopy(DEFAULT_TAIL_PRESETS)
+        return deepcopy(config.DEFAULT_TAIL_PRESETS)
 
     normalized: dict = {}
     for media_type, items in raw_presets.items():
@@ -709,7 +244,7 @@ def _normalize_tail_presets(raw_presets: dict) -> dict:
 
     # 1つも正規化できなければデフォルトへフォールバック
     if not normalized:
-        return deepcopy(DEFAULT_TAIL_PRESETS)
+        return deepcopy(config.DEFAULT_TAIL_PRESETS)
     return normalized
 
 
@@ -719,16 +254,14 @@ def load_tail_presets_from_yaml() -> None:
     YAML が欠損・パースエラー・スキーマ不正の場合は、DEFAULT_TAIL_PRESETS へフォールバックする。
     """
 
-    global TAIL_PRESETS
-
-    path = Path(TAIL_PRESETS_YAML)
+    path = Path(config.TAIL_PRESETS_YAML)
     if not path.exists():
         log_structured(
             logging.WARNING,
             "tail_presets_yaml_missing",
             {"path": str(path)},
         )
-        TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+        config.TAIL_PRESETS = deepcopy(config.DEFAULT_TAIL_PRESETS)
         return
 
     try:
@@ -740,7 +273,7 @@ def load_tail_presets_from_yaml() -> None:
             "tail_presets_yaml_parse_error",
             {"path": str(path), "error": str(error)},
         )
-        TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+        config.TAIL_PRESETS = deepcopy(config.DEFAULT_TAIL_PRESETS)
         return
     except OSError as error:
         log_structured(
@@ -748,7 +281,7 @@ def load_tail_presets_from_yaml() -> None:
             "tail_presets_yaml_io_error",
             {"path": str(path), "error": str(error)},
         )
-        TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+        config.TAIL_PRESETS = deepcopy(config.DEFAULT_TAIL_PRESETS)
         return
 
     tails = data.get("tails")
@@ -758,16 +291,16 @@ def load_tail_presets_from_yaml() -> None:
             "tail_presets_yaml_invalid_schema",
             {"path": str(path), "reason": "missing_or_non_mapping_tails"},
         )
-        TAIL_PRESETS = deepcopy(DEFAULT_TAIL_PRESETS)
+        config.TAIL_PRESETS = deepcopy(config.DEFAULT_TAIL_PRESETS)
         return
 
-    TAIL_PRESETS = _normalize_tail_presets(tails)
+    config.TAIL_PRESETS = _normalize_tail_presets(tails)
     log_structured(
         logging.INFO,
         "tail_presets_yaml_loaded",
         {
             "path": str(path),
-            "media_types": list(TAIL_PRESETS.keys()),
+            "media_types": list(config.TAIL_PRESETS.keys()),
         },
     )
 
@@ -1745,14 +1278,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(WINDOW_TITLE)
+        self.setWindowTitle(config.WINDOW_TITLE)
         self.setMinimumSize(1100, 680)
         self.attribute_types: List[AttributeType] = []
         self.attribute_details: List[AttributeDetail] = []
         self.main_prompt: str = ""
         self.tail_free_texts: str = ""
         self.option_prompt: str = ""
-        self.available_model_choices = list(AVAILABLE_LLM_MODELS)
+        self.available_model_choices = list(config.AVAILABLE_LLM_MODELS)
         self._thread: Optional[QtCore.QThread] = None
         self._movie_llm_context: Optional[dict] = None
         self._chaos_mix_context: Optional[dict] = None
@@ -1788,38 +1321,37 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
             {
                 "font_family": self._ui_font_family,
                 "font_scale_level": self.font_scale_level,
-                "llm_model": LLM_MODEL,
-                "db_path": DEFAULT_DB_PATH,
+                "llm_model": config.LLM_MODEL,
+                "db_path": config.DEFAULT_DB_PATH,
             },
         )
 
     def _ensure_model_choice_alignment(self) -> None:
         """設定値とコンボボックスの候補がズレた場合に警告し、UIを有効モデルへ合わせる。"""
 
-        global LLM_MODEL
         if not self.available_model_choices:
             return
 
-        if LLM_MODEL not in self.available_model_choices:
+        if config.LLM_MODEL not in self.available_model_choices:
             fallback_model = self.available_model_choices[0]
-            SETTINGS_LOAD_NOTES.append(
-                f"UI候補に存在しないLLMモデル '{LLM_MODEL}' を検出したため '{fallback_model}' に切り替えました。"
+            config.SETTINGS_LOAD_NOTES.append(
+                f"UI候補に存在しないLLMモデル '{config.LLM_MODEL}' を検出したため '{fallback_model}' に切り替えました。"
             )
             log_structured(
                 logging.WARNING,
                 "llm_model_ui_mismatch",
-                {"configured_model": LLM_MODEL, "fallback_model": fallback_model},
+                {"configured_model": config.LLM_MODEL, "fallback_model": fallback_model},
             )
             target_model = fallback_model
         else:
-            target_model = LLM_MODEL
+            target_model = config.LLM_MODEL
 
         index = self.combo_llm_model.findText(target_model)
         if index < 0:
             index = 0
         self.combo_llm_model.setCurrentIndex(index)
-        LLM_MODEL = self.combo_llm_model.currentText()
-        self.label_current_model.setText(f"選択中: {LLM_MODEL}")
+        config.LLM_MODEL = self.combo_llm_model.currentText()
+        self.label_current_model.setText(f"選択中: {config.LLM_MODEL}")
 
     # =============================
     # UI 構築
@@ -2337,7 +1869,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow):
     def _get_db_path_or_warn(self) -> Optional[Path]:
         """DBパスの存在をチェックし、欠損時はセットアップ手順を案内する。"""
 
-        db_path = Path(DEFAULT_DB_PATH)
+        db_path = Path(config.DEFAULT_DB_PATH)
         log_structured(logging.INFO, "db_path_check", {"db_path": str(db_path)})
         if db_path.exists():
             return db_path
