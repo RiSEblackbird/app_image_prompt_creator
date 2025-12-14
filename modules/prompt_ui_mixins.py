@@ -223,8 +223,16 @@ class PromptUIMixin:
         cuts_row = QtWidgets.QHBoxLayout()
         cuts_row.addWidget(QtWidgets.QLabel("カット数(動画用):"))
         self.combo_tail_cut_count = QtWidgets.QComboBox()
-        self.combo_tail_cut_count.addItems(["未指定"] + [str(i) for i in range(1, 7)])
-        self.combo_tail_cut_count.setToolTip("カット数が指定されている場合、LLM整形時の video_style としても利用されます。")
+        # planned_cuts は末尾2(content_flags)へ入る値で、1〜6 または "many"（多数カット）を取りうる。
+        # QComboBox は addItems() だと userData が入らないため、表示文字列と JSON 用の値を明示的に紐付ける。
+        self.combo_tail_cut_count.addItem("未指定", userData=None)
+        for i in range(1, 7):
+            self.combo_tail_cut_count.addItem(str(i), userData=i)
+        self.combo_tail_cut_count.addItem("とても多い", userData="many")
+        self.combo_tail_cut_count.setToolTip(
+            "作品全体の構成カット数の目安を指定します。"
+            "「とても多い」は planned_cuts=\"many\"（多数カット）として JSON に反映されます。"
+        )
         self.combo_tail_cut_count.currentIndexChanged.connect(self.auto_update)
         cuts_row.addWidget(self.combo_tail_cut_count)
         cuts_row.addStretch(1)
