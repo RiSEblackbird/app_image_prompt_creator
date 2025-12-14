@@ -220,6 +220,25 @@ class PromptUIMixin:
             flags_row.addWidget(chk)
         tail2_layout.addLayout(flags_row)
 
+        # 登場人物（動画用）
+        # person_present/person_count を末尾2(content_flags)へ反映するための入力UI。
+        person_row = QtWidgets.QHBoxLayout()
+        person_row.addWidget(QtWidgets.QLabel("登場人物(動画用):"))
+        self.combo_tail_person_count = QtWidgets.QComboBox()
+        self.combo_tail_person_count.addItem("(なし)", userData=None)
+        self.combo_tail_person_count.addItem("1人以上", userData="1+")
+        for i in range(1, 5):
+            self.combo_tail_person_count.addItem(f"{i}人", userData=i)
+        self.combo_tail_person_count.addItem("とても多い", userData="many")
+        self.combo_tail_person_count.setToolTip(
+            "映像内に人物が映っているかどうかと、おおよその人数を指定します。"
+            "「とても多い」は person_count=\"many\"（群衆・大人数）として JSON に反映されます。"
+        )
+        self.combo_tail_person_count.currentIndexChanged.connect(self.auto_update)
+        person_row.addWidget(self.combo_tail_person_count)
+        person_row.addStretch(1)
+        tail2_layout.addLayout(person_row)
+
         cuts_row = QtWidgets.QHBoxLayout()
         cuts_row.addWidget(QtWidgets.QLabel("カット数(動画用):"))
         self.combo_tail_cut_count = QtWidgets.QComboBox()
