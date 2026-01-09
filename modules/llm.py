@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -1028,7 +1029,11 @@ class GeneratePromptLLMWorker(QtCore.QObject):
 
 
 class StoryboardLLMWorker(QtCore.QObject):
-    """プロンプトからストーリーボードのカット分割をLLMで実行するワーカー。"""
+    """プロンプトからストーリーボードのカット分割をLLMで実行するワーカー。
+
+    video_style / content_flags を受け取ると、それらを背景補足情報として
+    プロンプトに含め、各カットがその雰囲気や制約に沿った内容になるよう LLM へ指示する。
+    """
 
     finished = QtCore.Signal(str)
     failed = QtCore.Signal(str)
@@ -1041,6 +1046,8 @@ class StoryboardLLMWorker(QtCore.QObject):
         total_duration_sec: float,
         output_language: str = "en",
         continuity_enhanced: bool = False,
+        video_style: dict | None = None,
+        content_flags: dict | None = None,
     ):
         super().__init__()
         self.text = text
@@ -1049,6 +1056,8 @@ class StoryboardLLMWorker(QtCore.QObject):
         self.total_duration_sec = float(total_duration_sec)
         self.output_language = _normalize_language_code(output_language)
         self.continuity_enhanced = continuity_enhanced
+        self.video_style = video_style
+        self.content_flags = content_flags
 
     @QtCore.Slot()
     def run(self):
@@ -1097,6 +1106,16 @@ class StoryboardLLMWorker(QtCore.QObject):
                 "The transition should feel organic, as if the camera naturally drifts from one scene to the next. "
             )
 
+        # スタイル反映時の追加指示
+        style_instruction = ""
+        if self.video_style or self.content_flags:
+            style_instruction = (
+                "STYLE REFLECTION MODE: Use the provided video_style and/or content_flags as background context. "
+                "Let these guide the mood, lighting, camera preferences, and presence of characters or audio elements "
+                "in each cut description. Do NOT simply repeat this metadata; instead, subtly incorporate it into "
+                "the visual description so the generated cuts naturally align with the intended style and constraints. "
+            )
+
         system_prompt = _append_temperature_hint(
             "You are a professional storyboard writer for video production. "
             "Your task is to split a given image prompt into multiple cinematic cuts for a short video. "
@@ -1105,7 +1124,8 @@ class StoryboardLLMWorker(QtCore.QObject):
             "If the source is in Japanese, write descriptions in Japanese. "
             "If the source is in English, write descriptions in English. "
             "Do NOT translate or change the language. "
-            + continuity_instruction,
+            + continuity_instruction
+            + style_instruction,
             self.model,
             config.LLM_TEMPERATURE,
         )
@@ -1119,11 +1139,26 @@ class StoryboardLLMWorker(QtCore.QObject):
                 "The viewer should feel the camera flowing from one scene to the next.\n"
             )
 
+        # スタイル反映時のコンテキスト追加
+        style_context = ""
+        if self.video_style or self.content_flags:
+            style_parts = []
+            if self.video_style:
+                style_parts.append(f"video_style: {json.dumps(self.video_style, ensure_ascii=False)}")
+            if self.content_flags:
+                style_parts.append(f"content_flags: {json.dumps(self.content_flags, ensure_ascii=False)}")
+            style_context = (
+                "Background context (use subtly, do NOT copy verbatim):\n"
+                + "\n".join(style_parts)
+                + "\n\n"
+            )
+
         user_prompt = (
             f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
             f"Total video duration: {self.total_duration_sec} seconds.\n"
             f"Each cut should be approximately {duration_per_cut} seconds.\n\n"
-            "Rules:\n"
+            + style_context
+            + "Rules:\n"
             "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
             "- Each cut should be a complete, vivid visual description.\n"
             f"{continuity_rule}"

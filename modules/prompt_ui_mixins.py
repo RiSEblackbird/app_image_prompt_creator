@@ -531,6 +531,15 @@ class PromptUIMixin:
         )
         settings_row.addWidget(self.check_sb_continuity)
 
+        # スタイル反映トグル（video_style / content_flags を背景補足情報として LLM に伝える）
+        self.check_sb_style_reflection = QtWidgets.QCheckBox("スタイル反映")
+        self.check_sb_style_reflection.setToolTip(
+            "有効にすると、抽出した video_style（カメラ・照明・雰囲気）と\n"
+            "content_flags（音声・人物・テロップ情報）をLLMへ背景補足情報として渡し、\n"
+            "それに沿った描写になるようカット内容を生成します"
+        )
+        settings_row.addWidget(self.check_sb_style_reflection)
+
         char_list_btn = QtWidgets.QPushButton("キャラクター一覧...")
         char_list_btn.setToolTip("Soraキャラクター一覧を表示します")
         char_list_btn.clicked.connect(self._show_sora_character_dialog)
@@ -936,6 +945,16 @@ class PromptUIMixin:
         # 連続性強化フラグを取得
         continuity = self.check_sb_continuity.isChecked()
 
+        # スタイル反映フラグを取得
+        style_reflection = self.check_sb_style_reflection.isChecked()
+
+        # スタイル反映が有効な場合、video_style / content_flags を LLM に渡す
+        video_style_ctx = None
+        content_flags_ctx = None
+        if style_reflection:
+            video_style_ctx = video_style
+            content_flags_ctx = content_flags
+
         # メタデータを除いたプロンプトテキストをLLMに送信
         worker = StoryboardLLMWorker(
             text=prompt_text,
@@ -944,6 +963,8 @@ class PromptUIMixin:
             total_duration_sec=total_duration,
             output_language=output_language,
             continuity_enhanced=continuity,
+            video_style=video_style_ctx,
+            content_flags=content_flags_ctx,
         )
 
         # コンテキストを保存
