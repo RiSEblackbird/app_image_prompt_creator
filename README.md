@@ -1,6 +1,6 @@
 # 画像・動画プロンプト生成ツール
 
-<img width="800" alt="image" src="https://github.com/user-attachments/assets/94caeef6-a26a-43a9-9966-38aa62ac623e" />
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/97f16892-7b02-45ca-824d-b7929db4d002" />
 
 ## 概要
 
