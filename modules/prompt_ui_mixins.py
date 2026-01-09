@@ -933,6 +933,9 @@ class PromptUIMixin:
             if data in ("en", "ja"):
                 output_language = data
 
+        # 連続性強化フラグを取得
+        continuity = self.check_sb_continuity.isChecked()
+
         # メタデータを除いたプロンプトテキストをLLMに送信
         worker = StoryboardLLMWorker(
             text=prompt_text,
@@ -940,6 +943,7 @@ class PromptUIMixin:
             cut_count=cut_count,
             total_duration_sec=total_duration,
             output_language=output_language,
+            continuity_enhanced=continuity,
         )
 
         # コンテキストを保存

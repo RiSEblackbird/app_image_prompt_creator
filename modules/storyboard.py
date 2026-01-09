@@ -189,71 +189,6 @@ class SoraCharacterListDialog(QtWidgets.QDialog):
             )
 
 
-def _extract_scene_essence(description: str, max_len: int = 60) -> str:
-    """カット説明から場面の本質を抽出する。
-
-    Args:
-        description: カットの説明文
-        max_len: 最大文字数
-
-    Returns:
-        抽出された場面の本質（簡潔な形式）
-    """
-    # 最初の文を取得
-    core = description.split(".")[0].strip()
-
-    # 長すぎる場合は句読点や接続詞で切る
-    if len(core) > max_len:
-        for delim in [",", " and ", " while ", " as ", " with "]:
-            if delim in core:
-                core = core.split(delim)[0].strip()
-                break
-        if len(core) > max_len:
-            core = core[:max_len - 3] + "..."
-
-    return core
-
-
-def _lowercase_first(text: str) -> str:
-    """先頭が通常の文章開始なら小文字化する。
-
-    ただし、固有名詞の可能性がある場合（2文字目以降が小文字）はそのまま。
-    """
-    if not text:
-        return text
-    # "A woman" -> "a woman", "She" -> "she", but "Tokyo" -> "Tokyo"
-    if len(text) > 1 and text[0].isupper() and text[1].islower():
-        return text[0].lower() + text[1:]
-    return text
-
-
-def _build_continuity_bridge(prev_description: str, current_description: str) -> str:
-    """直前のカットから現在のカットへの連続性ブリッジを生成する。
-
-    前のカットの具体的な場面要素を参照して、
-    世界観の一貫性と滑らかな遷移を実現する指示を生成する。
-
-    Args:
-        prev_description: 直前のカットの説明
-        current_description: 現在のカットの説明
-
-    Returns:
-        連続性を強化した説明文
-    """
-    prev_essence = _extract_scene_essence(prev_description)
-
-    # 現在の説明の先頭を調整（接続詞の後なので小文字が自然）
-    current_adjusted = _lowercase_first(current_description)
-
-    # 前のシーンの要素を明示的に引き継ぐ形式
-    # 動画生成モデルが前後の繋がりを理解しやすい構造
-    bridge = (
-        f"(Following: {prev_essence}) "
-        f"Seamlessly continuing in the same setting, {current_adjusted}"
-    )
-    return bridge
-
-
 def build_storyboard_json(
     cuts: List[StoryboardCut],
     total_duration_sec: float,
@@ -267,35 +202,28 @@ def build_storyboard_json(
     video_style と content_flags はストーリーボードと並列に配置される。
     これにより、各カットの説明に冗長な情報を含めずに済む。
 
+    continuity_enhanced が True の場合、フラグとしてJSONに記録される。
+    実際のカット説明への遷移表現の織り込みは、LLM生成時に行う。
+    （静的なフォーマット加工ではなく、LLMが文脈を理解して自然な遷移を描写する）
+
     Args:
         cuts: カットのリスト
         total_duration_sec: 総尺（秒）
         template_id: 使用したテンプレートID
         video_style: 動画スタイル定義（省略可）
         content_flags: コンテンツフラグ（省略可）
-        continuity_enhanced: 連続性強化モード（有効時、前のカットを参照した遷移指示を追加）
+        continuity_enhanced: 連続性強化モード（フラグのみ記録、LLM生成時に適用）
 
     Returns:
         JSON文字列
     """
     cuts_data = []
-    for i, cut in enumerate(cuts):
-        description = cut.description
-
-        # 連続性強化モード: 2番目以降のカット（かつプレースホルダでない）に適用
-        if continuity_enhanced and i > 0 and not cut.is_image_placeholder:
-            prev_cut = cuts[i - 1]
-            # 前のカットがプレースホルダでない場合のみブリッジ生成
-            if not prev_cut.is_image_placeholder:
-                # 既にブリッジが含まれている場合はスキップ
-                if not description.startswith("(Following:"):
-                    description = _build_continuity_bridge(prev_cut.description, description)
-
+    for cut in cuts:
         cut_dict = {
             "index": cut.index,
             "start_sec": cut.start_sec,
             "duration_sec": cut.duration_sec,
-            "description": description,
+            "description": cut.description,
         }
         if cut.camera_work and cut.camera_work != "static":
             cut_dict["camera_work"] = cut.camera_work

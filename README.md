@@ -207,17 +207,18 @@ tails:
 
 ### 連続性強化
 
-「連続性強化」チェックボックスを有効にすると、2番目以降の各カットに前のカットの内容を参照した連続性ブリッジが追加されます。単なる定型文ではなく、前のカットの場面要素を具体的に引用することで、動画生成モデルが世界観の一貫性を維持しやすくなります。
+「連続性強化」チェックボックスを有効にすると、LLM生成時に「各カットの冒頭で前のカットから滑らかに遷移するよう描写せよ」という指示がLLMに追加されます。
 
-**出力形式**:
-```
-(Following: {前のカットの場面要素}) Seamlessly continuing in the same setting, {現在のカット説明}
-```
+**重要**: 定型的なフォーマット（`(Following: ...)` など）は使用しません。代わりに、LLMがカット説明自体に遷移の描写を自然に織り込みます。
 
-- 最初のカット: そのまま出力
-- 2番目以降: 前のカットの本質を抽出して引用
-- 画像プレースホルダ（`is_image_placeholder: true`）は対象外
-- 現在のカット説明の先頭は自然な接続のため小文字化
+**例**:
+- カット1: 「夜明け前、まだ薄暗い空の下に広がる東京のパノラマ...」
+- カット2: 「空が次第に明るさを増し、朝日がビルのガラスに反射し始めた新宿の高層ビル街...」
+
+2番目のカットは「空が次第に明るさを増し」という遷移表現から始まり、前のカット（夜明け前）から自然に繋がっています。
+
+- **LLM生成時**: 連続性強化が有効ならLLMが自動的に遷移を織り込む
+- **手動編集時**: `continuity_enhanced: true` フラグがJSONに記録される（描写は手動で調整）
 
 ### 出力例
 
@@ -252,7 +253,7 @@ tails:
         "index": 1,
         "start_sec": 0.3,
         "duration_sec": 9.7,
-        "description": "(Following: [Attached image]) Seamlessly continuing in the same setting, jump into the world...",
+        "description": "The scene within this image comes alive as the camera begins to move, revealing the world...",
         "camera_work": "slow_zoom_out",
         "characters": ["@example.character1"]
       }

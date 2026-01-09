@@ -1040,6 +1040,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         cut_count: int,
         total_duration_sec: float,
         output_language: str = "en",
+        continuity_enhanced: bool = False,
     ):
         super().__init__()
         self.text = text
@@ -1047,6 +1048,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         self.cut_count = max(1, int(cut_count))
         self.total_duration_sec = float(total_duration_sec)
         self.output_language = _normalize_language_code(output_language)
+        self.continuity_enhanced = continuity_enhanced
 
     @QtCore.Slot()
     def run(self):
@@ -1083,6 +1085,18 @@ class StoryboardLLMWorker(QtCore.QObject):
         """ストーリーボード生成用のプロンプトを構築する。"""
         duration_per_cut = round(self.total_duration_sec / self.cut_count, 2)
 
+        # 連続性強化時の追加指示
+        continuity_instruction = ""
+        if self.continuity_enhanced:
+            continuity_instruction = (
+                "CONTINUITY ENHANCEMENT MODE: Each cut (except the first) must begin with a smooth, "
+                "natural transition from the previous scene. Do NOT use template phrases like "
+                "'Continuing from...' or 'Following...'. Instead, weave the transition INTO the "
+                "description itself. For example, if cut 1 shows 'dawn breaking over Tokyo', "
+                "cut 2 should start with something like 'As the morning light strengthens, the city awakens...' "
+                "The transition should feel organic, as if the camera naturally drifts from one scene to the next. "
+            )
+
         system_prompt = _append_temperature_hint(
             "You are a professional storyboard writer for video production. "
             "Your task is to split a given image prompt into multiple cinematic cuts for a short video. "
@@ -1090,10 +1104,20 @@ class StoryboardLLMWorker(QtCore.QObject):
             "CRITICAL: You MUST preserve the original language of the source prompt. "
             "If the source is in Japanese, write descriptions in Japanese. "
             "If the source is in English, write descriptions in English. "
-            "Do NOT translate or change the language.",
+            "Do NOT translate or change the language. "
+            + continuity_instruction,
             self.model,
             config.LLM_TEMPERATURE,
         )
+
+        # 連続性強化時のルール追加
+        continuity_rule = ""
+        if self.continuity_enhanced:
+            continuity_rule = (
+                "- CONTINUITY: Each cut after the first MUST begin by describing a smooth, natural transition "
+                "from the previous scene. Weave the transition into the description itself, not as a prefix. "
+                "The viewer should feel the camera flowing from one scene to the next.\n"
+            )
 
         user_prompt = (
             f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
@@ -1102,7 +1126,7 @@ class StoryboardLLMWorker(QtCore.QObject):
             "Rules:\n"
             "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
             "- Each cut should be a complete, vivid visual description.\n"
-            "- Maintain visual continuity between cuts.\n"
+            f"{continuity_rule}"
             "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
             "- The first cut should establish the scene.\n"
             "- The final cut should provide a sense of conclusion or climax.\n\n"
