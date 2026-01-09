@@ -202,6 +202,9 @@ def _apply_app_settings(app_settings: dict):
     config.TAIL_PRESETS_YAML = str(
         resolve_path(app_settings.get("TAIL_PRESETS_YAML", config.DEFAULT_APP_SETTINGS["TAIL_PRESETS_YAML"]))
     )
+    config.SORA_CHARACTERS_YAML = str(
+        resolve_path(app_settings.get("SORA_CHARACTERS_YAML", config.DEFAULT_APP_SETTINGS["SORA_CHARACTERS_YAML"]))
+    )
     config.LLM_INCLUDE_TEMPERATURE = app_settings.get(
         "LLM_INCLUDE_TEMPERATURE", config.DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]
     )

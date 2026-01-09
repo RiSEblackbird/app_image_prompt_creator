@@ -167,6 +167,131 @@ tails:
 
 ---
 
+## ストーリーボード
+
+「ストーリーボード」タブでは、複数カット構成の動画用プロンプトを時系列で管理できます。
+
+### 基本操作
+
+1. **テンプレートを選択**: カット構成のテンプレートを選びます
+2. **総尺を設定**: 10〜30秒（5秒刻み）から選択
+3. **カット生成方法を選択**:
+   - **「テンプレートから初期化」**: 選択したテンプレートでカットを生成
+   - **「現在のプロンプトから生成」**: 出力欄のプロンプトを文単位で分割してカット化
+4. **各カットを編集**: 説明、開始時刻、尺、カメラワークを設定
+5. **「JSON出力&コピー」**: ストーリーボードをJSON形式でコピー
+
+### プロンプトからのLLM生成
+
+「現在のプロンプトから生成(LLM)」ボタンを押すと、出力欄のプロンプト全文（末尾固定部含む）をLLMで解析し、シネマティックなカットに分割します。
+
+- プロンプト全文がLLMに送信されます
+- **元の言語が維持されます**（日本語のプロンプトは日本語のまま）
+- LLMがカット数に応じてシーンを分割し、カメラワークも提案します
+- 生成後、各カットを手動で編集できます
+
+### テキスト欄への反映
+
+「テキスト欄に反映」ボタンを押すと、出力欄をストーリーボードJSONで上書きします。
+
+### テンプレート
+
+| テンプレート | 説明 |
+|--------------|------|
+| （テンプレートなし） | カットを均等配分 |
+| 画像スタート（呪縛解除） | 添付画像から始めて0.3秒でシーンにジャンプ。Soraで画像添付時の「静止画問題」を解消 |
+| オープニング重視 | 導入カットを総尺の40%に |
+| クライマックス重視 | 最終カットを総尺の40%に |
+
+> **画像呪縛解除テンプレートについて**: Soraに画像を添付して動画生成すると、その画像に忠実であろうとするあまりほぼ静止画のような動画になることがあります。0.0秒を添付画像、0.3秒目に「シーンにジャンプ」と指示することで、画像の構図は維持しつつ動きのある動画が生成されやすくなります。
+
+### 連続性強化
+
+「連続性強化」チェックボックスを有効にすると、2番目以降の各カットに前のカットの内容を参照した連続性ブリッジが追加されます。単なる定型文ではなく、前のカットの場面要素を具体的に引用することで、動画生成モデルが世界観の一貫性を維持しやすくなります。
+
+**出力形式**:
+```
+(Following: {前のカットの場面要素}) Seamlessly continuing in the same setting, {現在のカット説明}
+```
+
+- 最初のカット: そのまま出力
+- 2番目以降: 前のカットの本質を抽出して引用
+- 画像プレースホルダ（`is_image_placeholder: true`）は対象外
+- 現在のカット説明の先頭は自然な接続のため小文字化
+
+### 出力例
+
+入力プロンプトに含まれる `video_style` や `content_flags` は自動抽出され、ストーリーボードと並列に配置されます。これにより各カットの説明に冗長なメタデータを含めずに済みます。
+
+```json
+{
+  "video_style": {
+    "scope": "full_movie",
+    "description": "atmospheric 1960s film print",
+    "grade": "film emulation"
+  },
+  "content_flags": {
+    "narration": false,
+    "bgm": true,
+    "ambient_sound": true,
+    "dialogue": true
+  },
+  "storyboard": {
+    "total_duration_sec": 10,
+    "template": "image_unbind",
+    "continuity_enhanced": true,
+    "cuts": [
+      {
+        "index": 0,
+        "start_sec": 0.0,
+        "duration_sec": 0.3,
+        "description": "[Attached image]",
+        "is_image_placeholder": true
+      },
+      {
+        "index": 1,
+        "start_sec": 0.3,
+        "duration_sec": 9.7,
+        "description": "(Following: [Attached image]) Seamlessly continuing in the same setting, jump into the world...",
+        "camera_work": "slow_zoom_out",
+        "characters": ["@example.character1"]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Soraキャラクター
+
+Soraに登録したキャラクターをストーリーボードのカットに埋め込むことができます。
+
+### 設定ファイル
+
+`sora_characters.yaml` を作成してキャラクター情報を定義します（サンプルは `sora_characters.yaml.example` を参照）。
+
+```yaml
+characters:
+  - id: "@abc.alien"
+    name: "タコ足配線くん"
+    pronoun_3rd: "彼"
+```
+
+| フィールド | 説明 |
+|------------|------|
+| `id` | Soraに登録したキャラクターの識別子（@で始まる） |
+| `name` | UIに表示する名前 |
+| `pronoun_3rd` | 三人称代名詞（彼/彼女/それ等） |
+
+> **注意**: `sora_characters.yaml` は個人情報を含むため gitignore 対象です。リポジトリにはコミットされません。
+
+### キャラクター一覧ダイアログ
+
+「キャラクター一覧...」ボタンで一覧ダイアログを開き、各フィールドの値をクリップボードにコピーできます。
+
+---
+
 ## LLM機能
 
 ### アレンジ
@@ -230,6 +355,7 @@ app_image_prompt_creator:
   DEFAULT_DB_PATH: "app_image_prompt_creator/data.sqlite3"
   EXCLUSION_CSV: "app_image_prompt_creator/exclusions.csv"
   ARRANGE_PRESETS_YAML: "app_image_prompt_creator/arrange_presets.yaml"
+  SORA_CHARACTERS_YAML: "app_image_prompt_creator/sora_characters.yaml"
   LLM_ENABLED: true
   LLM_MODEL: "gpt-4o-mini"
   LLM_MAX_COMPLETION_TOKENS: 4500
@@ -240,6 +366,7 @@ app_image_prompt_creator:
 
 | キー | 説明 |
 |------|------|
+| `SORA_CHARACTERS_YAML` | Soraキャラクター定義ファイルのパス |
 | `LLM_ENABLED` | LLM機能の有効/無効 |
 | `LLM_MODEL` | 使用モデル |
 | `LLM_MAX_COMPLETION_TOKENS` | 応答最大トークン |

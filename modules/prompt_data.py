@@ -29,6 +29,46 @@ class AttributeDetail:
     content_count: int
 
 
+@dataclass
+class SoraCharacter:
+    """Soraキャラクターの最小情報（実データはSora側に保持）。
+
+    Attributes:
+        id: Soraに登録したキャラクターの識別子（例: "@ajiconv.zishoualien"）
+        name: UIに表示する名前（例: "自称宇宙人"）
+        pronoun_3rd: 三人称代名詞（例: "彼" / "彼女" / "それ"）
+    """
+    id: str
+    name: str
+    pronoun_3rd: str
+
+
+@dataclass
+class StoryboardCut:
+    """ストーリーボードの1カットを表すデータ構造。
+
+    Attributes:
+        index: 0始まりのカット番号
+        start_sec: 開始秒（0.0, 0.3, ...）
+        duration_sec: このカットの尺（秒）
+        description: プロンプト文
+        camera_work: カメラワーク種別（"static" | "pan" | "zoom" | ...）
+        characters: 登場キャラクターIDのリスト
+        is_image_placeholder: True なら添付画像カット
+    """
+    index: int
+    start_sec: float
+    duration_sec: float
+    description: str
+    camera_work: str = "static"
+    characters: List[str] = None
+    is_image_placeholder: bool = False
+
+    def __post_init__(self):
+        if self.characters is None:
+            self.characters = []
+
+
 def load_exclusion_words() -> List[str]:
     """除外語句CSVを読み込み、コンボ用の選択肢リストを返す。欠損時は空要素のみ。"""
     try:
@@ -146,3 +186,63 @@ def load_arrange_presets_from_yaml() -> None:
             {"path": str(path), "error": str(error)},
         )
         config.ARRANGE_PRESETS = deepcopy(config.DEFAULT_ARRANGE_PRESETS)
+
+
+def load_sora_characters() -> List[SoraCharacter]:
+    """Soraキャラクター定義YAMLを読み込み、SoraCharacterのリストを返す。
+
+    ファイルが存在しない場合やパースエラー時は空リストを返す。
+    """
+    path = Path(config.SORA_CHARACTERS_YAML)
+    if not path.exists():
+        log_structured(
+            logging.DEBUG,
+            "sora_characters_yaml_missing",
+            {"path": str(path)},
+        )
+        return []
+
+    try:
+        with path.open("r", encoding="utf-8") as fp:
+            data = yaml.safe_load(fp) or {}
+    except yaml.YAMLError as error:
+        log_structured(
+            logging.ERROR,
+            "sora_characters_yaml_parse_error",
+            {"path": str(path), "error": str(error)},
+        )
+        return []
+    except OSError as error:
+        log_structured(
+            logging.ERROR,
+            "sora_characters_yaml_io_error",
+            {"path": str(path), "error": str(error)},
+        )
+        return []
+
+    characters_raw = data.get("characters")
+    if not isinstance(characters_raw, list):
+        log_structured(
+            logging.WARNING,
+            "sora_characters_yaml_invalid_schema",
+            {"path": str(path), "reason": "missing_or_non_list_characters"},
+        )
+        return []
+
+    result: List[SoraCharacter] = []
+    for item in characters_raw:
+        if not isinstance(item, dict):
+            continue
+        char_id = item.get("id")
+        name = item.get("name")
+        pronoun = item.get("pronoun_3rd", "")
+        if not char_id or not name:
+            continue
+        result.append(SoraCharacter(id=str(char_id), name=str(name), pronoun_3rd=str(pronoun)))
+
+    log_structured(
+        logging.INFO,
+        "sora_characters_yaml_loaded",
+        {"path": str(path), "count": len(result)},
+    )
+    return result

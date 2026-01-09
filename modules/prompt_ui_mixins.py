@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from typing import Iterable
+import json
+import re
+from typing import Iterable, List
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from modules import config
-from modules.prompt_data import load_exclusion_words
+from modules.prompt_data import load_exclusion_words, load_sora_characters, StoryboardCut
 from modules.ui_helpers import create_language_combo
+from modules.storyboard import (
+    SoraCharacterListDialog,
+    build_storyboard_json,
+    create_cuts_from_template,
+    extract_metadata_from_prompt,
+)
 
 
 class PromptUIMixin:
@@ -484,6 +492,595 @@ class PromptUIMixin:
         adjust_layout.addStretch(1)
 
         tools_tabs.addTab(adjust_tab, "LLM アレンジ")
+
+        # ストーリーボードタブ
+        storyboard_tab = QtWidgets.QWidget()
+        storyboard_layout = QtWidgets.QVBoxLayout(storyboard_tab)
+        storyboard_layout.setContentsMargins(5, 5, 5, 5)
+
+        # 設定行
+        settings_row = QtWidgets.QHBoxLayout()
+        settings_row.addWidget(QtWidgets.QLabel("テンプレート:"))
+        self.combo_sb_template = QtWidgets.QComboBox()
+        for key, tmpl in config.STORYBOARD_TEMPLATES.items():
+            self.combo_sb_template.addItem(tmpl["label"], userData=key)
+        self.combo_sb_template.setToolTip("カット構成のテンプレートを選択します")
+        self.combo_sb_template.currentIndexChanged.connect(self._on_sb_template_change)
+        settings_row.addWidget(self.combo_sb_template)
+
+        settings_row.addWidget(QtWidgets.QLabel("総尺:"))
+        self.combo_sb_duration = QtWidgets.QComboBox()
+        for sec in config.STORYBOARD_DURATION_CHOICES:
+            self.combo_sb_duration.addItem(f"{sec}秒", userData=sec)
+        self.combo_sb_duration.setCurrentIndex(0)
+        self.combo_sb_duration.setToolTip("動画の総尺を選択します（10〜30秒）")
+        settings_row.addWidget(self.combo_sb_duration)
+
+        settings_row.addWidget(QtWidgets.QLabel("カット数:"))
+        self.spin_sb_cut_count = QtWidgets.QSpinBox()
+        self.spin_sb_cut_count.setRange(1, 12)
+        self.spin_sb_cut_count.setValue(3)
+        self.spin_sb_cut_count.setToolTip("カットの数を指定します（1〜12）")
+        settings_row.addWidget(self.spin_sb_cut_count)
+
+        # 連続性強化トグル
+        self.check_sb_continuity = QtWidgets.QCheckBox("連続性強化")
+        self.check_sb_continuity.setToolTip(
+            "有効にすると、各カットが直前のカットから滑らかに変化するよう指示を追加し、\n"
+            "世界観の一貫性を強化します"
+        )
+        settings_row.addWidget(self.check_sb_continuity)
+
+        char_list_btn = QtWidgets.QPushButton("キャラクター一覧...")
+        char_list_btn.setToolTip("Soraキャラクター一覧を表示します")
+        char_list_btn.clicked.connect(self._show_sora_character_dialog)
+        settings_row.addWidget(char_list_btn)
+
+        settings_row.addStretch()
+        storyboard_layout.addLayout(settings_row)
+
+        # カットリストと詳細のスプリッター
+        sb_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+
+        # 左: カットリスト
+        cut_list_widget = QtWidgets.QWidget()
+        cut_list_layout = QtWidgets.QVBoxLayout(cut_list_widget)
+        cut_list_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.list_sb_cuts = QtWidgets.QListWidget()
+        self.list_sb_cuts.setMinimumWidth(180)
+        self.list_sb_cuts.currentRowChanged.connect(self._on_sb_cut_selected)
+        cut_list_layout.addWidget(self.list_sb_cuts)
+
+        cut_btn_row = QtWidgets.QHBoxLayout()
+        add_cut_btn = QtWidgets.QPushButton("+追加")
+        add_cut_btn.clicked.connect(self._sb_add_cut)
+        cut_btn_row.addWidget(add_cut_btn)
+        del_cut_btn = QtWidgets.QPushButton("-削除")
+        del_cut_btn.clicked.connect(self._sb_delete_cut)
+        cut_btn_row.addWidget(del_cut_btn)
+        up_cut_btn = QtWidgets.QPushButton("↑上へ")
+        up_cut_btn.clicked.connect(self._sb_move_cut_up)
+        cut_btn_row.addWidget(up_cut_btn)
+        down_cut_btn = QtWidgets.QPushButton("↓下へ")
+        down_cut_btn.clicked.connect(self._sb_move_cut_down)
+        cut_btn_row.addWidget(down_cut_btn)
+        cut_list_layout.addLayout(cut_btn_row)
+
+        sb_splitter.addWidget(cut_list_widget)
+
+        # 右: カット詳細
+        cut_detail_widget = QtWidgets.QWidget()
+        cut_detail_layout = QtWidgets.QVBoxLayout(cut_detail_widget)
+        cut_detail_layout.setContentsMargins(5, 0, 0, 0)
+
+        cut_detail_layout.addWidget(QtWidgets.QLabel("カット詳細:"))
+        self.text_sb_cut_desc = QtWidgets.QTextEdit()
+        self.text_sb_cut_desc.setPlaceholderText("このカットの説明を入力...")
+        self.text_sb_cut_desc.setMinimumHeight(80)
+        self.text_sb_cut_desc.textChanged.connect(self._on_sb_cut_desc_changed)
+        cut_detail_layout.addWidget(self.text_sb_cut_desc)
+
+        time_row = QtWidgets.QHBoxLayout()
+        time_row.addWidget(QtWidgets.QLabel("開始:"))
+        self.spin_sb_start = QtWidgets.QDoubleSpinBox()
+        self.spin_sb_start.setRange(0.0, 30.0)
+        self.spin_sb_start.setSingleStep(0.1)
+        self.spin_sb_start.setDecimals(1)
+        self.spin_sb_start.setSuffix("秒")
+        self.spin_sb_start.valueChanged.connect(self._on_sb_cut_time_changed)
+        time_row.addWidget(self.spin_sb_start)
+
+        time_row.addWidget(QtWidgets.QLabel("尺:"))
+        self.spin_sb_duration_cut = QtWidgets.QDoubleSpinBox()
+        self.spin_sb_duration_cut.setRange(0.1, 30.0)
+        self.spin_sb_duration_cut.setSingleStep(0.1)
+        self.spin_sb_duration_cut.setDecimals(1)
+        self.spin_sb_duration_cut.setSuffix("秒")
+        self.spin_sb_duration_cut.valueChanged.connect(self._on_sb_cut_time_changed)
+        time_row.addWidget(self.spin_sb_duration_cut)
+
+        time_row.addWidget(QtWidgets.QLabel("カメラ:"))
+        self.combo_sb_camera = QtWidgets.QComboBox()
+        for label, code in config.CAMERA_WORK_CHOICES:
+            self.combo_sb_camera.addItem(label, userData=code)
+        self.combo_sb_camera.currentIndexChanged.connect(self._on_sb_cut_camera_changed)
+        time_row.addWidget(self.combo_sb_camera)
+
+        time_row.addStretch()
+        cut_detail_layout.addLayout(time_row)
+
+        # キャラクター選択
+        char_row = QtWidgets.QHBoxLayout()
+        char_row.addWidget(QtWidgets.QLabel("登場キャラ:"))
+        self.combo_sb_char = QtWidgets.QComboBox()
+        self.combo_sb_char.setMinimumWidth(150)
+        self._refresh_sb_character_combo()
+        char_row.addWidget(self.combo_sb_char)
+        add_char_btn = QtWidgets.QPushButton("+追加")
+        add_char_btn.clicked.connect(self._sb_add_character_to_cut)
+        char_row.addWidget(add_char_btn)
+        self.label_sb_cut_chars = QtWidgets.QLabel("（なし）")
+        self.label_sb_cut_chars.setStyleSheet("color: #666;")
+        char_row.addWidget(self.label_sb_cut_chars)
+        clear_char_btn = QtWidgets.QPushButton("クリア")
+        clear_char_btn.clicked.connect(self._sb_clear_characters_from_cut)
+        char_row.addWidget(clear_char_btn)
+        char_row.addStretch()
+        cut_detail_layout.addLayout(char_row)
+
+        cut_detail_layout.addStretch()
+
+        sb_splitter.addWidget(cut_detail_widget)
+        sb_splitter.setStretchFactor(0, 3)
+        sb_splitter.setStretchFactor(1, 7)
+
+        storyboard_layout.addWidget(sb_splitter, 1)
+
+        # アクションボタン行
+        sb_action_row = QtWidgets.QHBoxLayout()
+        init_sb_btn = QtWidgets.QPushButton("テンプレートから初期化")
+        init_sb_btn.setToolTip("選択したテンプレートでカットを初期化します")
+        init_sb_btn.clicked.connect(self._sb_init_from_template)
+        sb_action_row.addWidget(init_sb_btn)
+
+        from_prompt_btn = QtWidgets.QPushButton("現在のプロンプトから生成(LLM)")
+        from_prompt_btn.setToolTip("出力欄のプロンプト全文をLLMでカットに分割します")
+        from_prompt_btn.clicked.connect(self._sb_generate_from_prompt)
+        sb_action_row.addWidget(from_prompt_btn)
+
+        sb_action_row.addStretch()
+
+        apply_to_text_btn = QtWidgets.QPushButton("テキスト欄に反映")
+        apply_to_text_btn.setToolTip("ストーリーボードJSONを出力欄に反映します")
+        apply_to_text_btn.clicked.connect(self._sb_apply_to_text_output)
+        sb_action_row.addWidget(apply_to_text_btn)
+
+        copy_sb_btn = QtWidgets.QPushButton("JSON出力&コピー")
+        copy_sb_btn.setToolTip("ストーリーボードをJSON形式でクリップボードにコピーします")
+        copy_sb_btn.clicked.connect(self._sb_copy_json)
+        sb_action_row.addWidget(copy_sb_btn)
+
+        storyboard_layout.addLayout(sb_action_row)
+
+        tools_tabs.addTab(storyboard_tab, "ストーリーボード")
+
+        # ストーリーボード内部状態の初期化
+        self._sb_cuts: List[StoryboardCut] = []
+        self._sb_current_index: int = -1
+        self._sb_video_style: dict = None  # 抽出した video_style
+        self._sb_content_flags: dict = None  # 抽出した content_flags
+
+    # =============================
+    # ストーリーボードタブのイベントハンドラ
+    # =============================
+    def _show_sora_character_dialog(self):
+        """Soraキャラクター一覧ダイアログを表示する。"""
+        dialog = SoraCharacterListDialog(self)
+        dialog.exec()
+        # ダイアログを閉じた後、キャラクターコンボを更新
+        self._refresh_sb_character_combo()
+
+    def _refresh_sb_character_combo(self):
+        """キャラクターコンボボックスを最新のYAMLデータで更新する。"""
+        self.combo_sb_char.clear()
+        self.combo_sb_char.addItem("（選択してください）", userData=None)
+        characters = load_sora_characters()
+        for char in characters:
+            self.combo_sb_char.addItem(f"{char.name} ({char.id})", userData=char.id)
+
+    def _on_sb_template_change(self, index: int):
+        """テンプレート変更時の処理。"""
+        pass  # 必要に応じてUIの有効/無効を切り替え
+
+    def _sb_init_from_template(self):
+        """テンプレートからカットリストを初期化する。"""
+        template_id = self.combo_sb_template.currentData()
+        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        cut_count = self.spin_sb_cut_count.value()
+
+        self._sb_cuts = create_cuts_from_template(template_id, total_duration, cut_count)
+        self._sb_refresh_cut_list()
+
+        if self._sb_cuts:
+            self.list_sb_cuts.setCurrentRow(0)
+
+    def _sb_refresh_cut_list(self):
+        """カットリストUIを内部状態から再描画する。"""
+        self.list_sb_cuts.clear()
+        for cut in self._sb_cuts:
+            label = f"#{cut.index} ({cut.start_sec:.1f}s, {cut.duration_sec:.1f}s)"
+            if cut.is_image_placeholder:
+                label = f"#{cut.index} [画像] ({cut.start_sec:.1f}s)"
+            self.list_sb_cuts.addItem(label)
+
+    def _on_sb_cut_selected(self, row: int):
+        """カットリストの選択変更時に詳細エリアを更新する。"""
+        if row < 0 or row >= len(self._sb_cuts):
+            self._sb_current_index = -1
+            self.text_sb_cut_desc.clear()
+            self.spin_sb_start.setValue(0)
+            self.spin_sb_duration_cut.setValue(1)
+            self.combo_sb_camera.setCurrentIndex(0)
+            self.label_sb_cut_chars.setText("（なし）")
+            return
+
+        self._sb_current_index = row
+        cut = self._sb_cuts[row]
+
+        # イベント発火を抑制するためにblockSignals
+        self.text_sb_cut_desc.blockSignals(True)
+        self.text_sb_cut_desc.setPlainText(cut.description)
+        self.text_sb_cut_desc.blockSignals(False)
+
+        self.spin_sb_start.blockSignals(True)
+        self.spin_sb_start.setValue(cut.start_sec)
+        self.spin_sb_start.blockSignals(False)
+
+        self.spin_sb_duration_cut.blockSignals(True)
+        self.spin_sb_duration_cut.setValue(cut.duration_sec)
+        self.spin_sb_duration_cut.blockSignals(False)
+
+        camera_index = 0
+        for i in range(self.combo_sb_camera.count()):
+            if self.combo_sb_camera.itemData(i) == cut.camera_work:
+                camera_index = i
+                break
+        self.combo_sb_camera.blockSignals(True)
+        self.combo_sb_camera.setCurrentIndex(camera_index)
+        self.combo_sb_camera.blockSignals(False)
+
+        self._update_sb_cut_chars_label()
+
+    def _update_sb_cut_chars_label(self):
+        """現在選択中のカットのキャラクター表示を更新する。"""
+        if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts):
+            self.label_sb_cut_chars.setText("（なし）")
+            return
+        cut = self._sb_cuts[self._sb_current_index]
+        if cut.characters:
+            self.label_sb_cut_chars.setText(", ".join(cut.characters))
+        else:
+            self.label_sb_cut_chars.setText("（なし）")
+
+    def _on_sb_cut_desc_changed(self):
+        """カット説明変更時の処理。"""
+        if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts):
+            return
+        self._sb_cuts[self._sb_current_index].description = self.text_sb_cut_desc.toPlainText()
+
+    def _on_sb_cut_time_changed(self):
+        """カットの時間設定変更時の処理。"""
+        if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts):
+            return
+        cut = self._sb_cuts[self._sb_current_index]
+        cut.start_sec = round(self.spin_sb_start.value(), 2)
+        cut.duration_sec = round(self.spin_sb_duration_cut.value(), 2)
+        self._sb_refresh_cut_list()
+        self.list_sb_cuts.setCurrentRow(self._sb_current_index)
+
+    def _on_sb_cut_camera_changed(self):
+        """カメラワーク変更時の処理。"""
+        if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts):
+            return
+        self._sb_cuts[self._sb_current_index].camera_work = self.combo_sb_camera.currentData() or "static"
+
+    def _sb_add_cut(self):
+        """新しいカットを追加する。"""
+        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        if self._sb_cuts:
+            last_cut = self._sb_cuts[-1]
+            new_start = last_cut.start_sec + last_cut.duration_sec
+            remaining = total_duration - new_start
+            new_duration = max(0.5, remaining) if remaining > 0 else 1.0
+        else:
+            new_start = 0.0
+            new_duration = total_duration / 3
+
+        new_cut = StoryboardCut(
+            index=len(self._sb_cuts),
+            start_sec=round(new_start, 2),
+            duration_sec=round(new_duration, 2),
+            description="",
+            camera_work="static",
+            characters=[],
+            is_image_placeholder=False,
+        )
+        self._sb_cuts.append(new_cut)
+        self._sb_reindex_cuts()
+        self._sb_refresh_cut_list()
+        self.list_sb_cuts.setCurrentRow(len(self._sb_cuts) - 1)
+
+    def _sb_delete_cut(self):
+        """選択中のカットを削除する。"""
+        if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts):
+            return
+        del self._sb_cuts[self._sb_current_index]
+        self._sb_reindex_cuts()
+        self._sb_refresh_cut_list()
+        if self._sb_cuts:
+            new_index = min(self._sb_current_index, len(self._sb_cuts) - 1)
+            self.list_sb_cuts.setCurrentRow(new_index)
+        else:
+            self._sb_current_index = -1
+            self._on_sb_cut_selected(-1)
+
+    def _sb_move_cut_up(self):
+        """選択中のカットを上に移動する。"""
+        if self._sb_current_index <= 0 or self._sb_current_index >= len(self._sb_cuts):
+            return
+        idx = self._sb_current_index
+        self._sb_cuts[idx], self._sb_cuts[idx - 1] = self._sb_cuts[idx - 1], self._sb_cuts[idx]
+        self._sb_reindex_cuts()
+        self._sb_refresh_cut_list()
+        self.list_sb_cuts.setCurrentRow(idx - 1)
+
+    def _sb_move_cut_down(self):
+        """選択中のカットを下に移動する。"""
+        if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts) - 1:
+            return
+        idx = self._sb_current_index
+        self._sb_cuts[idx], self._sb_cuts[idx + 1] = self._sb_cuts[idx + 1], self._sb_cuts[idx]
+        self._sb_reindex_cuts()
+        self._sb_refresh_cut_list()
+        self.list_sb_cuts.setCurrentRow(idx + 1)
+
+    def _sb_reindex_cuts(self):
+        """カットのインデックスを振り直す。"""
+        for i, cut in enumerate(self._sb_cuts):
+            cut.index = i
+
+    def _sb_add_character_to_cut(self):
+        """選択したキャラクターを現在のカットに追加する。"""
+        if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts):
+            QtWidgets.QMessageBox.warning(self, "注意", "カットを選択してください。")
+            return
+        char_id = self.combo_sb_char.currentData()
+        if not char_id:
+            QtWidgets.QMessageBox.warning(self, "注意", "キャラクターを選択してください。")
+            return
+        cut = self._sb_cuts[self._sb_current_index]
+        if char_id not in cut.characters:
+            cut.characters.append(char_id)
+        self._update_sb_cut_chars_label()
+
+    def _sb_clear_characters_from_cut(self):
+        """現在のカットからキャラクターをクリアする。"""
+        if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts):
+            return
+        self._sb_cuts[self._sb_current_index].characters = []
+        self._update_sb_cut_chars_label()
+
+    def _sb_copy_json(self):
+        """ストーリーボードをJSON形式でクリップボードにコピーする。"""
+        if not self._sb_cuts:
+            QtWidgets.QMessageBox.warning(self, "注意", "カットがありません。テンプレートから初期化してください。")
+            return
+
+        template_id = self.combo_sb_template.currentData() or "none"
+        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        continuity = self.check_sb_continuity.isChecked()
+
+        # メタデータ（video_style, content_flags）と連続性強化フラグを含めてJSON生成
+        json_text = build_storyboard_json(
+            self._sb_cuts,
+            total_duration,
+            template_id,
+            video_style=self._sb_video_style,
+            content_flags=self._sb_content_flags,
+            continuity_enhanced=continuity,
+        )
+        QtGui.QGuiApplication.clipboard().setText(json_text)
+        QtWidgets.QMessageBox.information(self, "コピー完了", "ストーリーボードJSONをクリップボードにコピーしました。")
+
+    def _sb_generate_from_prompt(self):
+        """出力欄のプロンプト全文をLLMでストーリーボードのカットに分割する。"""
+        from modules.llm import StoryboardLLMWorker
+
+        if not config.LLM_ENABLED:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "注意",
+                "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。",
+            )
+            return
+
+        # 出力欄から全テキストを取得（末尾固定部含む）
+        raw_text = self.text_output.toPlainText().strip()
+        if not raw_text:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "注意",
+                "出力欄にプロンプトがありません。先にプロンプトを生成してください。",
+            )
+            return
+
+        # メタデータ（video_style, content_flags）を抽出して保持
+        # これらはカットの説明に含めず、ストーリーボードと並列に配置する
+        video_style, content_flags, prompt_text = extract_metadata_from_prompt(raw_text)
+        self._sb_video_style = video_style
+        self._sb_content_flags = content_flags
+
+        # 総尺とカット数を取得
+        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        cut_count = self.spin_sb_cut_count.value()
+
+        # 出力言語を取得（動画用設定を流用）
+        output_language = "en"
+        lang_combo = getattr(self, "combo_movie_output_lang", None)
+        if lang_combo:
+            data = lang_combo.currentData()
+            if data in ("en", "ja"):
+                output_language = data
+
+        # メタデータを除いたプロンプトテキストをLLMに送信
+        worker = StoryboardLLMWorker(
+            text=prompt_text,
+            model=self.combo_llm_model.currentText(),
+            cut_count=cut_count,
+            total_duration_sec=total_duration,
+            output_language=output_language,
+        )
+
+        # コンテキストを保存
+        self._sb_llm_context = {
+            "cut_count": cut_count,
+            "total_duration": total_duration,
+        }
+
+        if self._start_background_worker(
+            worker,
+            self._handle_sb_llm_success,
+            self._handle_sb_llm_failure,
+        ):
+            pass  # ワーカー開始成功
+
+    def _handle_sb_llm_success(self, thread: QtCore.QThread, worker, result: str):
+        """ストーリーボードLLM生成成功時の処理。"""
+        self._set_loading_state(False)
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+
+        context = getattr(self, "_sb_llm_context", {}) or {}
+        self._sb_llm_context = None
+
+        if not result:
+            QtWidgets.QMessageBox.warning(self, "注意", "LLMから空のレスポンスが返されました。")
+            return
+
+        # JSONレスポンスをパース
+        try:
+            # レスポンスからJSON配列部分を抽出
+            json_match = re.search(r'\[.*\]', result, re.DOTALL)
+            if not json_match:
+                raise ValueError("JSON配列が見つかりません")
+            cuts_data = json.loads(json_match.group())
+        except (json.JSONDecodeError, ValueError) as e:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "パースエラー",
+                f"LLMレスポンスの解析に失敗しました:\n{e}\n\nレスポンス:\n{result[:500]}...",
+            )
+            return
+
+        if not isinstance(cuts_data, list) or not cuts_data:
+            QtWidgets.QMessageBox.warning(self, "注意", "有効なカットデータが見つかりません。")
+            return
+
+        # カットを生成
+        total_duration = context.get("total_duration", 10)
+        actual_cut_count = len(cuts_data)
+        duration_per_cut = total_duration / actual_cut_count
+
+        # カメラワークのマッピング
+        camera_map = {
+            "static": "static",
+            "pan": "pan",
+            "zoom_in": "zoom_in",
+            "zoom_out": "zoom_out",
+            "tracking": "tracking",
+            "dolly": "dolly",
+            "handheld": "handheld",
+            "drone": "drone",
+        }
+
+        self._sb_cuts = []
+        current_time = 0.0
+        for i, cut_data in enumerate(cuts_data):
+            description = cut_data.get("description", "")
+            camera_raw = cut_data.get("camera", "static")
+            camera_work = camera_map.get(camera_raw.lower(), "static")
+
+            cut = StoryboardCut(
+                index=i,
+                start_sec=round(current_time, 2),
+                duration_sec=round(duration_per_cut, 2),
+                description=description,
+                camera_work=camera_work,
+                characters=[],
+                is_image_placeholder=False,
+            )
+            self._sb_cuts.append(cut)
+            current_time += duration_per_cut
+
+        self._sb_refresh_cut_list()
+        if self._sb_cuts:
+            self.list_sb_cuts.setCurrentRow(0)
+
+        QtWidgets.QMessageBox.information(
+            self,
+            "生成完了",
+            f"LLMでプロンプトから {actual_cut_count} カットを生成しました。\n"
+            f"（総尺: {total_duration}秒）",
+        )
+
+    def _handle_sb_llm_failure(self, thread: QtCore.QThread, worker, error: str):
+        """ストーリーボードLLM生成失敗時の処理。"""
+        self._set_loading_state(False)
+        thread.quit()
+        thread.wait()
+        worker.deleteLater()
+        self._thread = None
+        self._sb_llm_context = None
+        QtWidgets.QMessageBox.critical(
+            self,
+            "エラー",
+            f"ストーリーボード生成でエラーが発生しました:\n{error}",
+        )
+
+    def _sb_apply_to_text_output(self):
+        """ストーリーボードJSONを出力欄に上書きする。"""
+        if not self._sb_cuts:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "注意",
+                "カットがありません。先にストーリーボードを生成してください。",
+            )
+            return
+
+        template_id = self.combo_sb_template.currentData() or "none"
+        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        continuity = self.check_sb_continuity.isChecked()
+
+        # メタデータ（video_style, content_flags）と連続性強化フラグを含めてJSON生成
+        json_text = build_storyboard_json(
+            self._sb_cuts,
+            total_duration,
+            template_id,
+            video_style=self._sb_video_style,
+            content_flags=self._sb_content_flags,
+            continuity_enhanced=continuity,
+        )
+
+        # 出力欄を上書き
+        self.text_output.setPlainText(json_text)
+        QtWidgets.QMessageBox.information(
+            self,
+            "反映完了",
+            "ストーリーボードJSONを出力欄に反映しました。",
+        )
 
     def cycle_font_scale(self):
         """UI全体のフォントプリセットを巡回させる。"""

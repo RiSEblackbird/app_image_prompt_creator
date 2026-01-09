@@ -24,6 +24,68 @@ LANGUAGE_COMBO_CHOICES = [
     ("日本語", "ja"),
 ]
 
+# =============================
+# ストーリーボード関連定数
+# =============================
+# 総尺の選択肢（秒）
+STORYBOARD_DURATION_CHOICES = [10, 15, 20, 25, 30]
+DEFAULT_STORYBOARD_DURATION = 10
+
+# カメラワークの選択肢
+CAMERA_WORK_CHOICES = [
+    ("固定", "static"),
+    ("パン", "pan"),
+    ("ズームイン", "zoom_in"),
+    ("ズームアウト", "zoom_out"),
+    ("トラッキング", "tracking"),
+    ("ドリー", "dolly"),
+    ("手持ち", "handheld"),
+    ("ドローン", "drone"),
+]
+
+# テンプレート定義
+# preset_cuts: 事前定義されたカット構成（None の場合は自動均等配分）
+# weight_distribution: カット比率（preset_cuts が None の場合に使用）
+STORYBOARD_TEMPLATES = {
+    "none": {
+        "label": "（テンプレートなし）",
+        "description": "カットを均等配分",
+        "preset_cuts": None,
+        "weight_distribution": None,
+    },
+    "image_unbind": {
+        "label": "画像スタート（呪縛解除）",
+        "description": "添付画像から始めて0.3秒でシーンにジャンプ",
+        "preset_cuts": [
+            {
+                "start_sec": 0.0,
+                "duration_sec": 0.3,
+                "description": "[Attached image]",
+                "is_image_placeholder": True,
+            },
+            {
+                "start_sec": 0.3,
+                "duration_sec": None,  # 残り時間を自動計算
+                "description": "Jump into the world where this image was taken. The scene begins to move and unfold naturally.",
+                "is_image_placeholder": False,
+            },
+        ],
+        "weight_distribution": None,
+    },
+    "opening_heavy": {
+        "label": "オープニング重視",
+        "description": "導入カットを総尺の40%に",
+        "preset_cuts": None,
+        "weight_distribution": [0.4, 0.3, 0.3],
+    },
+    "climax_heavy": {
+        "label": "クライマックス重視",
+        "description": "最終カットを総尺の40%に",
+        "preset_cuts": None,
+        "weight_distribution": [0.3, 0.3, 0.4],
+    },
+}
+
 # 末尾プリセット（YAML欠損時のフォールバック）
 DEFAULT_TAIL_PRESETS = {
     "image": [
@@ -139,6 +201,7 @@ DEFAULT_APP_SETTINGS = {
     "EXCLUSION_CSV": "exclusion_targets.csv",
     "ARRANGE_PRESETS_YAML": "arrange_presets.yaml",
     "TAIL_PRESETS_YAML": "tail_presets.yaml",
+    "SORA_CHARACTERS_YAML": "sora_characters.yaml",
     "DEDUPLICATE_PROMPTS": True,
     "LLM_ENABLED": False,
     "LLM_MODEL": DEFAULT_LLM_MODEL,
@@ -181,4 +244,5 @@ LLM_TIMEOUT = DEFAULT_APP_SETTINGS["LLM_TIMEOUT"]
 OPENAI_API_KEY_ENV = DEFAULT_APP_SETTINGS["OPENAI_API_KEY_ENV"]
 ARRANGE_PRESETS_YAML = str(SCRIPT_DIR / DEFAULT_APP_SETTINGS["ARRANGE_PRESETS_YAML"])
 TAIL_PRESETS_YAML = str(SCRIPT_DIR / DEFAULT_APP_SETTINGS["TAIL_PRESETS_YAML"])
+SORA_CHARACTERS_YAML = str(SCRIPT_DIR / DEFAULT_APP_SETTINGS["SORA_CHARACTERS_YAML"])
 LLM_INCLUDE_TEMPERATURE = DEFAULT_APP_SETTINGS["LLM_INCLUDE_TEMPERATURE"]

@@ -1,0 +1,17 @@
+# Sora キャラクターリスト
+# このファイルを sora_characters.yaml にコピーして使用してください
+#
+# フィールド説明:
+#   id         : Soraに登録したキャラクターの識別子（@で始まる）
+#   name       : UIに表示する名前
+#   pronoun_3rd: 三人称代名詞（彼/彼女/それ/この人/etc）
+#
+# このファイルはgitignore対象のため、リポジトリにはコミットされません
+
+characters:
+  - id: "@example.character1"
+    name: "サンプルキャラ1"
+    pronoun_3rd: "彼"
+  - id: "@example.character2"
+    name: "サンプルキャラ2"
+    pronoun_3rd: "彼女"

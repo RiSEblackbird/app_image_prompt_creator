@@ -25,3 +25,4 @@ failed_csv_rows_*.csv
 *.p12
 *.pfx
 *.cer
+sora_characters.yaml

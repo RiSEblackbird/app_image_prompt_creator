@@ -1025,3 +1025,94 @@ class GeneratePromptLLMWorker(QtCore.QObject):
             "If no attributes are given, create a varied but coherent mix of subjects, environments, materials, and visual styles."
         )
         return system_prompt, user_prompt
+
+
+class StoryboardLLMWorker(QtCore.QObject):
+    """プロンプトからストーリーボードのカット分割をLLMで実行するワーカー。"""
+
+    finished = QtCore.Signal(str)
+    failed = QtCore.Signal(str)
+
+    def __init__(
+        self,
+        text: str,
+        model: str,
+        cut_count: int,
+        total_duration_sec: float,
+        output_language: str = "en",
+    ):
+        super().__init__()
+        self.text = text
+        self.model = model
+        self.cut_count = max(1, int(cut_count))
+        self.total_duration_sec = float(total_duration_sec)
+        self.output_language = _normalize_language_code(output_language)
+
+    @QtCore.Slot()
+    def run(self):
+        try:
+            api_key = os.getenv(config.OPENAI_API_KEY_ENV)
+            if not api_key:
+                self.failed.emit(f"{config.OPENAI_API_KEY_ENV} が未設定です。環境変数にAPIキーを設定してください。")
+                return
+
+            system_prompt, user_prompt = self._build_prompts()
+            content, finish_reason, _, retry_count, error_message, status_code = send_llm_request(
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=config.LLM_TEMPERATURE,
+                max_tokens=config.LLM_MAX_COMPLETION_TOKENS,
+                timeout=config.LLM_TIMEOUT,
+                model_name=self.model,
+                include_temperature=config.LLM_INCLUDE_TEMPERATURE,
+            )
+            if error_message:
+                self.failed.emit(f"{error_message} (リトライ回数: {retry_count}, ステータス: {status_code})")
+                return
+            if retry_count:
+                logging.info("Storyboard generation succeeded after retries=%s", retry_count)
+            if finish_reason in config.LENGTH_LIMIT_REASONS:
+                self.failed.emit("LLM応答がトークン制限に達しました。カット数を減らして再試行してください。")
+                return
+            self.finished.emit((content or "").strip())
+        except Exception:
+            self.failed.emit(get_exception_trace())
+
+    def _build_prompts(self) -> Tuple[str, str]:
+        """ストーリーボード生成用のプロンプトを構築する。"""
+        duration_per_cut = round(self.total_duration_sec / self.cut_count, 2)
+
+        system_prompt = _append_temperature_hint(
+            "You are a professional storyboard writer for video production. "
+            "Your task is to split a given image prompt into multiple cinematic cuts for a short video. "
+            "Each cut should be a vivid, visual description suitable for AI video generation. "
+            "CRITICAL: You MUST preserve the original language of the source prompt. "
+            "If the source is in Japanese, write descriptions in Japanese. "
+            "If the source is in English, write descriptions in English. "
+            "Do NOT translate or change the language.",
+            self.model,
+            config.LLM_TEMPERATURE,
+        )
+
+        user_prompt = (
+            f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
+            f"Total video duration: {self.total_duration_sec} seconds.\n"
+            f"Each cut should be approximately {duration_per_cut} seconds.\n\n"
+            "Rules:\n"
+            "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+            "- Each cut should be a complete, vivid visual description.\n"
+            "- Maintain visual continuity between cuts.\n"
+            "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
+            "- The first cut should establish the scene.\n"
+            "- The final cut should provide a sense of conclusion or climax.\n\n"
+            "Output format (JSON array):\n"
+            "[\n"
+            '  {"cut": 1, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
+            '  {"cut": 2, "description": "...", "camera": "..."},\n'
+            "  ...\n"
+            "]\n\n"
+            f"Source prompt:\n{self.text}"
+        )
+
+        return system_prompt, user_prompt
