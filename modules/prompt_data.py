@@ -246,3 +246,64 @@ def load_sora_characters() -> List[SoraCharacter]:
         {"path": str(path), "count": len(result)},
     )
     return result
+
+
+def save_sora_characters(new_entries: List[dict]) -> bool:
+    """Soraキャラクター定義YAMLに新規キャラクターを追記する。
+
+    Args:
+        new_entries: {"id": str, "name": str, "pronoun_3rd": str} のリスト
+
+    Returns:
+        保存に成功したら True、失敗時は False。
+    """
+    path = Path(config.SORA_CHARACTERS_YAML)
+
+    try:
+        existing_data = {}
+        if path.exists():
+            with path.open("r", encoding="utf-8") as fp:
+                existing_data = yaml.safe_load(fp) or {}
+    except Exception as error:
+        log_structured(
+            logging.ERROR,
+            "sora_characters_yaml_load_for_write_error",
+            {"path": str(path), "error": str(error)},
+        )
+        return False
+
+    characters_raw = existing_data.get("characters") if isinstance(existing_data, dict) else None
+    characters: List[dict] = characters_raw if isinstance(characters_raw, list) else []
+    existing_ids = {str(item.get("id")) for item in characters if isinstance(item, dict) and item.get("id")}
+
+    appended_ids: List[str] = []
+    for entry in new_entries:
+        char_id = str(entry.get("id") or "").strip()
+        name = str(entry.get("name") or "").strip()
+        pronoun = str(entry.get("pronoun_3rd") or "").strip()
+        if not char_id or not name:
+            continue
+        if char_id in existing_ids:
+            continue
+        characters.append({"id": char_id, "name": name, "pronoun_3rd": pronoun})
+        existing_ids.add(char_id)
+        appended_ids.append(char_id)
+
+    data_to_write = {"characters": characters}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as fp:
+            yaml.safe_dump(data_to_write, fp, allow_unicode=True, sort_keys=False)
+        log_structured(
+            logging.INFO,
+            "sora_characters_yaml_saved",
+            {"path": str(path), "appended": appended_ids},
+        )
+        return True
+    except Exception as error:
+        log_structured(
+            logging.ERROR,
+            "sora_characters_yaml_save_error",
+            {"path": str(path), "error": str(error)},
+        )
+        return False

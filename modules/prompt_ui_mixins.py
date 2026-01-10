@@ -7,10 +7,16 @@ from typing import Iterable, List
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from modules import config
-from modules.prompt_data import load_exclusion_words, load_sora_characters, StoryboardCut
+from modules.prompt_data import (
+    StoryboardCut,
+    load_exclusion_words,
+    load_sora_characters,
+    save_sora_characters,
+)
 from modules.ui_helpers import create_language_combo
 from modules.storyboard import (
     SoraCharacterListDialog,
+    SoraCharacterRegisterDialog,
     build_storyboard_json,
     create_cuts_from_template,
     extract_metadata_from_prompt,
@@ -693,6 +699,7 @@ class PromptUIMixin:
         self._sb_video_style: dict = None  # 抽出した video_style
         self._sb_content_flags: dict = None  # 抽出した content_flags
         self._sb_total_duration_override: float | None = None  # LLM自動決定した総尺
+        self._sb_detected_characters: List[str] = []  # テキストから検出したキャラクターID
 
     # =============================
     # ストーリーボードタブのイベントハンドラ
@@ -711,6 +718,54 @@ class PromptUIMixin:
         characters = load_sora_characters()
         for char in characters:
             self.combo_sb_char.addItem(f"{char.name} ({char.id})", userData=char.id)
+
+    def _extract_character_ids_from_text(self, text: str) -> List[str]:
+        """テキストから @ID 形式のキャラクター識別子を抽出する。"""
+        if not text:
+            return []
+        pattern = re.compile(r"(?<!\w)@[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}")
+        seen: set[str] = set()
+        result: List[str] = []
+        for match in pattern.finditer(text):
+            candidate = match.group(0).rstrip(".,;:!?)］）】」』、。…")
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                result.append(candidate)
+        return result
+
+    def _ensure_characters_registered(self, detected_ids: List[str]) -> bool:
+        """検出したIDをYAMLと突合し、未登録なら登録ダイアログを表示する。"""
+        self._sb_detected_characters = detected_ids or []
+        if not detected_ids:
+            return True
+
+        known_ids = {char.id for char in load_sora_characters()}
+        missing_ids = [cid for cid in detected_ids if cid not in known_ids]
+        if not missing_ids:
+            return True
+
+        dialog = SoraCharacterRegisterDialog(missing_ids, self)
+        result = dialog.exec()
+        if result != QtWidgets.QDialog.Accepted:
+            return False
+
+        new_entries = dialog.get_entries()
+        if new_entries:
+            if not save_sora_characters(new_entries):
+                choice = QtWidgets.QMessageBox.question(
+                    self,
+                    "保存に失敗しました",
+                    "sora_characters.yaml への保存に失敗しました。\n"
+                    "登録せずに続行しますか？",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                    QtWidgets.QMessageBox.No,
+                )
+                if choice == QtWidgets.QMessageBox.No:
+                    return False
+            else:
+                self._refresh_sb_character_combo()
+
+        return True
 
     def _on_sb_template_change(self, index: int):
         """テンプレート変更時の処理。"""
@@ -798,6 +853,17 @@ class PromptUIMixin:
         delta = round(target_total - actual_end, 2)
         if abs(delta) >= 0.01:
             last_cut.duration_sec = round(max(0.1, last_cut.duration_sec + delta), 2)
+
+    def _apply_detected_characters_to_cuts(self):
+        """検出済みキャラクターIDを全カットに付与する（重複除去）。"""
+        if not self._sb_detected_characters or not self._sb_cuts:
+            return
+        for cut in self._sb_cuts:
+            existing = set(cut.characters or [])
+            for char_id in self._sb_detected_characters:
+                if char_id not in existing:
+                    cut.characters.append(char_id)
+                    existing.add(char_id)
 
     def _on_sb_cut_selected(self, row: int):
         """カットリストの選択変更時に詳細エリアを更新する。"""
@@ -1011,6 +1077,11 @@ class PromptUIMixin:
         self._sb_video_style = video_style
         self._sb_content_flags = content_flags
 
+        # テキストからキャラクターIDを抽出し、未登録があれば登録を促す
+        detected_characters = self._extract_character_ids_from_text(prompt_text)
+        if not self._ensure_characters_registered(detected_characters):
+            return
+
         # 総尺とカット数を取得
         total_duration = self._get_sb_total_duration()
         cut_count = self.spin_sb_cut_count.value()
@@ -1200,6 +1271,9 @@ class PromptUIMixin:
 
         # 総尺誤差を最終カットで吸収
         self._adjust_sb_total_duration(total_duration)
+
+        # テキストから検出したキャラクターを全カットへ反映
+        self._apply_detected_characters_to_cuts()
 
         # 自動構成の結果を保存
         if auto_structure:

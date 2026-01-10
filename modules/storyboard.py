@@ -216,6 +216,97 @@ class SoraCharacterListDialog(QtWidgets.QDialog):
             )
 
 
+class SoraCharacterRegisterDialog(QtWidgets.QDialog):
+    """不足しているキャラクターIDを登録するダイアログ。"""
+
+    def __init__(self, missing_ids: List[str], parent: Optional[QtWidgets.QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle("不足キャラクターの登録")
+        self.setModal(True)
+        self._missing_ids = missing_ids
+        self._entries: List[dict] = []
+        self._name_edits: List[QtWidgets.QLineEdit] = []
+        self._pronoun_edits: List[QtWidgets.QLineEdit] = []
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+        desc = QtWidgets.QLabel(
+            "テキストに含まれている未登録のキャラクターIDが見つかりました。\n"
+            "名前を入力して登録するか、登録せずに続行するかを選択できます。"
+        )
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        form = QtWidgets.QGridLayout()
+        form.addWidget(QtWidgets.QLabel("ID"), 0, 0)
+        form.addWidget(QtWidgets.QLabel("名前（必須）"), 0, 1)
+        form.addWidget(QtWidgets.QLabel("3人称（任意）"), 0, 2)
+
+        for row, char_id in enumerate(self._missing_ids, start=1):
+            id_label = QtWidgets.QLabel(char_id)
+            form.addWidget(id_label, row, 0)
+
+            name_edit = QtWidgets.QLineEdit()
+            name_edit.setPlaceholderText("例: 月曜日さん")
+            form.addWidget(name_edit, row, 1)
+            self._name_edits.append(name_edit)
+
+            pronoun_edit = QtWidgets.QLineEdit()
+            pronoun_edit.setPlaceholderText("例: 彼/彼女/それ/この人")
+            form.addWidget(pronoun_edit, row, 2)
+            self._pronoun_edits.append(pronoun_edit)
+
+        layout.addLayout(form)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        register_btn = QtWidgets.QPushButton("登録して続行")
+        register_btn.clicked.connect(self._on_register)
+        btn_row.addWidget(register_btn)
+
+        skip_btn = QtWidgets.QPushButton("登録せず続行")
+        skip_btn.clicked.connect(self._on_skip)
+        btn_row.addWidget(skip_btn)
+
+        cancel_btn = QtWidgets.QPushButton("キャンセル")
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+    def _on_register(self):
+        entries: List[dict] = []
+        missing_required: List[str] = []
+        for idx, char_id in enumerate(self._missing_ids):
+            name = self._name_edits[idx].text().strip()
+            pronoun = self._pronoun_edits[idx].text().strip()
+            if not name:
+                missing_required.append(char_id)
+                continue
+            entries.append({"id": char_id, "name": name, "pronoun_3rd": pronoun})
+
+        if missing_required:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "未入力があります",
+                "登録する場合はすべての名前を入力してください。\n"
+                f"未入力: {', '.join(missing_required)}",
+            )
+            return
+
+        self._entries = entries
+        self.accept()
+
+    def _on_skip(self):
+        self._entries = []
+        self.accept()
+
+    def get_entries(self) -> List[dict]:
+        """ダイアログで入力されたキャラクター情報を返す。"""
+        return self._entries
+
+
 def build_storyboard_json(
     cuts: List[StoryboardCut],
     total_duration_sec: float,
