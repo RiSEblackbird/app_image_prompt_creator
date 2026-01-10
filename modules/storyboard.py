@@ -326,8 +326,6 @@ def build_storyboard_json(
         }
         if cut.camera_work and cut.camera_work != "static":
             cut_dict["camera_work"] = cut.camera_work
-        if cut.characters:
-            cut_dict["characters"] = cut.characters
         if cut.is_image_placeholder:
             cut_dict["is_image_placeholder"] = True
         cuts_data.append(cut_dict)

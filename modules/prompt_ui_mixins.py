@@ -854,17 +854,6 @@ class PromptUIMixin:
         if abs(delta) >= 0.01:
             last_cut.duration_sec = round(max(0.1, last_cut.duration_sec + delta), 2)
 
-    def _apply_detected_characters_to_cuts(self):
-        """検出済みキャラクターIDを全カットに付与する（重複除去）。"""
-        if not self._sb_detected_characters or not self._sb_cuts:
-            return
-        for cut in self._sb_cuts:
-            existing = set(cut.characters or [])
-            for char_id in self._sb_detected_characters:
-                if char_id not in existing:
-                    cut.characters.append(char_id)
-                    existing.add(char_id)
-
     def _on_sb_cut_selected(self, row: int):
         """カットリストの選択変更時に詳細エリアを更新する。"""
         if row < 0 or row >= len(self._sb_cuts):
@@ -1108,6 +1097,21 @@ class PromptUIMixin:
             video_style_ctx = video_style
             content_flags_ctx = content_flags
 
+        # 検出したキャラクター情報を取得（LLMが各カットで適切に言及できるよう）
+        character_info: List[dict] = []
+        if detected_characters:
+            registered_chars = {c.id: c for c in load_sora_characters()}
+            for char_id in detected_characters:
+                char = registered_chars.get(char_id)
+                if char:
+                    character_info.append({
+                        "id": char.id,
+                        "name": char.name,
+                        "pronoun_3rd": char.pronoun_3rd,
+                    })
+                else:
+                    character_info.append({"id": char_id, "name": "", "pronoun_3rd": ""})
+
         # メタデータを除いたプロンプトテキストをLLMに送信
         worker = StoryboardLLMWorker(
             text=prompt_text,
@@ -1125,6 +1129,7 @@ class PromptUIMixin:
             min_duration_sec=config.STORYBOARD_AUTO_MIN_DURATION,
             max_duration_sec=config.STORYBOARD_AUTO_MAX_DURATION,
             default_duration_sec=total_duration or config.STORYBOARD_AUTO_DEFAULT_DURATION,
+            detected_characters=character_info,
         )
 
         # コンテキストを保存
@@ -1271,9 +1276,6 @@ class PromptUIMixin:
 
         # 総尺誤差を最終カットで吸収
         self._adjust_sb_total_duration(total_duration)
-
-        # テキストから検出したキャラクターを全カットへ反映
-        self._apply_detected_characters_to_cuts()
 
         # 自動構成の結果を保存
         if auto_structure:

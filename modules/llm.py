@@ -1033,6 +1033,9 @@ class StoryboardLLMWorker(QtCore.QObject):
 
     video_style / content_flags を受け取ると、それらを背景補足情報として
     プロンプトに含め、各カットがその雰囲気や制約に沿った内容になるよう LLM へ指示する。
+    
+    detected_characters を受け取ると、キャラクター情報をLLMに伝え、
+    各カットの内容に応じて適切にキャラクターを言及させる（全カット強制ではない）。
     """
 
     finished = QtCore.Signal(str)
@@ -1055,6 +1058,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         min_duration_sec: float | None = None,
         max_duration_sec: float | None = None,
         default_duration_sec: float | None = None,
+        detected_characters: list | None = None,
     ):
         super().__init__()
         self.text = text
@@ -1072,6 +1076,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         self.min_duration_sec = min_duration_sec or config.STORYBOARD_AUTO_MIN_DURATION
         self.max_duration_sec = max_duration_sec or config.STORYBOARD_AUTO_MAX_DURATION
         self.default_duration_sec = default_duration_sec or config.STORYBOARD_AUTO_DEFAULT_DURATION
+        self.detected_characters = detected_characters or []
 
     @QtCore.Slot()
     def run(self):
@@ -1165,6 +1170,35 @@ class StoryboardLLMWorker(QtCore.QObject):
                 + "\n\n"
             )
 
+        # キャラクター情報の追加（登場カットでのみ言及させる）
+        character_context = ""
+        if self.detected_characters:
+            char_lines = []
+            for char in self.detected_characters:
+                char_id = char.get("id", "")
+                char_name = char.get("name", "")
+                pronoun = char.get("pronoun_3rd", "")
+                if char_id:
+                    info = f"  - ID: {char_id}"
+                    if char_name:
+                        info += f" (name: {char_name})"
+                    if pronoun:
+                        info += f" (pronoun: {pronoun})"
+                    char_lines.append(info)
+            if char_lines:
+                character_context = (
+                    "CHARACTERS in this video:\n"
+                    + "\n".join(char_lines)
+                    + "\n\n"
+                    "CHARACTER RULES:\n"
+                    "- When a character appears in a cut, use their ID (e.g. @ex.abc) as their name in the description.\n"
+                    "- CRITICAL: Always surround the ID with spaces on both sides (e.g. ' @ex.abc ').\n"
+                    "- Do NOT mention a character in cuts where they do not appear.\n"
+                    "- Prefer using the ID over pronouns for the first mention in each cut.\n"
+                    "- After the first mention, you may use pronouns if appropriate.\n"
+                    "- Example: '@ex.abc is surprised and jumps up, dropping the juice he was holding.'\n\n"
+                )
+
         length_rule = ""
         if self.length_limit and self.length_limit > 0:
             estimated_cuts = self.cut_count
@@ -1195,6 +1229,7 @@ class StoryboardLLMWorker(QtCore.QObject):
                 "- Sum of all duration_sec must match total_duration_sec within 0.2 seconds.\n"
                 "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n\n"
                 + style_context
+                + character_context
                 + "Rules:\n"
                 "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
                 "- Each cut should be a complete, vivid visual description.\n"
@@ -1220,6 +1255,7 @@ class StoryboardLLMWorker(QtCore.QObject):
                 f"Total video duration: {self.total_duration_sec} seconds.\n"
                 f"Each cut should be approximately {duration_per_cut} seconds.\n\n"
                 + style_context
+                + character_context
                 + "Rules:\n"
                 "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
                 "- Each cut should be a complete, vivid visual description.\n"
