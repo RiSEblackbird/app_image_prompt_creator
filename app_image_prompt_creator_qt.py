@@ -1225,27 +1225,6 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             output_language=output_language,
         )
 
-    def handle_movie_storyboard(self):
-        prepared = self._prepare_movie_prompt_parts()
-        if not prepared:
-            return
-        main_text, options_tail, movie_tail, content_flags_tail = prepared
-        details = extract_sentence_details(main_text)
-        video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
-        length_limit = self._get_selected_movie_length_limit()
-        output_language = combo_language_code(getattr(self, "combo_movie_output_lang", None))
-        self._start_movie_llm_transformation(
-            "storyboard",
-            main_text,
-            details,
-            movie_tail,
-            options_tail,
-            video_style_arg,
-            content_flags_arg,
-            length_limit,
-            output_language=output_language,
-        )
-
     def _get_selected_movie_length_limit(self) -> int:
         text = self.combo_movie_length_limit.currentText()
         if text.isdigit():
@@ -1377,7 +1356,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         self.text_output.setPlainText(combined)
         self._update_internal_prompt_from_text(combined)
         QtGui.QGuiApplication.clipboard().setText(combined)
-        label = "世界観整形" if mode == "world" else "ストーリー構築"
+        # mode="world" 以外は現状UIから提供しないため、汎用名で表示する
+        label = "世界観整形" if mode == "world" else "動画用整形"
         QtWidgets.QMessageBox.information(self, "コピー完了", f"{label}をLLMで実行し、全文をコピーしました。")
 
     def _handle_llm_failure(self, thread: QtCore.QThread, worker: LLMWorker, error: str):

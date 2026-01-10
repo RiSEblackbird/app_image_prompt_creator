@@ -571,42 +571,23 @@ class MovieLLMWorker(QtCore.QObject):
             limit_instruction = f"\nIMPORTANT: Strictly limit the output summary to under {self.length_limit} characters."
         _, language_label, language_sentence = _language_directives(self.output_language)
 
-        if self.mode == "world":
-            system_prompt = _append_temperature_hint(
-                "You refine disjoint visual fragments into one coherent world description for a single 10-second cinematic clip. "
-                "Focus on the most impactful visual elements and atmosphere to fit the short duration. "
-                f"Do not narrate events in sequence; describe one continuous world in natural {language_label}."
-                f"{limit_instruction}\n{language_sentence}",
-                self.model,
-                config.LLM_TEMPERATURE,
-            )
-            user_prompt = (
-                "Convert the following fragments into a single connected world description that fits a 10-second video.\n"
-                "Omit minor details to keep it concise and impactful.\n"
-                f"{style_context_block}"
-                f"Source summary: {self.text}\n"
-                f"Fragments:\n{detail_lines}\n"
-                f"{language_sentence}\n"
-                f"Output one concise paragraph that links every fragment into one world.{limit_instruction}"
-            )
-            return system_prompt, user_prompt
-
+        # ワンショット整形は廃止したため、MovieLLMWorker は世界観整形のみを提供する。
         system_prompt = _append_temperature_hint(
-            "You craft a single continuous storyboard beat for a 10-second shot. "
-            "Ensure actions and camera moves are simple enough to complete within 10 seconds, even if the pace is slightly fast. "
-            f"Blend all elements into a flowing moment without hard scene cuts while writing in natural {language_label}."
+            "You refine disjoint visual fragments into one coherent world description for a single 10-second cinematic clip. "
+            "Focus on the most impactful visual elements and atmosphere to fit the short duration. "
+            f"Do not narrate events in sequence; describe one continuous world in natural {language_label}."
             f"{limit_instruction}\n{language_sentence}",
             self.model,
             config.LLM_TEMPERATURE,
         )
         user_prompt = (
-            "Turn the fragments into a 10-second single-shot storyboard.\n"
-            "Condense the sequence to fit the time limit, merging or simplifying transitions where necessary.\n"
+            "Convert the following fragments into a single connected world description that fits a 10-second video.\n"
+            "Omit minor details to keep it concise and impactful.\n"
             f"{style_context_block}"
             f"Source summary: {self.text}\n"
             f"Fragments:\n{detail_lines}\n"
             f"{language_sentence}\n"
-            f"Describe a vivid, fast-paced but coherent sequence in one paragraph, focusing on visual continuity.{limit_instruction}"
+            f"Output one concise paragraph that links every fragment into one world.{limit_instruction}"
         )
         return system_prompt, user_prompt
 
@@ -1226,7 +1207,9 @@ class StoryboardLLMWorker(QtCore.QObject):
                 f"- Choose a total video duration between {min_duration} and {max_duration} seconds; "
                 f"if uncertain, stay near {target_duration} seconds.\n"
                 "- Allocate time unevenly if needed (openings/endings can be longer, transitions shorter).\n"
-                "- Sum of all duration_sec must match total_duration_sec within 0.2 seconds.\n"
+                # Total duration must be strictly preserved; do not rely on post-processing or tolerance.
+                "- HARD CONSTRAINT: After rounding each duration_sec to 2 decimals, the SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY (no over/under).\n"
+                "- If rounding creates any mismatch, adjust ONLY the LAST cut's duration_sec so the sum becomes exact.\n"
                 "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n\n"
                 + style_context
                 + character_context
@@ -1253,7 +1236,8 @@ class StoryboardLLMWorker(QtCore.QObject):
             user_prompt = (
                 f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
                 f"Total video duration: {self.total_duration_sec} seconds.\n"
-                f"Each cut should be approximately {duration_per_cut} seconds.\n\n"
+                f"Each cut should be approximately {duration_per_cut} seconds.\n"
+                "HARD CONSTRAINT: Keep the action density per cut realistic for its duration so the whole storyboard fits the total duration.\n\n"
                 + style_context
                 + character_context
                 + "Rules:\n"

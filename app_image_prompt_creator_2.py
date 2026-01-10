@@ -768,14 +768,6 @@ class TextGeneratorApp:
             font=self.sub_buttons_font,
             command=self.handle_movie_worldbuilding,
         ).pack(side='left', padx=2)
-        tk.Button(
-            llm_row,
-            text="ストーリー構築",
-            padx=5,
-            width=14,
-            font=self.sub_buttons_font,
-            command=self.handle_movie_storyboard,
-        ).pack(side='left', padx=2)
 
         # 変数初期化
         self.file_lines = []
@@ -1317,10 +1309,6 @@ class TextGeneratorApp:
         """LLMで断片を一つの世界観に自然連結する。"""
         self._process_movie_llm(mode="world")
 
-    def handle_movie_storyboard(self):
-        """LLMでワンカットのストーリーボード描写へ整形する。"""
-        self._process_movie_llm(mode="storyboard")
-
     def handle_format_for_movie_prompt(self):
         """後方互換のためのエイリアス。"""
         self.handle_format_for_movie_json()
@@ -1807,30 +1795,18 @@ class TextGeneratorApp:
 
         selected_model = self.get_selected_model()
         detail_lines = "\n".join(f"- {d}" for d in details)
-        if mode == "world":
-            system_prompt = (
-                "You refine disjoint visual fragments into one coherent world description for a single cinematic environment. "
-                "Do not narrate time progression; describe one continuous world in natural English."
-            )
-            user_prompt = (
-                "Convert the fragments into a single connected world that feels inhabitable.\n"
-                f"Source summary: {main_text}\n"
-                f"Fragments:\n{detail_lines}\n"
-                "Output one concise paragraph that links every fragment into one world."
-            )
-            label = "世界観整形"
-        else:
-            system_prompt = (
-                "You craft a single continuous storyboard beat that can be filmed as one shot. "
-                "Blend all elements into a flowing moment without hard scene cuts."
-            )
-            user_prompt = (
-                "Turn the fragments into a single-shot storyboard that can be captured in one camera move.\n"
-                f"Source summary: {main_text}\n"
-                f"Fragments:\n{detail_lines}\n"
-                "Describe a vivid but single-cut sequence in one paragraph, focusing on visual continuity."
-            )
-            label = "ストーリー構築"
+        # 旧実装には world/story の分岐があったが、ワンショット整形は廃止したため world のみ提供する。
+        system_prompt = (
+            "You refine disjoint visual fragments into one coherent world description for a single cinematic environment. "
+            "Do not narrate time progression; describe one continuous world in natural English."
+        )
+        user_prompt = (
+            "Convert the fragments into a single connected world that feels inhabitable.\n"
+            f"Source summary: {main_text}\n"
+            f"Fragments:\n{detail_lines}\n"
+            "Output one concise paragraph that links every fragment into one world."
+        )
+        label = "世界観整形"
 
         system_prompt = self._append_temperature_hint_for_model(system_prompt, LLM_TEMPERATURE)
 
@@ -2065,7 +2041,9 @@ class TextGeneratorApp:
         return len(cleaned or "")
 
     def _process_movie_llm(self, mode: str):
-        """動画向けLLM改良（世界観/ストーリー）の共通前処理と後処理。"""
+        """動画向けLLM改良（世界観整形）の共通前処理と後処理。"""
+        # ワンショット整形は廃止したため、互換のため mode が渡ってきても world として扱う。
+        mode = "world"
         prepared = self._prepare_movie_prompt_parts()
         if not prepared:
             return
@@ -2076,8 +2054,8 @@ class TextGeneratorApp:
         if not transformed:
             return
 
-        scope = "single_continuous_world" if mode == "world" else "single_shot_storyboard"
-        json_key = "world_description" if mode == "world" else "storyboard"
+        scope = "single_continuous_world"
+        json_key = "world_description"
         enriched_details = self._extract_sentence_details(transformed)
         world_json = self._build_movie_json_payload(transformed, enriched_details, scope=scope, key=json_key)
         result = self._compose_movie_prompt(world_json, movie_tail, options_tail)
@@ -2087,7 +2065,7 @@ class TextGeneratorApp:
         self._update_internal_prompt_from_text(result)
         self.copy_all_to_clipboard()
 
-        label = "世界観整形" if mode == "world" else "ストーリー構築"
+        label = "世界観整形"
         messagebox.showinfo("コピー完了", f"{label}をLLMで実行し、全文をコピーしました。")
 
     def _extract_anchor_terms(self, text: str, max_terms: int = 8):
