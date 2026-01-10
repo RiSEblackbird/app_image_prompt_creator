@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
@@ -7,7 +8,13 @@ import pytest
 PySide6 = pytest.importorskip("PySide6")
 from PySide6 import QtWidgets
 
-import app_image_prompt_creator_qt as qt_app
+# repo root から pytest を実行しても import が崩れないよう、app_image_prompt_creator を明示的に sys.path へ追加する。
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_APP_DIR = _REPO_ROOT / "app_image_prompt_creator"
+if str(_APP_DIR) not in sys.path:
+    sys.path.insert(0, str(_APP_DIR))
+
+import app_image_prompt_creator_qt as qt_app  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -99,3 +106,40 @@ def test_generate_text_uses_selected_attribute_id(prompt_generator):
 
     assert "Second prompt." in prompt_generator.main_prompt
     assert "First prompt" not in prompt_generator.main_prompt
+
+
+def test_storyboard_duration_allocation_prompt_llm_contains_duration_rules(qt_application):
+    """カット数指定 + 尺配分=LLM の場合に duration_sec と厳密合計ルールを要求すること。"""
+
+    from modules.llm import StoryboardLLMWorker
+
+    worker = StoryboardLLMWorker(
+        text="東京の夜景。雨。ネオン。",
+        model="gpt-4o-mini",
+        cut_count=3,
+        total_duration_sec=12.0,
+        duration_allocation="llm",
+        auto_structure=False,
+    )
+    _, user_prompt = worker._build_prompts()
+    assert "duration_sec" in user_prompt
+    assert "SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY" in user_prompt
+    assert "exactly 3 cinematic cuts" in user_prompt
+
+
+def test_storyboard_duration_allocation_prompt_uniform_uses_array_format(qt_application):
+    """カット数指定 + 尺配分=均等 の場合は配列フォーマットを使い、duration_sec を必須化しないこと。"""
+
+    from modules.llm import StoryboardLLMWorker
+
+    worker = StoryboardLLMWorker(
+        text="A calm morning in Kyoto.",
+        model="gpt-4o-mini",
+        cut_count=4,
+        total_duration_sec=20.0,
+        duration_allocation="uniform",
+        auto_structure=False,
+    )
+    _, user_prompt = worker._build_prompts()
+    assert "Output format (JSON array)" in user_prompt
+    assert '"duration_sec"' not in user_prompt

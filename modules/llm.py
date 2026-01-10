@@ -1028,6 +1028,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         model: str,
         cut_count: int,
         total_duration_sec: float,
+        duration_allocation: str = "uniform",
         output_language: str = "en",
         continuity_enhanced: bool = False,
         video_style: dict | None = None,
@@ -1046,6 +1047,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         self.model = model
         self.cut_count = max(1, int(cut_count))
         self.total_duration_sec = float(total_duration_sec)
+        self.duration_allocation = (duration_allocation or "uniform").strip().lower()
         self.output_language = _normalize_language_code(output_language)
         self.continuity_enhanced = continuity_enhanced
         self.video_style = video_style
@@ -1232,29 +1234,59 @@ class StoryboardLLMWorker(QtCore.QObject):
                 f"Source prompt:\n{self.text}"
             )
         else:
-            duration_per_cut = round(self.total_duration_sec / self.cut_count, 2)
-            user_prompt = (
-                f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
-                f"Total video duration: {self.total_duration_sec} seconds.\n"
-                f"Each cut should be approximately {duration_per_cut} seconds.\n"
-                "HARD CONSTRAINT: Keep the action density per cut realistic for its duration so the whole storyboard fits the total duration.\n\n"
-                + style_context
-                + character_context
-                + "Rules:\n"
-                "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
-                "- Each cut should be a complete, vivid visual description.\n"
-                f"{continuity_rule}"
-                "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
-                "- The first cut should establish the scene.\n"
-                "- The final cut should provide a sense of conclusion or climax.\n"
-                f"{length_rule}\n"
-                "Output format (JSON array):\n"
-                "[\n"
-                '  {"cut": 1, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
-                '  {"cut": 2, "description": "...", "camera": "..."},\n'
-                "  ...\n"
-                "]\n\n"
-                f"Source prompt:\n{self.text}"
-            )
+            if self.duration_allocation == "llm":
+                user_prompt = (
+                    f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
+                    f"Total video duration: {self.total_duration_sec} seconds (fixed).\n"
+                    "- Allocate duration unevenly if it improves pacing (openings/endings can be longer, transitions shorter).\n"
+                    "- HARD CONSTRAINT: After rounding each duration_sec to 2 decimals, the SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY (no over/under).\n"
+                    "- If rounding creates any mismatch, adjust ONLY the LAST cut's duration_sec so the sum becomes exact.\n"
+                    "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n"
+                    "HARD CONSTRAINT: Keep the action density per cut realistic for its duration so the whole storyboard fits the total duration.\n\n"
+                    + style_context
+                    + character_context
+                    + "Rules:\n"
+                    "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                    "- Each cut should be a complete, vivid visual description.\n"
+                    f"{continuity_rule}"
+                    "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
+                    "- The first cut should establish the scene.\n"
+                    "- The final cut should provide a sense of conclusion or climax.\n"
+                    f"{length_rule}\n"
+                    "Output format (JSON object):\n"
+                    "{\n"
+                    f'  "total_duration_sec": {self.total_duration_sec},\n'
+                    '  "cuts": [\n'
+                    '    {"cut": 1, "duration_sec": <number>, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
+                    '    {"cut": 2, "duration_sec": <number>, "description": "...", "camera": "..."}\n'
+                    "  ]\n"
+                    "}\n\n"
+                    f"Source prompt:\n{self.text}"
+                )
+            else:
+                duration_per_cut = round(self.total_duration_sec / self.cut_count, 2)
+                user_prompt = (
+                    f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
+                    f"Total video duration: {self.total_duration_sec} seconds.\n"
+                    f"Each cut should be approximately {duration_per_cut} seconds.\n"
+                    "HARD CONSTRAINT: Keep the action density per cut realistic for its duration so the whole storyboard fits the total duration.\n\n"
+                    + style_context
+                    + character_context
+                    + "Rules:\n"
+                    "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                    "- Each cut should be a complete, vivid visual description.\n"
+                    f"{continuity_rule}"
+                    "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
+                    "- The first cut should establish the scene.\n"
+                    "- The final cut should provide a sense of conclusion or climax.\n"
+                    f"{length_rule}\n"
+                    "Output format (JSON array):\n"
+                    "[\n"
+                    '  {"cut": 1, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
+                    '  {"cut": 2, "description": "...", "camera": "..."},\n'
+                    "  ...\n"
+                    "]\n\n"
+                    f"Source prompt:\n{self.text}"
+                )
 
         return system_prompt, user_prompt

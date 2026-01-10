@@ -529,6 +529,18 @@ class PromptUIMixin:
         self.spin_sb_cut_count.valueChanged.connect(self._on_sb_cut_count_change)
         settings_row.addWidget(self.spin_sb_cut_count)
 
+        settings_row.addWidget(QtWidgets.QLabel("尺配分:"))
+        self.combo_sb_time_allocation = QtWidgets.QComboBox()
+        self.combo_sb_time_allocation.addItem("均等（固定）", userData="uniform")
+        self.combo_sb_time_allocation.addItem("内容に応じて（LLM配分）", userData="llm")
+        self.combo_sb_time_allocation.setCurrentIndex(0)
+        self.combo_sb_time_allocation.setToolTip(
+            "カット数を指定してLLM生成する際の尺配分方針を選びます。\n"
+            "- 均等（固定）: 総尺÷カット数で均等割当（LLMがdurationを返しても無視）\n"
+            "- 内容に応じて（LLM配分）: LLMが各カットのduration_secを提案（総尺に厳密一致）"
+        )
+        settings_row.addWidget(self.combo_sb_time_allocation)
+
         # 連続性強化トグル
         self.check_sb_continuity = QtWidgets.QCheckBox("連続性強化")
         self.check_sb_continuity.setToolTip(
@@ -821,6 +833,9 @@ class PromptUIMixin:
         """自動構成トグル切替時の処理。"""
         self.combo_sb_duration.setEnabled(not checked)
         self.spin_sb_cut_count.setEnabled(not checked)
+        combo = getattr(self, "combo_sb_time_allocation", None)
+        if combo is not None:
+            combo.setEnabled(not checked)
         if checked:
             # LLM決定を待つ状態にする
             self._clear_sb_duration_override()
@@ -1073,6 +1088,14 @@ class PromptUIMixin:
         cut_count = self.spin_sb_cut_count.value()
         auto_structure = self.check_sb_auto_structure.isChecked()
 
+        # カット数指定時の尺配分ポリシーを取得（自動構成の場合は常にLLM配分）
+        allocation = "llm" if auto_structure else "uniform"
+        alloc_combo = getattr(self, "combo_sb_time_allocation", None)
+        if not auto_structure and alloc_combo is not None:
+            data = alloc_combo.currentData()
+            if data in ("uniform", "llm"):
+                allocation = data
+
         # 出力言語を取得（動画用設定を流用）
         output_language = "en"
         lang_combo = getattr(self, "combo_movie_output_lang", None)
@@ -1115,6 +1138,7 @@ class PromptUIMixin:
             model=self.combo_llm_model.currentText(),
             cut_count=cut_count,
             total_duration_sec=total_duration,
+            duration_allocation=allocation,
             output_language=output_language,
             continuity_enhanced=continuity,
             video_style=video_style_ctx,
@@ -1134,6 +1158,7 @@ class PromptUIMixin:
             "cut_count": cut_count,
             "total_duration": total_duration,
             "auto_structure": auto_structure,
+            "duration_allocation": allocation,
         }
 
         if self._start_background_worker(
@@ -1159,6 +1184,8 @@ class PromptUIMixin:
             return
 
         auto_structure = context.get("auto_structure", False)
+        duration_allocation = context.get("duration_allocation", "uniform")
+        allocation_fallback_to_uniform = False
 
         # JSONレスポンスをパース（オブジェクト形式/配列形式どちらも許容）
         cuts_data = None
@@ -1211,6 +1238,11 @@ class PromptUIMixin:
                 has_duration_field = False
                 break
 
+        # UI側で均等配分を選択している場合は、LLMが duration_sec を返しても無視して均等割当する
+        if duration_allocation == "uniform":
+            has_duration_field = False
+            durations = []
+
         if has_duration_field and durations:
             total_from_payload = round(sum(durations), 2)
             try:
@@ -1233,6 +1265,9 @@ class PromptUIMixin:
             total_duration = float(total_duration or config.DEFAULT_STORYBOARD_DURATION)
             duration_per_cut = total_duration / actual_cut_count
             durations = [duration_per_cut for _ in range(actual_cut_count)]
+            if duration_allocation == "llm":
+                # LLM配分を要求したが duration_sec が得られなかった場合は均等割当へフォールバックする
+                allocation_fallback_to_uniform = True
 
         # 数値に正規化
         total_duration = round(float(total_duration), 2)
@@ -1290,11 +1325,16 @@ class PromptUIMixin:
         if self._sb_cuts:
             self.list_sb_cuts.setCurrentRow(0)
 
+        allocation_label = "自動構成(LLM)" if auto_structure else ("均等（固定）" if duration_allocation == "uniform" else "内容に応じて（LLM配分）")
+        extra = ""
+        if allocation_fallback_to_uniform:
+            extra = "\n※ LLM配分を要求しましたが duration_sec が返らなかったため、均等割当で生成しました。"
         QtWidgets.QMessageBox.information(
             self,
             "生成完了",
             f"LLMでプロンプトから {actual_cut_count} カットを生成しました。\n"
-            f"（総尺: {total_duration:.1f}秒）",
+            f"（総尺: {total_duration:.1f}秒 / 尺配分: {allocation_label}）"
+            f"{extra}",
         )
 
     def _handle_sb_llm_failure(self, thread: QtCore.QThread, worker, error: str):
