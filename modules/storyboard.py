@@ -32,6 +32,21 @@ def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[di
     content_flags = None
     remaining = text
 
+    # Sora向け新形式 (video_prompt ルート) を優先して解釈
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        parsed = None
+    if isinstance(parsed, dict) and isinstance(parsed.get("video_prompt"), dict):
+        vp = parsed["video_prompt"]
+        video_style = vp.get("video_style")
+        content_flags = vp.get("content_flags")
+        remaining = vp.get("prompt") or ""
+        if not remaining and isinstance(vp.get("world_description"), dict):
+            remaining = vp["world_description"].get("summary", "")
+        remaining = " ".join(str(remaining).split()).strip()
+        return video_style, content_flags, remaining
+
     # video_style を抽出
     # {"video_style": {...}} のパターンを探す
     vs_pattern = r'\{[^{}]*"video_style"\s*:\s*\{[^{}]*\}[^{}]*\}'
@@ -197,26 +212,7 @@ def build_storyboard_json(
     content_flags: Optional[dict] = None,
     continuity_enhanced: bool = False,
 ) -> str:
-    """ストーリーボードのカットリストをJSON形式に変換する。
-
-    video_style と content_flags はストーリーボードと並列に配置される。
-    これにより、各カットの説明に冗長な情報を含めずに済む。
-
-    continuity_enhanced が True の場合、フラグとしてJSONに記録される。
-    実際のカット説明への遷移表現の織り込みは、LLM生成時に行う。
-    （静的なフォーマット加工ではなく、LLMが文脈を理解して自然な遷移を描写する）
-
-    Args:
-        cuts: カットのリスト
-        total_duration_sec: 総尺（秒）
-        template_id: 使用したテンプレートID
-        video_style: 動画スタイル定義（省略可）
-        content_flags: コンテンツフラグ（省略可）
-        continuity_enhanced: 連続性強化モード（フラグのみ記録、LLM生成時に適用）
-
-    Returns:
-        JSON文字列
-    """
+    """ストーリーボードのカットリストをSora向け video_prompt 形式でJSON化する。"""
     cuts_data = []
     for cut in cuts:
         cut_dict = {
@@ -233,16 +229,6 @@ def build_storyboard_json(
             cut_dict["is_image_placeholder"] = True
         cuts_data.append(cut_dict)
 
-    # ルートレベルのペイロードを構築
-    # video_style と content_flags はストーリーボードと並列に配置
-    payload = {}
-
-    if video_style:
-        payload["video_style"] = video_style
-
-    if content_flags:
-        payload["content_flags"] = content_flags
-
     storyboard_data = {
         "total_duration_sec": total_duration_sec,
         "template": template_id,
@@ -252,7 +238,12 @@ def build_storyboard_json(
     if continuity_enhanced:
         storyboard_data["continuity_enhanced"] = True
 
-    payload["storyboard"] = storyboard_data
+    payload = {"video_prompt": {"storyboard": storyboard_data}}
+    if video_style:
+        payload["video_prompt"]["video_style"] = video_style
+    if content_flags:
+        payload["video_prompt"]["content_flags"] = content_flags
+
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 

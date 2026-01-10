@@ -1132,6 +1132,25 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             # 手動編集や他機能の結果を基準に、内部状態を最新テキストへ合わせてから再構成する。
             self._update_internal_prompt_from_text(self.text_output.toPlainText())
 
+        # movieモードではSora向けJSONに統一し、MJオプションは付与しない
+        media_type = self.combo_tail_media_type.currentText() or config.DEFAULT_TAIL_MEDIA_TYPE
+        if media_type == "movie":
+            main_text = (self.main_prompt or "").strip()
+            movie_tail = self._resolve_tail_free_prompt()
+            flags_tail = self._make_tail_flags_json()
+            details = extract_sentence_details(main_text)
+            core_json = build_movie_json_payload(
+                summary=main_text,
+                details=details,
+                scope="single_continuous_world",
+                key="world_description",
+            )
+            result = compose_movie_prompt(core_json, movie_tail, flags_tail, options_tail="")
+            self.text_output.setPlainText(result)
+            # JSONを基準に内部状態も再同期
+            self._update_internal_prompt_from_text(result)
+            return
+
         self.option_prompt = self._make_option_prompt()
         self.tail_free_texts = self._make_tail_text()
         tail_flags = self._make_tail_flags_json()
@@ -1398,6 +1417,25 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         if not src:
             QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
             return None
+
+        # 先にSora統合JSON(video_prompt)をパース（新形式）
+        try:
+            parsed = json.loads(src)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict) and isinstance(parsed.get("video_prompt"), dict):
+            vp = parsed["video_prompt"]
+            main_text = vp.get("prompt") or ""
+            if not main_text and isinstance(vp.get("world_description"), dict):
+                main_text = vp["world_description"].get("summary", "")
+            movie_tail = ""
+            if isinstance(vp.get("video_style"), dict):
+                movie_tail = json.dumps({"video_style": vp["video_style"]}, ensure_ascii=False)
+            flags_tail = ""
+            if isinstance(vp.get("content_flags"), dict):
+                flags_tail = json.dumps({"content_flags": vp["content_flags"]}, ensure_ascii=False)
+            return main_text, "", movie_tail, flags_tail
+
         # 末尾2(JSONフラグ)はLLM用のメインテキストからは除外する
         core_without_flags, flags_tail = detach_content_flags_tail(src)
         core_without_movie, movie_tail = detach_movie_tail_for_llm(core_without_flags)
@@ -1508,6 +1546,26 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         normalized = (full_text or "").strip()
         if not normalized:
             return
+        try:
+            parsed = json.loads(normalized)
+        except json.JSONDecodeError:
+            parsed = None
+
+        if isinstance(parsed, dict) and isinstance(parsed.get("video_prompt"), dict):
+            vp = parsed["video_prompt"]
+            summary = ""
+            if isinstance(vp.get("prompt"), str):
+                summary = vp["prompt"]
+            elif isinstance(vp.get("world_description"), dict):
+                summary = vp["world_description"].get("summary", "")
+            self.main_prompt = summary
+            movie_tail = ""
+            if isinstance(vp.get("video_style"), dict):
+                movie_tail = json.dumps({"video_style": vp["video_style"]}, ensure_ascii=False)
+            self.tail_free_texts = f" {movie_tail}" if movie_tail else ""
+            self.option_prompt = ""
+            return
+
         main_text, options_tail, _ = self._split_prompt_and_options(normalized)
         # 末尾2(JSONフラグ)は内部状態の main_prompt からは外す
         core_without_flags, _ = self._detach_content_flags_tail(main_text)

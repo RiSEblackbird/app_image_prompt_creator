@@ -250,23 +250,75 @@ def extract_sentence_details(text: str) -> List[str]:
 
 
 def build_movie_json_payload(summary: str, details: List[str], scope: str, key: str) -> str:
-    """world_description もしくは storyboard としてJSON文字列を生成する。"""
-    payload = {
-        key: {
-            "scope": scope,
-            "summary": (summary or "").strip(),
-        }
-    }
+    """動画用コアを最小化したJSON文字列にする。
+
+    Plan A: Sora Web/iOS向けに `prompt` を単一文字列で保持し、冗長な summary/details を残さない。
+    `scope`/`key` 引数は呼び出し互換のため残すが、実体は prompt に集約する。
+    """
+    payload = {"prompt": (summary or "").strip()}
     return json.dumps(payload, ensure_ascii=False)
 
 
 def compose_movie_prompt(core_json: str, movie_tail: str, flags_tail: str, options_tail: str) -> str:
-    """生成したJSONと末尾要素（動画スタイル・末尾2フラグ・MJオプション）を安全に連結する。"""
-    parts = [core_json]
-    if movie_tail:
-        parts.append(movie_tail.strip())
-    if flags_tail:
-        parts.append(flags_tail.strip())
-    if options_tail:
-        parts.append(options_tail.strip())
-    return " ".join(p for p in parts if p)
+    """Sora向けに video_prompt ルートへ統合したJSONを返す（最小構造）。
+
+    - core_json   : prompt または storyboard を含むJSON文字列/辞書/プレーンテキスト
+    - movie_tail  : {"video_style": {...}}
+    - flags_tail  : {"content_flags": {...}}
+    - options_tail: MJオプション（動画では無視）
+    """
+
+    def _parse_json_block(raw):
+        if raw is None:
+            return None
+        if isinstance(raw, dict):
+            return raw
+        text = str(raw).strip()
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except Exception:
+            return None
+
+    base_payload = {"video_prompt": {}}
+
+    core = _parse_json_block(core_json)
+    if core:
+        if "video_prompt" in core and isinstance(core["video_prompt"], dict):
+            base_payload["video_prompt"].update(core["video_prompt"])
+        else:
+            # storyboardがあれば保持
+            if isinstance(core.get("storyboard"), dict):
+                base_payload["video_prompt"]["storyboard"] = core["storyboard"]
+            # promptがあれば文字列化して格納
+            if isinstance(core.get("prompt"), str):
+                base_payload["video_prompt"]["prompt"] = core["prompt"]
+            # world_descriptionにsummaryがあれば prompt に取り込む（後方互換）
+            if "prompt" not in base_payload["video_prompt"] and isinstance(core.get("world_description"), dict):
+                summary = core["world_description"].get("summary", "")
+                if summary:
+                    base_payload["video_prompt"]["prompt"] = summary
+            # それでも無ければ core全体を文字列化して prompt に落とす
+            if "prompt" not in base_payload["video_prompt"]:
+                base_payload["video_prompt"]["prompt"] = json.dumps(core, ensure_ascii=False)
+    else:
+        text = str(core_json or "").strip()
+        if text:
+            base_payload["video_prompt"]["prompt"] = text
+
+    video_style = _parse_json_block(movie_tail)
+    if video_style and "video_style" in video_style:
+        base_payload["video_prompt"]["video_style"] = video_style["video_style"]
+
+    flags = _parse_json_block(flags_tail)
+    if flags and "content_flags" in flags:
+        base_payload["video_prompt"]["content_flags"] = flags["content_flags"]
+
+    # Sora Web/iOS では --ar などのMJオプションは不要なので options_tail は無視する
+
+    # 空要素を取り除く（promptは空でもキーを残す）
+    vp = base_payload["video_prompt"]
+    cleaned = {k: v for k, v in vp.items() if v is not None and v != ""}
+    base_payload["video_prompt"] = cleaned
+    return json.dumps(base_payload, ensure_ascii=False, indent=2)

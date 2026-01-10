@@ -167,6 +167,30 @@ tails:
 
 ---
 
+## Sora2向けJSON形式（動画共通）
+
+- すべての動画系出力は `video_prompt` ルートを持つ単一JSONに統合されます（Web/iOS版Sora想定、API用ではありません）。
+- Midjourney系オプション（`--ar` など）は動画モードでは付与しません。
+
+正例（最小形）:
+```json
+{
+  "video_prompt": {
+    "prompt": "A serene zen garden at dawn with soft mist.",
+    "video_style": {"scope": "full_movie", "description": "gentle cinematic look"},
+    "content_flags": {"narration": true, "bgm": true, "planned_cuts": 3}
+  }
+}
+```
+
+負例（Sora Web/iOSでは推奨しない）:
+```
+<prompt> --ar 16:9 --s 200
+```
+※ 動画モードで `--ar` などのMJオプションを足さないでください。
+
+---
+
 ## ストーリーボード
 
 「ストーリーボード」タブでは、複数カット構成の動画用プロンプトを時系列で管理できます。
@@ -233,42 +257,44 @@ tails:
 
 ### 出力例
 
-入力プロンプトに含まれる `video_style` や `content_flags` は自動抽出され、ストーリーボードと並列に配置されます。これにより各カットの説明に冗長なメタデータを含めずに済みます。
+入力プロンプトに含まれる `video_style` や `content_flags` は自動抽出され、`video_prompt` ルートにまとめて配置されます。これにより各カットの説明に冗長なメタデータを含めずに済みます。
 
 ```json
 {
-  "video_style": {
-    "scope": "full_movie",
-    "description": "atmospheric 1960s film print",
-    "grade": "film emulation"
-  },
-  "content_flags": {
-    "narration": false,
-    "bgm": true,
-    "ambient_sound": true,
-    "dialogue": true
-  },
-  "storyboard": {
-    "total_duration_sec": 10,
-    "template": "image_unbind",
-    "continuity_enhanced": true,
-    "cuts": [
-      {
-        "index": 0,
-        "start_sec": 0.0,
-        "duration_sec": 0.3,
-        "description": "[Attached image]",
-        "is_image_placeholder": true
-      },
-      {
-        "index": 1,
-        "start_sec": 0.3,
-        "duration_sec": 9.7,
-        "description": "The scene within this image comes alive as the camera begins to move, revealing the world...",
-        "camera_work": "slow_zoom_out",
-        "characters": ["@example.character1"]
-      }
-    ]
+  "video_prompt": {
+    "video_style": {
+      "scope": "full_movie",
+      "description": "atmospheric 1960s film print",
+      "grade": "film emulation"
+    },
+    "content_flags": {
+      "narration": false,
+      "bgm": true,
+      "ambient_sound": true,
+      "dialogue": true
+    },
+    "storyboard": {
+      "total_duration_sec": 10,
+      "template": "image_unbind",
+      "continuity_enhanced": true,
+      "cuts": [
+        {
+          "index": 0,
+          "start_sec": 0.0,
+          "duration_sec": 0.3,
+          "description": "[Attached image]",
+          "is_image_placeholder": true
+        },
+        {
+          "index": 1,
+          "start_sec": 0.3,
+          "duration_sec": 9.7,
+          "description": "The scene within this image comes alive as the camera begins to move, revealing the world...",
+          "camera_work": "zoom_out",
+          "characters": ["@example.character1"]
+        }
+      ]
+    }
   }
 }
 ```
@@ -335,6 +361,7 @@ characters:
 | `--weird` | 0-3000 |
 
 チェックボックスで有効化し、プルダウンから値を選択します。「optionsのみコピー」で末尾の `--options` 部分だけを取得することもできます。
+> **動画モードでは自動付与しません**（Sora Web/iOS向け最適化のため）。
 
 ---
 
