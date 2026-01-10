@@ -166,3 +166,42 @@ def test_storyboard_auto_structure_prompt_keeps_total_duration_fixed(qt_applicat
     assert "Total video duration: 12.0 seconds (fixed by settings)." in user_prompt
     assert "DO NOT change total_duration_sec" in user_prompt
     assert '"total_duration_sec": 12.0' in user_prompt
+
+
+def test_extract_metadata_from_prompt_fallbacks_to_storyboard_cut_descriptions():
+    """video_prompt.prompt が無いストーリーボードJSONでも、cuts[].description を本文として復元できること。"""
+
+    from modules.storyboard import extract_metadata_from_prompt
+
+    raw = """
+    {
+      "video_prompt": {
+        "video_style": {"genre": "tv_news_special"},
+        "content_flags": {"bgm": true},
+        "storyboard": {
+          "total_duration_sec": 10.0,
+          "template": "none",
+          "cuts": [
+            {"index": 0, "start_sec": 0.0, "duration_sec": 2.5, "description": "東京の夜。雨に濡れたネオンが反射する。"},
+            {"index": 1, "start_sec": 2.5, "duration_sec": 7.5, "description": "路地を走るタクシー。カメラは追従する。"}
+          ]
+        }
+      }
+    }
+    """
+    video_style, content_flags, prompt_text = extract_metadata_from_prompt(raw)
+    assert video_style == {"genre": "tv_news_special"}
+    assert content_flags == {"bgm": True}
+    assert "東京の夜" in prompt_text
+    assert "路地を走るタクシー" in prompt_text
+
+
+def test_extract_metadata_from_prompt_video_prompt_without_body_falls_back_to_full_text():
+    """本文がどこにも無い場合でも、自由記述として全文フォールバックし empty にならないこと。"""
+
+    from modules.storyboard import extract_metadata_from_prompt
+
+    raw = '{"video_prompt":{"storyboard":{"cuts":[{"index":0,"description":""}]}}}'
+    _, _, prompt_text = extract_metadata_from_prompt(raw)
+    assert prompt_text  # empty にはならない
+    assert "video_prompt" in prompt_text

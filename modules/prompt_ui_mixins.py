@@ -1079,6 +1079,15 @@ class PromptUIMixin:
         self._sb_video_style = video_style
         self._sb_content_flags = content_flags
 
+        # NOTE:
+        # text_output は自由記述欄のため、文章/JSON/任意の構造が入力されうる。
+        # extract_metadata_from_prompt() は video_prompt 形式なら prompt / world_description.summary / storyboard.cuts[].description
+        # から本文を復元し、どれも無ければ全文フォールバックする。
+        # そのため、ここでは「本当に空」の場合のみ止める。
+        if not prompt_text:
+            QtWidgets.QMessageBox.warning(self, "注意", "本文として扱えるテキストが見つかりませんでした。")
+            return
+
         # テキストからキャラクターIDを抽出し、未登録があれば登録を促す
         detected_characters = self._extract_character_ids_from_text(prompt_text)
         if not self._ensure_characters_registered(detected_characters):

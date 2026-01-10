@@ -53,9 +53,34 @@ def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[di
         vp = parsed["video_prompt"]
         video_style = vp.get("video_style")
         content_flags = vp.get("content_flags")
+        # NOTE:
+        # この関数は「自由記述欄のテキスト」から本文プロンプトを抽出するために使われる。
+        # video_prompt 形式のJSONが入力されることもあるが、どんな構造でも本文が空扱いにならないように
+        # 既知の場所から順に復元し、最後は全文フォールバックする。
         remaining = vp.get("prompt") or ""
         if not remaining and isinstance(vp.get("world_description"), dict):
             remaining = vp["world_description"].get("summary", "")
+
+        # ストーリーボードJSONのみが入力されるケース:
+        # {"video_prompt":{"storyboard":{"cuts":[{"description":...}, ...]}}}
+        # その場合は cuts[].description を連結して本文として扱う。
+        if not remaining:
+            storyboard = vp.get("storyboard")
+            if isinstance(storyboard, dict) and isinstance(storyboard.get("cuts"), list):
+                descriptions: List[str] = []
+                for cut in storyboard["cuts"]:
+                    if not isinstance(cut, dict):
+                        continue
+                    desc = cut.get("description")
+                    if isinstance(desc, str) and desc.strip():
+                        descriptions.append(desc.strip())
+                if descriptions:
+                    remaining = "\n".join(descriptions)
+
+        # どこにも本文が無い場合でも、自由記述欄の入力が「空扱い」にならないよう全文を返す。
+        if not remaining:
+            remaining = text
+
         remaining = " ".join(str(remaining).split()).strip()
         return video_style, content_flags, remaining
 

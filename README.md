@@ -212,6 +212,11 @@ tails:
 
 「現在のプロンプトから生成(LLM)」ボタンを押すと、出力欄のプロンプト全文（末尾固定部含む）をLLMで解析し、シネマティックなカットに分割します。
 
+ - 注意: 出力欄がストーリーボードJSON（例: `{"video_prompt":{"storyboard": ...}}`）になっている場合、本文（`video_prompt.prompt` または `world_description.summary`）が無いことがあります。
+  - 現在は、`video_prompt.prompt` / `world_description.summary` が無い場合でも、`storyboard.cuts[].description` を連結して本文として扱います（自由記述欄のため）。
+  - ただし `description` がすべて空の場合は、JSON全文を本文として扱うため、LLMの分割結果が期待どおりにならない場合があります。
+  - 対処: 先に通常のプロンプトを生成して出力欄に表示する／または JSON に `video_prompt.prompt`（もしくは `world_description.summary`）を追加する／または各カットの `description` を埋める
+
 - プロンプト全文がLLMに送信されます
 - **元の言語が維持されます**（日本語のプロンプトは日本語のまま）
 - LLMがカット数に応じてシーンを分割し、カメラワークも提案します
