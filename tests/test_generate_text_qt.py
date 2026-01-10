@@ -86,7 +86,9 @@ def prompt_generator(tmp_path, monkeypatch, qt_application):
 
     db_path = tmp_path / "test.db"
     _prepare_test_db(db_path)
-    monkeypatch.setattr(qt_app, "DEFAULT_DB_PATH", str(db_path))
+    # PromptGeneratorWindow は modules.config.DEFAULT_DB_PATH を参照するため、そちらを差し替える。
+    # qt_app モジュールの属性だけを差し替えると、起動時にDB不足ダイアログが出てテストが停止しうる。
+    monkeypatch.setattr(qt_app.config, "DEFAULT_DB_PATH", str(db_path))
     window = qt_app.PromptGeneratorWindow()
     window.spin_row_num.setValue(1)
     yield window
@@ -125,6 +127,7 @@ def test_storyboard_duration_allocation_prompt_llm_contains_duration_rules(qt_ap
     assert "duration_sec" in user_prompt
     assert "SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY" in user_prompt
     assert "exactly 3 cinematic cuts" in user_prompt
+    assert "DEPICTABILITY FIRST" in user_prompt
 
 
 def test_storyboard_duration_allocation_prompt_uniform_uses_array_format(qt_application):
@@ -143,3 +146,4 @@ def test_storyboard_duration_allocation_prompt_uniform_uses_array_format(qt_appl
     _, user_prompt = worker._build_prompts()
     assert "Output format (JSON array)" in user_prompt
     assert '"duration_sec"' not in user_prompt
+    assert "DEPICTABILITY FIRST" in user_prompt

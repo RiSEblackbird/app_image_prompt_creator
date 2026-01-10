@@ -1094,6 +1094,15 @@ class StoryboardLLMWorker(QtCore.QObject):
 
     def _build_prompts(self) -> Tuple[str, str]:
         """ストーリーボード生成用のプロンプトを構築する。"""
+        # 重要: ストーリーボードは「秒数に対して描写できる内容」になっていないと、Sora側で破綻しやすい。
+        # 本ツールでは脚本・段取り・説明過多を許容せず、描写可能性（action density）を優先する方針を常に付与する。
+        depictability_instruction = (
+            "DEPICTABILITY FIRST: Prioritize what can be VISUALLY depicted within the given seconds. "
+            "If a cut feels too dense for its duration, simplify aggressively by removing secondary beats, "
+            "procedural steps, off-screen events, backstory, and script-like instructions. "
+            "It is acceptable to drop details as long as the core meaning, subject, setting, and intended mood remain. "
+            "Write as what the camera can show, not as a script or a sequence of many actions."
+        )
         # 連続性強化時の追加指示
         continuity_instruction = ""
         if self.continuity_enhanced:
@@ -1119,11 +1128,12 @@ class StoryboardLLMWorker(QtCore.QObject):
         system_prompt = _append_temperature_hint(
             "You are a professional storyboard writer for video production. "
             "Your task is to split a given image prompt into multiple cinematic cuts for a short video. "
-            "Each cut should be a vivid, visual description suitable for AI video generation. "
+            "Each cut should be a vivid yet depictable visual description suitable for AI video generation. "
             "CRITICAL: You MUST preserve the original language of the source prompt. "
             "If the source is in Japanese, write descriptions in Japanese. "
             "If the source is in English, write descriptions in English. "
             "Do NOT translate or change the language. "
+            + depictability_instruction
             + continuity_instruction
             + style_instruction,
             self.model,
@@ -1184,17 +1194,10 @@ class StoryboardLLMWorker(QtCore.QObject):
 
         length_rule = ""
         if self.length_limit and self.length_limit > 0:
-            estimated_cuts = self.cut_count
-            if self.auto_structure:
-                estimated_cuts = max(
-                    self.cut_count_min,
-                    min(self.cut_count_max, (self.cut_count_min + self.cut_count_max) // 2),
-                )
-            per_cut_hint = max(30, int((self.length_limit - 200) / max(estimated_cuts, 1)))
             length_rule = (
                 f"- LENGTH: Keep the ENTIRE JSON (including brackets/keys) under {self.length_limit} characters.\n"
                 '- If shortening is needed, reduce only the "description" fields; keep cut count, indices, and camera keys intact.\n'
-                f"- Aim each description to stay within ~{per_cut_hint} characters; use concise cinematic wording.\n"
+                "- Keep each description concise; remove secondary details first.\n"
             )
 
         if self.auto_structure:
@@ -1217,6 +1220,8 @@ class StoryboardLLMWorker(QtCore.QObject):
                 + character_context
                 + "Rules:\n"
                 "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                "- DEPICTABILITY FIRST: For each cut, ensure the described visuals/actions are realistically depictable within its duration_sec.\n"
+                "- If any cut feels too dense for its duration, simplify by deleting secondary beats and script-like details.\n"
                 "- Each cut should be a complete, vivid visual description.\n"
                 f"{continuity_rule}"
                 "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
@@ -1247,6 +1252,8 @@ class StoryboardLLMWorker(QtCore.QObject):
                     + character_context
                     + "Rules:\n"
                     "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                    "- DEPICTABILITY FIRST: Choose durations and descriptions together. If a cut is short, keep it extremely simple.\n"
+                    "- If a cut needs more content, allocate more seconds; do NOT cram multiple beats into a short cut.\n"
                     "- Each cut should be a complete, vivid visual description.\n"
                     f"{continuity_rule}"
                     "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
@@ -1274,6 +1281,8 @@ class StoryboardLLMWorker(QtCore.QObject):
                     + character_context
                     + "Rules:\n"
                     "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                    f"- DEPICTABILITY FIRST: Assume each cut lasts ~{duration_per_cut} seconds. Keep each cut realistically depictable within that time.\n"
+                    "- If the source prompt contains too much story/script for the available time, keep only the essential visual beats and omit the rest.\n"
                     "- Each cut should be a complete, vivid visual description.\n"
                     f"{continuity_rule}"
                     "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
