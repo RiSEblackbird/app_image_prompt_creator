@@ -197,14 +197,14 @@ tails:
 ### 基本操作
 
 1. **テンプレートを選択**: カット構成のテンプレートを選びます
-2. **総尺を設定**: 10〜30秒（5秒刻み）から選択（LLM自動構成ON時は目安値）
+2. **総尺を設定**: 10〜30秒（5秒刻み）から選択（LLM自動構成ON時もこの値を厳守）
 3. **尺配分（カット数指定時）**:
    - **均等（固定）**: 総尺÷カット数で均等割当（LLMが `duration_sec` を返しても無視して均等にします）
    - **内容に応じて（LLM配分）**: LLMが各カットの `duration_sec` を提案（総尺に一致するよう調整）
 4. **カット生成方法を選択**:
    - **「テンプレートから初期化」**: 選択したテンプレートでカットを生成
    - **「現在のプロンプトから生成」**: 出力欄のプロンプトを文単位で分割してカット化
-   - **「カット数/尺をLLM自動決定」**: ONにするとLLMがプロンプト内容からカット数(目安:3〜6)と総尺(目安:8〜24秒)を推定し、duration_sec付きで返します。OFFの場合は手動指定のカット数・総尺をそのまま使います。
+   - **「カット数をLLM自動決定（総尺は固定）」**: ONにするとLLMがプロンプト内容からカット数(目安:3〜6)を推定し、各カットの `duration_sec` を提案します。**総尺（秒）はUIの選択値を厳守**します。
 5. **各カットを編集**: 説明、開始時刻、尺、カメラワークを設定
 6. **「JSON出力&コピー」**: ストーリーボードをJSON形式でコピー
 
@@ -252,19 +252,20 @@ tails:
 - **LLM生成時**: 連続性強化が有効ならLLMが自動的に遷移を織り込む
 - **手動編集時**: `continuity_enhanced: true` フラグがJSONに記録される（描写は手動で調整）
 
-### LLM自動構成（カット数/尺の自動決定）
+### LLM自動構成（カット数の自動決定）
 
-- 「カット数/尺をLLM自動決定」をONにすると、カット数(目安:3〜6)と総尺(目安:8〜24秒)をLLMが推定し、`duration_sec` 付きで返します。総尺は推定値が優先され、UIのプルダウンは目安表示として扱います。
+- 「カット数をLLM自動決定（総尺は固定）」をONにすると、カット数(目安:3〜6)をLLMが推定し、`duration_sec` 付きで返します。**総尺（秒）はUIの選択値を厳守**します。
+- ※ `duration_sec` の合計は **総尺と0.01秒単位で一致**している必要があります（ズレると動画生成が失敗しやすいため）。
 - スタイル反映・連続性強化の指示は自動構成でも有効です。
 
 正例（ON、プロンプト全文から自動構成）:
 ```json
 {
-  "total_duration_sec": 12.4,
+  "total_duration_sec": 15.0,
   "cuts": [
-    {"cut": 1, "duration_sec": 3.6, "description": "A misty alpine lake at blue hour...", "camera": "drone"},
-    {"cut": 2, "duration_sec": 4.0, "description": "The camera glides closer...", "camera": "tracking"},
-    {"cut": 3, "duration_sec": 4.8, "description": "Sunlight breaks through...", "camera": "zoom_out"}
+    {"cut": 1, "duration_sec": 4.2, "description": "A misty alpine lake at blue hour...", "camera": "drone"},
+    {"cut": 2, "duration_sec": 5.1, "description": "The camera glides closer...", "camera": "tracking"},
+    {"cut": 3, "duration_sec": 5.7, "description": "Sunlight breaks through...", "camera": "zoom_out"}
   ]
 }
 ```

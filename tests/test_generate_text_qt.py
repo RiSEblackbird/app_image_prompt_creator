@@ -147,3 +147,22 @@ def test_storyboard_duration_allocation_prompt_uniform_uses_array_format(qt_appl
     assert "Output format (JSON array)" in user_prompt
     assert '"duration_sec"' not in user_prompt
     assert "DEPICTABILITY FIRST" in user_prompt
+
+
+def test_storyboard_auto_structure_prompt_keeps_total_duration_fixed(qt_application):
+    """自動構成（カット数自動）でも総尺は固定値を厳守し、LLMに総尺を選ばせないこと。"""
+
+    from modules.llm import StoryboardLLMWorker
+
+    worker = StoryboardLLMWorker(
+        text="東京の夜景。雨。ネオン。",
+        model="gpt-4o-mini",
+        cut_count=3,
+        total_duration_sec=12.0,
+        duration_allocation="llm",
+        auto_structure=True,
+    )
+    _, user_prompt = worker._build_prompts()
+    assert "Total video duration: 12.0 seconds (fixed by settings)." in user_prompt
+    assert "DO NOT change total_duration_sec" in user_prompt
+    assert '"total_duration_sec": 12.0' in user_prompt

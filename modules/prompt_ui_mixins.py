@@ -558,12 +558,12 @@ class PromptUIMixin:
         )
         settings_row.addWidget(self.check_sb_style_reflection)
 
-        # カット数・総尺の自動決定
-        self.check_sb_auto_structure = QtWidgets.QCheckBox("カット数/尺をLLM自動決定")
+        # カット数の自動決定（総尺は固定）
+        self.check_sb_auto_structure = QtWidgets.QCheckBox("カット数をLLM自動決定（総尺は固定）")
         self.check_sb_auto_structure.setToolTip(
-            "ONにすると、カット数と総尺をLLMがプロンプト内容から自動判断します。\n"
-            f"目安レンジ: カット数 {config.STORYBOARD_AUTO_MIN_CUTS}-{config.STORYBOARD_AUTO_MAX_CUTS}、"
-            f"総尺 {config.STORYBOARD_AUTO_MIN_DURATION:.0f}-{config.STORYBOARD_AUTO_MAX_DURATION:.0f} 秒"
+            "ONにすると、カット数をLLMがプロンプト内容から自動判断します。\n"
+            "※ 総尺（秒）はUIの選択値を厳守し、LLMに変更させません。\n"
+            f"目安レンジ（カット数）: {config.STORYBOARD_AUTO_MIN_CUTS}-{config.STORYBOARD_AUTO_MAX_CUTS}"
         )
         self.check_sb_auto_structure.toggled.connect(self._on_sb_auto_structure_toggled)
         settings_row.addWidget(self.check_sb_auto_structure)
@@ -831,13 +831,14 @@ class PromptUIMixin:
 
     def _on_sb_auto_structure_toggled(self, checked: bool):
         """自動構成トグル切替時の処理。"""
-        self.combo_sb_duration.setEnabled(not checked)
+        # 総尺は常にUI選択値を厳守するため、自動構成ONでも無効化しない
+        self.combo_sb_duration.setEnabled(True)
         self.spin_sb_cut_count.setEnabled(not checked)
         combo = getattr(self, "combo_sb_time_allocation", None)
         if combo is not None:
             combo.setEnabled(not checked)
         if checked:
-            # LLM決定を待つ状態にする
+            # 自動構成ONでも総尺は固定のため、LLM決定値は保持しない
             self._clear_sb_duration_override()
 
     def _on_sb_duration_change(self, *_):
@@ -1194,7 +1195,8 @@ class PromptUIMixin:
             parsed = json.loads(result)
             if isinstance(parsed, dict) and isinstance(parsed.get("cuts"), list):
                 cuts_data = parsed.get("cuts")
-                total_duration = parsed.get("total_duration_sec") or total_duration
+                # 総尺はUI設定を厳守する（LLMがtotal_duration_secを返しても採用しない）
+                total_duration = total_duration
             elif isinstance(parsed, list):
                 cuts_data = parsed
         except Exception:
@@ -1206,7 +1208,8 @@ class PromptUIMixin:
                 if json_match:
                     parsed = json.loads(json_match.group())
                     cuts_data = parsed.get("cuts")
-                    total_duration = parsed.get("total_duration_sec") or total_duration
+                    # 総尺はUI設定を厳守する（LLMがtotal_duration_secを返しても採用しない）
+                    total_duration = total_duration
             except Exception:
                 cuts_data = None
 
@@ -1250,7 +1253,7 @@ class PromptUIMixin:
             except (TypeError, ValueError):
                 total_duration_value = None
 
-            if auto_structure or total_duration_value is None:
+            if total_duration_value is None:
                 total_duration_value = total_from_payload or config.DEFAULT_STORYBOARD_DURATION
             if total_duration_value and total_from_payload and abs(total_duration_value - total_from_payload) >= 0.2:
                 # スケールして総尺に合わせる
@@ -1311,7 +1314,8 @@ class PromptUIMixin:
 
         # 自動構成の結果を保存
         if auto_structure:
-            self._set_sb_total_duration_override(total_duration)
+            # 総尺はUI設定を厳守するため、LLM由来の総尺は保持しない
+            self._clear_sb_duration_override()
             # UIのカット数表示も結果に合わせる
             try:
                 self.spin_sb_cut_count.blockSignals(True)
@@ -1325,7 +1329,7 @@ class PromptUIMixin:
         if self._sb_cuts:
             self.list_sb_cuts.setCurrentRow(0)
 
-        allocation_label = "自動構成(LLM)" if auto_structure else ("均等（固定）" if duration_allocation == "uniform" else "内容に応じて（LLM配分）")
+        allocation_label = "カット数自動(LLM)" if auto_structure else ("均等（固定）" if duration_allocation == "uniform" else "内容に応じて（LLM配分）")
         extra = ""
         if allocation_fallback_to_uniform:
             extra = "\n※ LLM配分を要求しましたが duration_sec が返らなかったため、均等割当で生成しました。"

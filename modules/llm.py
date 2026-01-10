@@ -1203,18 +1203,16 @@ class StoryboardLLMWorker(QtCore.QObject):
         if self.auto_structure:
             min_cuts = max(2, int(self.cut_count_min))
             max_cuts = max(min_cuts, int(self.cut_count_max))
-            min_duration = max(1.0, float(self.min_duration_sec))
-            max_duration = max(min_duration + 1.0, float(self.max_duration_sec))
-            target_duration = min(max_duration, max(min_duration, float(self.default_duration_sec)))
             user_prompt = (
-                "Analyze the following image prompt and DESIGN the storyboard structure automatically.\n"
+                "Analyze the following image prompt and DESIGN the storyboard cut structure automatically.\n"
                 f"- Decide the number of cuts between {min_cuts} and {max_cuts} based on complexity and pacing.\n"
-                f"- Choose a total video duration between {min_duration} and {max_duration} seconds; "
-                f"if uncertain, stay near {target_duration} seconds.\n"
-                "- Allocate time unevenly if needed (openings/endings can be longer, transitions shorter).\n"
-                # Total duration must be strictly preserved; do not rely on post-processing or tolerance.
+                f"Total video duration: {self.total_duration_sec} seconds (fixed by settings).\n"
+                "- DO NOT change total_duration_sec. It is fixed.\n"
+                "- Allocate duration unevenly if needed (openings/endings can be longer, transitions shorter).\n"
+                "- ZERO TOLERANCE / 絶対厳守: If the total duration is not matched EXACTLY, downstream video generation will FAIL. There is no tolerance.\n"
                 "- HARD CONSTRAINT: After rounding each duration_sec to 2 decimals, the SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY (no over/under).\n"
-                "- If rounding creates any mismatch, adjust ONLY the LAST cut's duration_sec so the sum becomes exact.\n"
+                "- FINAL CHECK: Compute sum_rounded = round(sum(duration_sec), 2). If sum_rounded != total_duration_sec, set delta = round(total_duration_sec - sum_rounded, 2) and adjust ONLY the LAST cut by delta.\n"
+                "- You MUST perform the final check and correction BEFORE outputting JSON.\n"
                 "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n\n"
                 + style_context
                 + character_context
@@ -1230,7 +1228,7 @@ class StoryboardLLMWorker(QtCore.QObject):
                 f"{length_rule}\n"
                 "Output format (JSON object):\n"
                 "{\n"
-                '  "total_duration_sec": <number>,\n'
+                f'  "total_duration_sec": {self.total_duration_sec},\n'
                 '  "cuts": [\n'
                 '    {"cut": 1, "duration_sec": <number>, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
                 '    {"cut": 2, "duration_sec": <number>, "description": "...", "camera": "..."}\n'
@@ -1243,9 +1241,12 @@ class StoryboardLLMWorker(QtCore.QObject):
                 user_prompt = (
                     f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
                     f"Total video duration: {self.total_duration_sec} seconds (fixed).\n"
+                    "- ZERO TOLERANCE / 絶対厳守: If the total duration is not matched EXACTLY, downstream video generation will FAIL. There is no tolerance.\n"
+                    f'- HARD CONSTRAINT: "total_duration_sec" is FIXED by settings and MUST remain exactly {self.total_duration_sec}. Do NOT change it.\n'
                     "- Allocate duration unevenly if it improves pacing (openings/endings can be longer, transitions shorter).\n"
                     "- HARD CONSTRAINT: After rounding each duration_sec to 2 decimals, the SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY (no over/under).\n"
-                    "- If rounding creates any mismatch, adjust ONLY the LAST cut's duration_sec so the sum becomes exact.\n"
+                    "- FINAL CHECK: Compute sum_rounded = round(sum(duration_sec), 2). If sum_rounded != total_duration_sec, set delta = round(total_duration_sec - sum_rounded, 2) and adjust ONLY the LAST cut by delta.\n"
+                    "- You MUST perform the final check and correction BEFORE outputting JSON.\n"
                     "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n"
                     "HARD CONSTRAINT: Keep the action density per cut realistic for its duration so the whole storyboard fits the total duration.\n\n"
                     + style_context
