@@ -198,10 +198,11 @@ tails:
 ### 基本操作
 
 1. **テンプレートを選択**: カット構成のテンプレートを選びます
-2. **総尺を設定**: 10〜30秒（5秒刻み）から選択
+2. **総尺を設定**: 10〜30秒（5秒刻み）から選択（LLM自動構成ON時は目安値）
 3. **カット生成方法を選択**:
    - **「テンプレートから初期化」**: 選択したテンプレートでカットを生成
    - **「現在のプロンプトから生成」**: 出力欄のプロンプトを文単位で分割してカット化
+   - **「カット数/尺をLLM自動決定」**: ONにするとLLMがプロンプト内容からカット数(目安:3〜6)と総尺(目安:8〜24秒)を推定し、duration_sec付きで返します。OFFの場合は手動指定のカット数・総尺をそのまま使います。
 4. **各カットを編集**: 説明、開始時刻、尺、カメラワークを設定
 5. **「JSON出力&コピー」**: ストーリーボードをJSON形式でコピー
 
@@ -246,6 +247,32 @@ tails:
 
 - **LLM生成時**: 連続性強化が有効ならLLMが自動的に遷移を織り込む
 - **手動編集時**: `continuity_enhanced: true` フラグがJSONに記録される（描写は手動で調整）
+
+### LLM自動構成（カット数/尺の自動決定）
+
+- 「カット数/尺をLLM自動決定」をONにすると、カット数(目安:3〜6)と総尺(目安:8〜24秒)をLLMが推定し、`duration_sec` 付きで返します。総尺は推定値が優先され、UIのプルダウンは目安表示として扱います。
+- スタイル反映・連続性強化の指示は自動構成でも有効です。
+
+正例（ON、プロンプト全文から自動構成）:
+```json
+{
+  "total_duration_sec": 12.4,
+  "cuts": [
+    {"cut": 1, "duration_sec": 3.6, "description": "A misty alpine lake at blue hour...", "camera": "drone"},
+    {"cut": 2, "duration_sec": 4.0, "description": "The camera glides closer...", "camera": "tracking"},
+    {"cut": 3, "duration_sec": 4.8, "description": "Sunlight breaks through...", "camera": "zoom_out"}
+  ]
+}
+```
+
+負例（NG例: duration_sec を含まない配列を手動で貼り付けると均等割りになり、意図した尺配分になりません）:
+```
+[
+  {"cut": 1, "description": "opening", "camera": "pan"},
+  {"cut": 2, "description": "ending", "camera": "static"}
+]
+```
+→ 各カットに `duration_sec` を付けるか、自動構成をOFFにして総尺・カット数を手動指定してください。
 
 ### スタイル反映
 

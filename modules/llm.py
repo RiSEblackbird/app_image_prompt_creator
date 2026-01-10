@@ -1049,6 +1049,12 @@ class StoryboardLLMWorker(QtCore.QObject):
         video_style: dict | None = None,
         content_flags: dict | None = None,
         length_limit: int = config.SORA_PROMPT_SAFE_CHARS,
+        auto_structure: bool = False,
+        cut_count_min: int | None = None,
+        cut_count_max: int | None = None,
+        min_duration_sec: float | None = None,
+        max_duration_sec: float | None = None,
+        default_duration_sec: float | None = None,
     ):
         super().__init__()
         self.text = text
@@ -1060,6 +1066,12 @@ class StoryboardLLMWorker(QtCore.QObject):
         self.video_style = video_style
         self.content_flags = content_flags
         self.length_limit = length_limit
+        self.auto_structure = auto_structure
+        self.cut_count_min = cut_count_min or config.STORYBOARD_AUTO_MIN_CUTS
+        self.cut_count_max = cut_count_max or config.STORYBOARD_AUTO_MAX_CUTS
+        self.min_duration_sec = min_duration_sec or config.STORYBOARD_AUTO_MIN_DURATION
+        self.max_duration_sec = max_duration_sec or config.STORYBOARD_AUTO_MAX_DURATION
+        self.default_duration_sec = default_duration_sec or config.STORYBOARD_AUTO_DEFAULT_DURATION
 
     @QtCore.Slot()
     def run(self):
@@ -1094,8 +1106,6 @@ class StoryboardLLMWorker(QtCore.QObject):
 
     def _build_prompts(self) -> Tuple[str, str]:
         """ストーリーボード生成用のプロンプトを構築する。"""
-        duration_per_cut = round(self.total_duration_sec / self.cut_count, 2)
-
         # 連続性強化時の追加指示
         continuity_instruction = ""
         if self.continuity_enhanced:
@@ -1157,33 +1167,74 @@ class StoryboardLLMWorker(QtCore.QObject):
 
         length_rule = ""
         if self.length_limit and self.length_limit > 0:
-            per_cut_hint = max(30, int((self.length_limit - 200) / self.cut_count))
+            estimated_cuts = self.cut_count
+            if self.auto_structure:
+                estimated_cuts = max(
+                    self.cut_count_min,
+                    min(self.cut_count_max, (self.cut_count_min + self.cut_count_max) // 2),
+                )
+            per_cut_hint = max(30, int((self.length_limit - 200) / max(estimated_cuts, 1)))
             length_rule = (
                 f"- LENGTH: Keep the ENTIRE JSON (including brackets/keys) under {self.length_limit} characters.\n"
                 '- If shortening is needed, reduce only the "description" fields; keep cut count, indices, and camera keys intact.\n'
                 f"- Aim each description to stay within ~{per_cut_hint} characters; use concise cinematic wording.\n"
             )
 
-        user_prompt = (
-            f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
-            f"Total video duration: {self.total_duration_sec} seconds.\n"
-            f"Each cut should be approximately {duration_per_cut} seconds.\n\n"
-            + style_context
-            + "Rules:\n"
-            "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
-            "- Each cut should be a complete, vivid visual description.\n"
-            f"{continuity_rule}"
-            "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
-            "- The first cut should establish the scene.\n"
-            "- The final cut should provide a sense of conclusion or climax.\n"
-            f"{length_rule}\n"
-            "Output format (JSON array):\n"
-            "[\n"
-            '  {"cut": 1, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
-            '  {"cut": 2, "description": "...", "camera": "..."},\n'
-            "  ...\n"
-            "]\n\n"
-            f"Source prompt:\n{self.text}"
-        )
+        if self.auto_structure:
+            min_cuts = max(2, int(self.cut_count_min))
+            max_cuts = max(min_cuts, int(self.cut_count_max))
+            min_duration = max(1.0, float(self.min_duration_sec))
+            max_duration = max(min_duration + 1.0, float(self.max_duration_sec))
+            target_duration = min(max_duration, max(min_duration, float(self.default_duration_sec)))
+            user_prompt = (
+                "Analyze the following image prompt and DESIGN the storyboard structure automatically.\n"
+                f"- Decide the number of cuts between {min_cuts} and {max_cuts} based on complexity and pacing.\n"
+                f"- Choose a total video duration between {min_duration} and {max_duration} seconds; "
+                f"if uncertain, stay near {target_duration} seconds.\n"
+                "- Allocate time unevenly if needed (openings/endings can be longer, transitions shorter).\n"
+                "- Sum of all duration_sec must match total_duration_sec within 0.2 seconds.\n"
+                "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n\n"
+                + style_context
+                + "Rules:\n"
+                "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                "- Each cut should be a complete, vivid visual description.\n"
+                f"{continuity_rule}"
+                "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
+                "- The first cut should establish the scene.\n"
+                "- The final cut should provide a sense of conclusion or climax.\n"
+                f"{length_rule}\n"
+                "Output format (JSON object):\n"
+                "{\n"
+                '  "total_duration_sec": <number>,\n'
+                '  "cuts": [\n'
+                '    {"cut": 1, "duration_sec": <number>, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
+                '    {"cut": 2, "duration_sec": <number>, "description": "...", "camera": "..."}\n'
+                "  ]\n"
+                "}\n\n"
+                f"Source prompt:\n{self.text}"
+            )
+        else:
+            duration_per_cut = round(self.total_duration_sec / self.cut_count, 2)
+            user_prompt = (
+                f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
+                f"Total video duration: {self.total_duration_sec} seconds.\n"
+                f"Each cut should be approximately {duration_per_cut} seconds.\n\n"
+                + style_context
+                + "Rules:\n"
+                "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                "- Each cut should be a complete, vivid visual description.\n"
+                f"{continuity_rule}"
+                "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
+                "- The first cut should establish the scene.\n"
+                "- The final cut should provide a sense of conclusion or climax.\n"
+                f"{length_rule}\n"
+                "Output format (JSON array):\n"
+                "[\n"
+                '  {"cut": 1, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
+                '  {"cut": 2, "description": "...", "camera": "..."},\n'
+                "  ...\n"
+                "]\n\n"
+                f"Source prompt:\n{self.text}"
+            )
 
         return system_prompt, user_prompt

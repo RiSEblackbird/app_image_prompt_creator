@@ -513,7 +513,9 @@ class PromptUIMixin:
         for sec in config.STORYBOARD_DURATION_CHOICES:
             self.combo_sb_duration.addItem(f"{sec}秒", userData=sec)
         self.combo_sb_duration.setCurrentIndex(0)
-        self.combo_sb_duration.setToolTip("動画の総尺を選択します（10〜30秒）")
+        self._sb_duration_tooltip_base = "動画の総尺を選択します（10〜30秒）"
+        self.combo_sb_duration.setToolTip(self._sb_duration_tooltip_base)
+        self.combo_sb_duration.currentIndexChanged.connect(self._on_sb_duration_change)
         settings_row.addWidget(self.combo_sb_duration)
 
         settings_row.addWidget(QtWidgets.QLabel("カット数:"))
@@ -521,6 +523,7 @@ class PromptUIMixin:
         self.spin_sb_cut_count.setRange(1, 12)
         self.spin_sb_cut_count.setValue(3)
         self.spin_sb_cut_count.setToolTip("カットの数を指定します（1〜12）")
+        self.spin_sb_cut_count.valueChanged.connect(self._on_sb_cut_count_change)
         settings_row.addWidget(self.spin_sb_cut_count)
 
         # 連続性強化トグル
@@ -539,6 +542,16 @@ class PromptUIMixin:
             "それに沿った描写になるようカット内容を生成します"
         )
         settings_row.addWidget(self.check_sb_style_reflection)
+
+        # カット数・総尺の自動決定
+        self.check_sb_auto_structure = QtWidgets.QCheckBox("カット数/尺をLLM自動決定")
+        self.check_sb_auto_structure.setToolTip(
+            "ONにすると、カット数と総尺をLLMがプロンプト内容から自動判断します。\n"
+            f"目安レンジ: カット数 {config.STORYBOARD_AUTO_MIN_CUTS}-{config.STORYBOARD_AUTO_MAX_CUTS}、"
+            f"総尺 {config.STORYBOARD_AUTO_MIN_DURATION:.0f}-{config.STORYBOARD_AUTO_MAX_DURATION:.0f} 秒"
+        )
+        self.check_sb_auto_structure.toggled.connect(self._on_sb_auto_structure_toggled)
+        settings_row.addWidget(self.check_sb_auto_structure)
 
         char_list_btn = QtWidgets.QPushButton("キャラクター一覧...")
         char_list_btn.setToolTip("Soraキャラクター一覧を表示します")
@@ -679,6 +692,7 @@ class PromptUIMixin:
         self._sb_current_index: int = -1
         self._sb_video_style: dict = None  # 抽出した video_style
         self._sb_content_flags: dict = None  # 抽出した content_flags
+        self._sb_total_duration_override: float | None = None  # LLM自動決定した総尺
 
     # =============================
     # ストーリーボードタブのイベントハンドラ
@@ -705,8 +719,11 @@ class PromptUIMixin:
     def _sb_init_from_template(self):
         """テンプレートからカットリストを初期化する。"""
         template_id = self.combo_sb_template.currentData()
-        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        total_duration = self._get_sb_total_duration()
         cut_count = self.spin_sb_cut_count.value()
+
+        # 手動初期化時は自動総尺をリセット
+        self._clear_sb_duration_override()
 
         self._sb_cuts = create_cuts_from_template(template_id, total_duration, cut_count)
         self._sb_refresh_cut_list()
@@ -722,6 +739,65 @@ class PromptUIMixin:
             if cut.is_image_placeholder:
                 label = f"#{cut.index} [画像] ({cut.start_sec:.1f}s)"
             self.list_sb_cuts.addItem(label)
+
+    def _get_sb_total_duration(self) -> float:
+        """UI選択またはLLM決定された総尺を返す。"""
+        if self._sb_total_duration_override is not None:
+            return round(self._sb_total_duration_override, 2)
+        return self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+
+    def _set_sb_total_duration_override(self, value: float | None):
+        """LLM決定の総尺を保持し、ツールチップに表示する。"""
+        self._sb_total_duration_override = None if value is None else round(float(value), 2)
+        self._update_sb_duration_tooltip()
+
+    def _clear_sb_duration_override(self):
+        """LLM決定の総尺を解除する。"""
+        self._sb_total_duration_override = None
+        self._update_sb_duration_tooltip()
+
+    def _update_sb_duration_tooltip(self):
+        """総尺コンボのツールチップを最新状態に揃える。"""
+        if self._sb_total_duration_override is None:
+            self.combo_sb_duration.setToolTip(self._sb_duration_tooltip_base)
+        else:
+            self.combo_sb_duration.setToolTip(
+                f"{self._sb_duration_tooltip_base}\nLLM自動推定: {self._sb_total_duration_override:.1f} 秒"
+            )
+
+    def _on_sb_auto_structure_toggled(self, checked: bool):
+        """自動構成トグル切替時の処理。"""
+        self.combo_sb_duration.setEnabled(not checked)
+        self.spin_sb_cut_count.setEnabled(not checked)
+        if checked:
+            # LLM決定を待つ状態にする
+            self._clear_sb_duration_override()
+
+    def _on_sb_duration_change(self, *_):
+        """総尺選択変更時にLLM自動値を解除する。"""
+        self._clear_sb_duration_override()
+
+    def _on_sb_cut_count_change(self, *_):
+        """カット数変更時にLLM自動値を解除する。"""
+        self._clear_sb_duration_override()
+
+    def _recalculate_sb_total_from_cuts(self):
+        """カットの開始+尺から総尺を再計算し、自動値があれば更新する。"""
+        if self._sb_total_duration_override is None or not self._sb_cuts:
+            return
+        last_cut = self._sb_cuts[-1]
+        total = round(last_cut.start_sec + last_cut.duration_sec, 2)
+        self._set_sb_total_duration_override(total)
+
+    def _adjust_sb_total_duration(self, target_total: float):
+        """最終カットで総尺誤差を吸収する。"""
+        if not self._sb_cuts:
+            return
+        last_cut = self._sb_cuts[-1]
+        actual_end = round(last_cut.start_sec + last_cut.duration_sec, 2)
+        delta = round(target_total - actual_end, 2)
+        if abs(delta) >= 0.01:
+            last_cut.duration_sec = round(max(0.1, last_cut.duration_sec + delta), 2)
 
     def _on_sb_cut_selected(self, row: int):
         """カットリストの選択変更時に詳細エリアを更新する。"""
@@ -787,6 +863,7 @@ class PromptUIMixin:
         cut.duration_sec = round(self.spin_sb_duration_cut.value(), 2)
         self._sb_refresh_cut_list()
         self.list_sb_cuts.setCurrentRow(self._sb_current_index)
+        self._recalculate_sb_total_from_cuts()
 
     def _on_sb_cut_camera_changed(self):
         """カメラワーク変更時の処理。"""
@@ -796,7 +873,7 @@ class PromptUIMixin:
 
     def _sb_add_cut(self):
         """新しいカットを追加する。"""
-        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        total_duration = self._get_sb_total_duration()
         if self._sb_cuts:
             last_cut = self._sb_cuts[-1]
             new_start = last_cut.start_sec + last_cut.duration_sec
@@ -819,6 +896,7 @@ class PromptUIMixin:
         self._sb_reindex_cuts()
         self._sb_refresh_cut_list()
         self.list_sb_cuts.setCurrentRow(len(self._sb_cuts) - 1)
+        self._recalculate_sb_total_from_cuts()
 
     def _sb_delete_cut(self):
         """選択中のカットを削除する。"""
@@ -833,6 +911,7 @@ class PromptUIMixin:
         else:
             self._sb_current_index = -1
             self._on_sb_cut_selected(-1)
+        self._recalculate_sb_total_from_cuts()
 
     def _sb_move_cut_up(self):
         """選択中のカットを上に移動する。"""
@@ -843,6 +922,7 @@ class PromptUIMixin:
         self._sb_reindex_cuts()
         self._sb_refresh_cut_list()
         self.list_sb_cuts.setCurrentRow(idx - 1)
+        self._recalculate_sb_total_from_cuts()
 
     def _sb_move_cut_down(self):
         """選択中のカットを下に移動する。"""
@@ -853,6 +933,7 @@ class PromptUIMixin:
         self._sb_reindex_cuts()
         self._sb_refresh_cut_list()
         self.list_sb_cuts.setCurrentRow(idx + 1)
+        self._recalculate_sb_total_from_cuts()
 
     def _sb_reindex_cuts(self):
         """カットのインデックスを振り直す。"""
@@ -887,7 +968,7 @@ class PromptUIMixin:
             return
 
         template_id = self.combo_sb_template.currentData() or "none"
-        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        total_duration = self._get_sb_total_duration()
         continuity = self.check_sb_continuity.isChecked()
 
         # メタデータ（video_style, content_flags）と連続性強化フラグを含めてJSON生成
@@ -931,8 +1012,9 @@ class PromptUIMixin:
         self._sb_content_flags = content_flags
 
         # 総尺とカット数を取得
-        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        total_duration = self._get_sb_total_duration()
         cut_count = self.spin_sb_cut_count.value()
+        auto_structure = self.check_sb_auto_structure.isChecked()
 
         # 出力言語を取得（動画用設定を流用）
         output_language = "en"
@@ -966,12 +1048,19 @@ class PromptUIMixin:
             video_style=video_style_ctx,
             content_flags=content_flags_ctx,
             length_limit=getattr(config, "SORA_PROMPT_SAFE_CHARS", 1900),
+            auto_structure=auto_structure,
+            cut_count_min=config.STORYBOARD_AUTO_MIN_CUTS,
+            cut_count_max=config.STORYBOARD_AUTO_MAX_CUTS,
+            min_duration_sec=config.STORYBOARD_AUTO_MIN_DURATION,
+            max_duration_sec=config.STORYBOARD_AUTO_MAX_DURATION,
+            default_duration_sec=total_duration or config.STORYBOARD_AUTO_DEFAULT_DURATION,
         )
 
         # コンテキストを保存
         self._sb_llm_context = {
             "cut_count": cut_count,
             "total_duration": total_duration,
+            "auto_structure": auto_structure,
         }
 
         if self._start_background_worker(
@@ -996,29 +1085,84 @@ class PromptUIMixin:
             QtWidgets.QMessageBox.warning(self, "注意", "LLMから空のレスポンスが返されました。")
             return
 
-        # JSONレスポンスをパース
+        auto_structure = context.get("auto_structure", False)
+
+        # JSONレスポンスをパース（オブジェクト形式/配列形式どちらも許容）
+        cuts_data = None
+        total_duration = context.get("total_duration") or config.DEFAULT_STORYBOARD_DURATION
         try:
-            # レスポンスからJSON配列部分を抽出
-            json_match = re.search(r'\[.*\]', result, re.DOTALL)
-            if not json_match:
-                raise ValueError("JSON配列が見つかりません")
-            cuts_data = json.loads(json_match.group())
-        except (json.JSONDecodeError, ValueError) as e:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "パースエラー",
-                f"LLMレスポンスの解析に失敗しました:\n{e}\n\nレスポンス:\n{result[:500]}...",
-            )
-            return
+            parsed = json.loads(result)
+            if isinstance(parsed, dict) and isinstance(parsed.get("cuts"), list):
+                cuts_data = parsed.get("cuts")
+                total_duration = parsed.get("total_duration_sec") or total_duration
+            elif isinstance(parsed, list):
+                cuts_data = parsed
+        except Exception:
+            cuts_data = None
+
+        if cuts_data is None:
+            try:
+                json_match = re.search(r'\{.*"cuts"\s*:\s*\[.*\]\s*\}', result, re.DOTALL)
+                if json_match:
+                    parsed = json.loads(json_match.group())
+                    cuts_data = parsed.get("cuts")
+                    total_duration = parsed.get("total_duration_sec") or total_duration
+            except Exception:
+                cuts_data = None
+
+        if cuts_data is None:
+            try:
+                json_match = re.search(r'\[.*\]', result, re.DOTALL)
+                if json_match:
+                    cuts_data = json.loads(json_match.group())
+            except Exception:
+                cuts_data = None
 
         if not isinstance(cuts_data, list) or not cuts_data:
             QtWidgets.QMessageBox.warning(self, "注意", "有効なカットデータが見つかりません。")
             return
 
         # カットを生成
-        total_duration = context.get("total_duration", 10)
         actual_cut_count = len(cuts_data)
-        duration_per_cut = total_duration / actual_cut_count
+
+        # duration_sec が返ってくる場合は尊重し、無い場合は均等割り当て
+        durations: List[float] = []
+        has_duration_field = True
+        for cut_data in cuts_data:
+            dur = cut_data.get("duration_sec")
+            if dur is None:
+                dur = cut_data.get("duration")
+            if isinstance(dur, (int, float)):
+                durations.append(max(0.1, float(dur)))
+            else:
+                has_duration_field = False
+                break
+
+        if has_duration_field and durations:
+            total_from_payload = round(sum(durations), 2)
+            try:
+                total_duration_value = float(total_duration) if total_duration is not None else None
+            except (TypeError, ValueError):
+                total_duration_value = None
+
+            if auto_structure or total_duration_value is None:
+                total_duration_value = total_from_payload or config.DEFAULT_STORYBOARD_DURATION
+            if total_duration_value and total_from_payload and abs(total_duration_value - total_from_payload) >= 0.2:
+                # スケールして総尺に合わせる
+                scale = total_duration_value / total_from_payload
+                durations = [round(max(0.1, d * scale), 2) for d in durations]
+                total_from_payload = round(sum(durations), 2)
+            if total_duration_value is None:
+                total_duration_value = total_from_payload or config.DEFAULT_STORYBOARD_DURATION
+            duration_per_cut = None
+            total_duration = total_duration_value
+        else:
+            total_duration = float(total_duration or config.DEFAULT_STORYBOARD_DURATION)
+            duration_per_cut = total_duration / actual_cut_count
+            durations = [duration_per_cut for _ in range(actual_cut_count)]
+
+        # 数値に正規化
+        total_duration = round(float(total_duration), 2)
 
         # カメラワークのマッピング
         camera_map = {
@@ -1039,17 +1183,35 @@ class PromptUIMixin:
             camera_raw = cut_data.get("camera", "static")
             camera_work = camera_map.get(camera_raw.lower(), "static")
 
+            duration_sec = durations[i] if i < len(durations) else duration_per_cut
+            duration_sec = round(duration_sec or duration_per_cut or 1.0, 2)
+
             cut = StoryboardCut(
                 index=i,
                 start_sec=round(current_time, 2),
-                duration_sec=round(duration_per_cut, 2),
+                duration_sec=duration_sec,
                 description=description,
                 camera_work=camera_work,
                 characters=[],
                 is_image_placeholder=False,
             )
             self._sb_cuts.append(cut)
-            current_time += duration_per_cut
+            current_time += duration_sec
+
+        # 総尺誤差を最終カットで吸収
+        self._adjust_sb_total_duration(total_duration)
+
+        # 自動構成の結果を保存
+        if auto_structure:
+            self._set_sb_total_duration_override(total_duration)
+            # UIのカット数表示も結果に合わせる
+            try:
+                self.spin_sb_cut_count.blockSignals(True)
+                self.spin_sb_cut_count.setValue(actual_cut_count)
+            finally:
+                self.spin_sb_cut_count.blockSignals(False)
+        else:
+            self._clear_sb_duration_override()
 
         self._sb_refresh_cut_list()
         if self._sb_cuts:
@@ -1059,7 +1221,7 @@ class PromptUIMixin:
             self,
             "生成完了",
             f"LLMでプロンプトから {actual_cut_count} カットを生成しました。\n"
-            f"（総尺: {total_duration}秒）",
+            f"（総尺: {total_duration:.1f}秒）",
         )
 
     def _handle_sb_llm_failure(self, thread: QtCore.QThread, worker, error: str):
@@ -1087,7 +1249,7 @@ class PromptUIMixin:
             return
 
         template_id = self.combo_sb_template.currentData() or "none"
-        total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
+        total_duration = self._get_sb_total_duration()
         continuity = self.check_sb_continuity.isChecked()
 
         # メタデータ（video_style, content_flags）と連続性強化フラグを含めてJSON生成
