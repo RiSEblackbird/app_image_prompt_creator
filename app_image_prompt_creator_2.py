@@ -179,9 +179,10 @@ def _resolve_path(path_value, base_dir=SCRIPT_DIR):
     return base_dir / path
 
 AVAILABLE_LLM_MODELS = [
+    "gpt-5.2",
     "gpt-5.1",
     "gpt-4o-mini",
-    "gpt-4o"
+    "gpt-4o",
 ]
 
 LABEL_EXCLUSION_WORDS = "除外語句："
@@ -2528,7 +2529,7 @@ POSITION_FILE = settings["app_image_prompt_creator"]["POSITION_FILE"]
 EXCLUSION_CSV = settings["app_image_prompt_creator"]["EXCLUSION_CSV"]
 DEDUPLICATE_PROMPTS = settings["app_image_prompt_creator"].get("DEDUPLICATE_PROMPTS", True)
 LLM_ENABLED       = settings["app_image_prompt_creator"].get("LLM_ENABLED", False)
-LLM_MODEL         = settings["app_image_prompt_creator"].get("LLM_MODEL", "gpt-5-mini")
+LLM_MODEL         = settings["app_image_prompt_creator"].get("LLM_MODEL", "gpt-5.2")
 LLM_TEMPERATURE   = settings["app_image_prompt_creator"].get("LLM_TEMPERATURE", 0.7)
 LLM_MAX_COMPLETION_TOKENS = settings["app_image_prompt_creator"].get("LLM_MAX_COMPLETION_TOKENS", 4500)
 LLM_TIMEOUT       = settings["app_image_prompt_creator"].get("LLM_TIMEOUT", 30)

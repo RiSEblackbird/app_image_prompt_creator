@@ -14,9 +14,10 @@ WINDOW_TITLE = "画像プロンプトランダム生成ツール (PySide6)"
 DEFAULT_ROW_NUM = 10
 DEFAULT_TAIL_MEDIA_TYPE = "image"
 AVAILABLE_LLM_MODELS = [
+    "gpt-5.2",
+    "gpt-5.1",
     "gpt-4o-mini",
     "gpt-4o",
-    "gpt-5.1",
 ]
 DEFAULT_LLM_MODEL = AVAILABLE_LLM_MODELS[0]
 LANGUAGE_COMBO_CHOICES = [
