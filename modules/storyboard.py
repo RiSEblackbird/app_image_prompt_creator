@@ -16,6 +16,18 @@ from . import config
 from .prompt_data import SoraCharacter, StoryboardCut, load_sora_characters
 
 
+def _adjust_last_cut_duration(cuts: List[StoryboardCut], total_duration_sec: float) -> List[StoryboardCut]:
+    """最終カットで総尺との丸め誤差を吸収する（0.01秒以内に調整）。"""
+    if not cuts:
+        return cuts
+    last_cut = cuts[-1]
+    actual_end = last_cut.start_sec + last_cut.duration_sec
+    delta = round(total_duration_sec - actual_end, 2)
+    if abs(delta) >= 0.01:
+        last_cut.duration_sec = round(last_cut.duration_sec + delta, 2)
+    return cuts
+
+
 def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[dict], str]:
     """プロンプトテキストから video_style と content_flags を抽出する。
 
@@ -307,7 +319,7 @@ def create_cuts_from_template(
             cuts.append(cut)
             current_time += duration
 
-        return cuts
+        return _adjust_last_cut_duration(cuts, total_duration_sec)
 
     # weight_distribution が定義されている場合
     if weight_distribution:
@@ -329,7 +341,7 @@ def create_cuts_from_template(
             cuts.append(cut)
             current_time += duration
 
-        return cuts
+        return _adjust_last_cut_duration(cuts, total_duration_sec)
 
     # デフォルト: 均等配分
     cuts = []
@@ -349,4 +361,4 @@ def create_cuts_from_template(
         cuts.append(cut)
         current_time += duration_per_cut
 
-    return cuts
+    return _adjust_last_cut_duration(cuts, total_duration_sec)
