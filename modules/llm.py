@@ -1048,6 +1048,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         continuity_enhanced: bool = False,
         video_style: dict | None = None,
         content_flags: dict | None = None,
+        length_limit: int = config.SORA_PROMPT_SAFE_CHARS,
     ):
         super().__init__()
         self.text = text
@@ -1058,6 +1059,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         self.continuity_enhanced = continuity_enhanced
         self.video_style = video_style
         self.content_flags = content_flags
+        self.length_limit = length_limit
 
     @QtCore.Slot()
     def run(self):
@@ -1153,6 +1155,15 @@ class StoryboardLLMWorker(QtCore.QObject):
                 + "\n\n"
             )
 
+        length_rule = ""
+        if self.length_limit and self.length_limit > 0:
+            per_cut_hint = max(30, int((self.length_limit - 200) / self.cut_count))
+            length_rule = (
+                f"- LENGTH: Keep the ENTIRE JSON (including brackets/keys) under {self.length_limit} characters.\n"
+                '- If shortening is needed, reduce only the "description" fields; keep cut count, indices, and camera keys intact.\n'
+                f"- Aim each description to stay within ~{per_cut_hint} characters; use concise cinematic wording.\n"
+            )
+
         user_prompt = (
             f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
             f"Total video duration: {self.total_duration_sec} seconds.\n"
@@ -1164,7 +1175,8 @@ class StoryboardLLMWorker(QtCore.QObject):
             f"{continuity_rule}"
             "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
             "- The first cut should establish the scene.\n"
-            "- The final cut should provide a sense of conclusion or climax.\n\n"
+            "- The final cut should provide a sense of conclusion or climax.\n"
+            f"{length_rule}\n"
             "Output format (JSON array):\n"
             "[\n"
             '  {"cut": 1, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'

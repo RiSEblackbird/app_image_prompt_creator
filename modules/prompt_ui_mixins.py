@@ -965,6 +965,7 @@ class PromptUIMixin:
             continuity_enhanced=continuity,
             video_style=video_style_ctx,
             content_flags=content_flags_ctx,
+            length_limit=getattr(config, "SORA_PROMPT_SAFE_CHARS", 1900),
         )
 
         # コンテキストを保存
