@@ -1017,6 +1017,9 @@ class StoryboardLLMWorker(QtCore.QObject):
     
     detected_characters を受け取ると、キャラクター情報をLLMに伝え、
     各カットの内容に応じて適切にキャラクターを言及させる（全カット強制ではない）。
+
+    additional_request を受け取ると、ユーザーの追加要求（任意）をプロンプトへ含める。
+    追加要求が別言語で書かれていても、出力（各カットの description ）は元プロンプトの言語を維持する。
     """
 
     finished = QtCore.Signal(str)
@@ -1033,6 +1036,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         continuity_enhanced: bool = False,
         video_style: dict | None = None,
         content_flags: dict | None = None,
+        additional_request: str | None = None,
         length_limit: int = config.SORA_PROMPT_SAFE_CHARS,
         auto_structure: bool = False,
         cut_count_min: int | None = None,
@@ -1052,6 +1056,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         self.continuity_enhanced = continuity_enhanced
         self.video_style = video_style
         self.content_flags = content_flags
+        self.additional_request = (additional_request or "").strip()
         self.length_limit = length_limit
         self.auto_structure = auto_structure
         self.cut_count_min = cut_count_min or config.STORYBOARD_AUTO_MIN_CUTS
@@ -1129,6 +1134,7 @@ class StoryboardLLMWorker(QtCore.QObject):
             "You are a professional storyboard writer for video production. "
             "Your task is to split a given image prompt into multiple cinematic cuts for a short video. "
             "Each cut should be a vivid yet depictable visual description suitable for AI video generation. "
+            "You MUST follow any additional user requests provided in the user prompt. "
             "CRITICAL: You MUST preserve the original language of the source prompt. "
             "If the source is in Japanese, write descriptions in Japanese. "
             "If the source is in English, write descriptions in English. "
@@ -1192,6 +1198,15 @@ class StoryboardLLMWorker(QtCore.QObject):
                     "- Example: '@ex.abc is surprised and jumps up, dropping the juice he was holding.'\n\n"
                 )
 
+        additional_request_context = ""
+        if self.additional_request:
+            additional_request_context = (
+                "ADDITIONAL USER REQUESTS (must follow):\n"
+                "- Apply these requests even if they are written in a different language.\n"
+                "- IMPORTANT: Still keep the output language the same as the source prompt.\n"
+                f"{self.additional_request}\n\n"
+            )
+
         length_rule = ""
         if self.length_limit and self.length_limit > 0:
             length_rule = (
@@ -1216,6 +1231,7 @@ class StoryboardLLMWorker(QtCore.QObject):
                 "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n\n"
                 + style_context
                 + character_context
+                + additional_request_context
                 + "Rules:\n"
                 "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
                 "- DEPICTABILITY FIRST: For each cut, ensure the described visuals/actions are realistically depictable within its duration_sec.\n"
@@ -1251,6 +1267,7 @@ class StoryboardLLMWorker(QtCore.QObject):
                     "HARD CONSTRAINT: Keep the action density per cut realistic for its duration so the whole storyboard fits the total duration.\n\n"
                     + style_context
                     + character_context
+                    + additional_request_context
                     + "Rules:\n"
                     "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
                     "- DEPICTABILITY FIRST: Choose durations and descriptions together. If a cut is short, keep it extremely simple.\n"
@@ -1280,6 +1297,7 @@ class StoryboardLLMWorker(QtCore.QObject):
                     "HARD CONSTRAINT: Keep the action density per cut realistic for its duration so the whole storyboard fits the total duration.\n\n"
                     + style_context
                     + character_context
+                    + additional_request_context
                     + "Rules:\n"
                     "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
                     f"- DEPICTABILITY FIRST: Assume each cut lasts ~{duration_per_cut} seconds. Keep each cut realistically depictable within that time.\n"
