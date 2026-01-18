@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import re
 from typing import Iterable, List
@@ -576,6 +577,18 @@ class PromptUIMixin:
         settings_row.addStretch()
         storyboard_layout.addLayout(settings_row)
 
+        # 追加要求（任意）
+        sb_extra_group = QtWidgets.QGroupBox("追加要求（任意）")
+        sb_extra_group.setToolTip("ストーリーボード生成(LLM)時に、任意の追加指示をLLMへ送信します。")
+        sb_extra_layout = QtWidgets.QVBoxLayout(sb_extra_group)
+        self.text_sb_additional_request = QtWidgets.QPlainTextEdit()
+        self.text_sb_additional_request.setPlaceholderText(
+            "例: 人物Aが主役です / 人物Cの登場シーンを削除 / 犬ではなく猫にする / アニメ調の映像にする"
+        )
+        self.text_sb_additional_request.setMinimumHeight(60)
+        sb_extra_layout.addWidget(self.text_sb_additional_request)
+        storyboard_layout.addWidget(sb_extra_group)
+
         # カットリストと詳細のスプリッター
         sb_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
 
@@ -709,6 +722,10 @@ class PromptUIMixin:
         self._sb_content_flags: dict = None  # 抽出した content_flags
         self._sb_total_duration_override: float | None = None  # LLM自動決定した総尺
         self._sb_detected_characters: List[str] = []  # テキストから検出したキャラクターID
+        # NOTE:
+        # ストーリーボードの開始秒/尺は常に連動して編集される（非連動状態はあり得ない）。
+        # QDoubleSpinBox の valueChanged → 内部状態更新 → UI再描画 の際に再入しないようガードを置く。
+        self._sb_time_edit_guard: bool = False
 
     # =============================
     # ストーリーボードタブのイベントハンドラ
@@ -923,15 +940,119 @@ class PromptUIMixin:
         self._sb_cuts[self._sb_current_index].description = self.text_sb_cut_desc.toPlainText()
 
     def _on_sb_cut_time_changed(self):
-        """カットの時間設定変更時の処理。"""
+        """カットの時間設定変更時の処理。
+
+        仕様:
+        - 開始秒(start_sec)と尺(duration_sec)は常に連動しており、非連動状態は存在しない。
+        - カットiの「開始」を変更した場合: 直前カット(i-1)の尺を調整して開始へ合わせ、以降は累積でstartを再計算する。
+        - カットiの「尺」を変更した場合: その尺を更新し、以降は累積でstartを再計算する。
+        - 総尺は UI の選択値（または内部で保持している総尺）を厳守し、最後のカットの尺で誤差/差分を吸収する。
+        - 失敗（負の開始、最後の尺が最小値未満など）の場合は変更を巻き戻し、警告する。
+        """
         if self._sb_current_index < 0 or self._sb_current_index >= len(self._sb_cuts):
             return
-        cut = self._sb_cuts[self._sb_current_index]
-        cut.start_sec = round(self.spin_sb_start.value(), 2)
-        cut.duration_sec = round(self.spin_sb_duration_cut.value(), 2)
-        self._sb_refresh_cut_list()
-        self.list_sb_cuts.setCurrentRow(self._sb_current_index)
-        self._recalculate_sb_total_from_cuts()
+
+        if getattr(self, "_sb_time_edit_guard", False):
+            return
+
+        idx = self._sb_current_index
+        target_total = float(self._get_sb_total_duration())
+        min_duration = 0.1  # QDoubleSpinBox の最小値（UI仕様）
+
+        # 失敗時の巻き戻し用スナップショット
+        snapshot = deepcopy(self._sb_cuts)
+
+        def revert_with_warning(message: str) -> None:
+            """時間編集を巻き戻し、ユーザーへ理由を提示する。"""
+            self._sb_time_edit_guard = True
+            try:
+                self._sb_cuts = snapshot
+                self._sb_refresh_cut_list()
+                self.list_sb_cuts.setCurrentRow(min(idx, len(self._sb_cuts) - 1))
+                # 詳細欄も内部状態へ同期しておく（spin の値を戻す）
+                if 0 <= self._sb_current_index < len(self._sb_cuts):
+                    self._on_sb_cut_selected(self._sb_current_index)
+            finally:
+                self._sb_time_edit_guard = False
+            QtWidgets.QMessageBox.warning(self, "時間調整できません", message)
+
+        sender = self.sender()
+        cuts = self._sb_cuts
+
+        # 1) ユーザーの入力を「duration の更新」に落とし込む
+        if sender is self.spin_sb_start:
+            # start編集は、直前カットのduration編集として解釈する（開始は累積値で一意）
+            if idx <= 0:
+                revert_with_warning("先頭カットの開始時刻は 0 秒固定です。")
+                return
+            new_start = round(float(self.spin_sb_start.value()), 2)
+            prev = cuts[idx - 1]
+            prev_start = round(float(prev.start_sec), 2)
+            new_prev_duration = round(new_start - prev_start, 2)
+            if new_prev_duration < min_duration:
+                revert_with_warning(
+                    f"開始時刻の変更により、直前カットの尺が {min_duration:.1f} 秒未満になります。"
+                )
+                return
+            prev.duration_sec = new_prev_duration
+
+        elif sender is self.spin_sb_duration_cut:
+            new_duration = round(float(self.spin_sb_duration_cut.value()), 2)
+            if new_duration < min_duration:
+                revert_with_warning(f"尺は {min_duration:.1f} 秒以上にしてください。")
+                return
+            cuts[idx].duration_sec = new_duration
+        else:
+            # blockSignals していない経路や将来のUI変更で sender が不明な場合でも、
+            # 現在のスピン値を優先して duration を更新して整合を取る。
+            new_duration = round(float(self.spin_sb_duration_cut.value()), 2)
+            if new_duration < min_duration:
+                revert_with_warning(f"尺は {min_duration:.1f} 秒以上にしてください。")
+                return
+            cuts[idx].duration_sec = new_duration
+
+        # 2) start を duration の累積で再計算（ギャップ/オーバーラップを作らない）
+        current = 0.0
+        for i, c in enumerate(cuts):
+            c.start_sec = round(current, 2)
+            current = round(current + float(c.duration_sec), 2)
+
+        # 3) 総尺を厳守するため、最後のカットの尺で差分を吸収（厳密・失敗なら巻き戻し）
+        if cuts:
+            last = cuts[-1]
+            actual_end = round(float(last.start_sec) + float(last.duration_sec), 2)
+            delta = round(target_total - actual_end, 2)
+            if abs(delta) >= 0.01:
+                new_last_duration = round(float(last.duration_sec) + delta, 2)
+                if new_last_duration < min_duration:
+                    revert_with_warning(
+                        "この編集だと総尺を維持できません（最後のカットの尺が短くなりすぎます）。"
+                    )
+                    return
+                last.duration_sec = new_last_duration
+
+        # 4) 最終検証（負の開始、総尺ズレ）
+        if any(float(c.start_sec) < 0.0 for c in cuts):
+            revert_with_warning("開始時刻が 0 秒未満になるため、この変更は適用できません。")
+            return
+        if cuts:
+            last = cuts[-1]
+            final_end = round(float(last.start_sec) + float(last.duration_sec), 2)
+            if abs(final_end - round(target_total, 2)) >= 0.02:
+                revert_with_warning(
+                    f"総尺が一致しません（期待: {target_total:.2f} 秒, 実際: {final_end:.2f} 秒）。"
+                )
+                return
+
+        # 5) UI反映（再入を防ぎつつ、詳細欄も最新化）
+        self._sb_time_edit_guard = True
+        try:
+            self._sb_refresh_cut_list()
+            self.list_sb_cuts.setCurrentRow(idx)
+            self._on_sb_cut_selected(idx)
+            self._recalculate_sb_total_from_cuts()
+        finally:
+            self._sb_time_edit_guard = False
 
     def _on_sb_cut_camera_changed(self):
         """カメラワーク変更時の処理。"""
@@ -1120,6 +1241,12 @@ class PromptUIMixin:
         # スタイル反映フラグを取得
         style_reflection = self.check_sb_style_reflection.isChecked()
 
+        # 追加要求（任意）を取得
+        additional_request = ""
+        extra_edit = getattr(self, "text_sb_additional_request", None)
+        if extra_edit is not None:
+            additional_request = (extra_edit.toPlainText() or "").strip()
+
         # スタイル反映が有効な場合、video_style / content_flags を LLM に渡す
         video_style_ctx = None
         content_flags_ctx = None
@@ -1153,6 +1280,7 @@ class PromptUIMixin:
             continuity_enhanced=continuity,
             video_style=video_style_ctx,
             content_flags=content_flags_ctx,
+            additional_request=additional_request,
             length_limit=getattr(config, "SORA_PROMPT_SAFE_CHARS", 1900),
             auto_structure=auto_structure,
             cut_count_min=config.STORYBOARD_AUTO_MIN_CUTS,

@@ -205,3 +205,66 @@ def test_extract_metadata_from_prompt_video_prompt_without_body_falls_back_to_fu
     _, _, prompt_text = extract_metadata_from_prompt(raw)
     assert prompt_text  # empty にはならない
     assert "video_prompt" in prompt_text
+
+
+def test_storyboard_time_edit_start_updates_prev_duration_and_ripples(prompt_generator, monkeypatch):
+    """開始時刻の編集が、直前カットの尺に反映され、以降の start が累積で再計算されること。"""
+
+    # QMessageBox がモーダルでテストを止めないようにする（失敗時の保険）
+    monkeypatch.setattr(QtWidgets.QMessageBox, "warning", lambda *args, **kwargs: None)
+
+    prompt_generator.spin_sb_cut_count.setValue(3)
+    prompt_generator._sb_init_from_template()
+    assert len(prompt_generator._sb_cuts) == 3
+
+    # 2番目のカットを選択し、開始を +1.0 秒ずらす → 前カットの尺が +1.0 秒になる
+    prompt_generator.list_sb_cuts.setCurrentRow(1)
+    before = [(c.start_sec, c.duration_sec) for c in prompt_generator._sb_cuts]
+
+    old_start_1 = prompt_generator._sb_cuts[1].start_sec
+    # QDoubleSpinBox は小数桁/ステップで丸めるため、実際に入った値を基準に差分を評価する
+    prompt_generator.spin_sb_start.setValue(old_start_1 + 1.0)
+    applied_start_1 = prompt_generator.spin_sb_start.value()
+    delta = round(applied_start_1 - old_start_1, 2)
+
+    after = [(c.start_sec, c.duration_sec) for c in prompt_generator._sb_cuts]
+
+    def assert_close(actual: float, expected: float, tol: float = 0.02) -> None:
+        assert abs(round(actual - expected, 2)) <= tol
+
+    # 前カット(0)の尺が増える
+    assert_close(after[0][1] - before[0][1], delta)
+    # 選択カット(1)の開始は更新される（累積なので一致するはず）
+    assert_close(after[1][0] - before[1][0], delta)
+    # 後続カット(2)の開始もリップルする
+    assert_close(after[2][0] - before[2][0], delta)
+
+
+def test_storyboard_time_edit_duration_ripples_next_start(prompt_generator, monkeypatch):
+    """尺の編集が、後続カットの start を自動更新し、総尺は最後で吸収されること。"""
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, "warning", lambda *args, **kwargs: None)
+
+    prompt_generator.spin_sb_cut_count.setValue(3)
+    prompt_generator._sb_init_from_template()
+    assert len(prompt_generator._sb_cuts) == 3
+
+    prompt_generator.list_sb_cuts.setCurrentRow(0)
+    before = [(c.start_sec, c.duration_sec) for c in prompt_generator._sb_cuts]
+
+    # 先頭カットの尺を +1.0 秒
+    old_dur_0 = prompt_generator._sb_cuts[0].duration_sec
+    prompt_generator.spin_sb_duration_cut.setValue(old_dur_0 + 1.0)
+    applied_dur_0 = prompt_generator.spin_sb_duration_cut.value()
+    delta = round(applied_dur_0 - old_dur_0, 2)
+
+    after = [(c.start_sec, c.duration_sec) for c in prompt_generator._sb_cuts]
+
+    def assert_close(actual: float, expected: float, tol: float = 0.02) -> None:
+        assert abs(round(actual - expected, 2)) <= tol
+
+    # 先頭カットの尺が増える
+    assert_close(after[0][1] - before[0][1], delta)
+    # 次カット以降の開始が押し出される
+    assert_close(after[1][0] - before[1][0], delta)
+    assert_close(after[2][0] - before[2][0], delta)
