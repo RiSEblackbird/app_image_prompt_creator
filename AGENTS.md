@@ -9,7 +9,7 @@ PySide6デスクトップアプリ。画像生成AI（Midjourney等）と動画�
 
 ```bash
 # 起動
-python app_image_prompt_creator/app_image_prompt_creator_qt.py
+python app_image_prompt_creator_qt.py
 
 # テスト
 python -m pytest tests/test_generate_text_qt.py -v
