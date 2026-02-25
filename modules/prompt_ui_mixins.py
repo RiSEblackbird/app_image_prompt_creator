@@ -1219,6 +1219,18 @@ class PromptUIMixin:
         cut_count = self.spin_sb_cut_count.value()
         auto_structure = self.check_sb_auto_structure.isChecked()
 
+        # テンプレートに定義されたプリセット固定カット（duration_sec が明示定義）を取得する。
+        # LLMには「固定カット分を除いた残り尺・残りカット数」を渡し、
+        # 生成後に固定カットを先頭へ挿入してストーリーボードを完成させる。
+        _template_id_for_llm = self.combo_sb_template.currentData() or "none"
+        _template_def = config.STORYBOARD_TEMPLATES.get(_template_id_for_llm, {})
+        _preset_cuts_def = _template_def.get("preset_cuts") or []
+        fixed_preset_defs = [p for p in _preset_cuts_def if p.get("duration_sec") is not None]
+        fixed_duration_sum = round(sum(float(p["duration_sec"]) for p in fixed_preset_defs), 2)
+        # 固定カット分を差し引いた、LLM に渡す尺とカット数
+        llm_total_duration = max(0.1, round(total_duration - fixed_duration_sum, 2))
+        llm_cut_count = max(1, cut_count - len(fixed_preset_defs))
+
         # カット数指定時の尺配分ポリシーを取得（自動構成の場合は常にLLM配分）
         allocation = "llm" if auto_structure else "uniform"
         alloc_combo = getattr(self, "combo_sb_time_allocation", None)
@@ -1269,12 +1281,13 @@ class PromptUIMixin:
                 else:
                     character_info.append({"id": char_id, "name": "", "pronoun_3rd": ""})
 
-        # メタデータを除いたプロンプトテキストをLLMに送信
+        # メタデータを除いたプロンプトテキストをLLMに送信。
+        # テンプレートにプリセット固定カットがある場合、LLMには残り尺・残りカット数を渡す。
         worker = StoryboardLLMWorker(
             text=prompt_text,
             model=self.combo_llm_model.currentText(),
-            cut_count=cut_count,
-            total_duration_sec=total_duration,
+            cut_count=llm_cut_count,
+            total_duration_sec=llm_total_duration,
             duration_allocation=allocation,
             output_language=output_language,
             continuity_enhanced=continuity,
@@ -1287,16 +1300,19 @@ class PromptUIMixin:
             cut_count_max=config.STORYBOARD_AUTO_MAX_CUTS,
             min_duration_sec=config.STORYBOARD_AUTO_MIN_DURATION,
             max_duration_sec=config.STORYBOARD_AUTO_MAX_DURATION,
-            default_duration_sec=total_duration or config.STORYBOARD_AUTO_DEFAULT_DURATION,
+            default_duration_sec=llm_total_duration or config.STORYBOARD_AUTO_DEFAULT_DURATION,
             detected_characters=character_info,
         )
 
-        # コンテキストを保存
+        # コンテキストを保存（プリセット固定カット情報を含む）
         self._sb_llm_context = {
-            "cut_count": cut_count,
-            "total_duration": total_duration,
+            "cut_count": llm_cut_count,
+            "total_duration": llm_total_duration,
+            "original_total_duration": total_duration,
             "auto_structure": auto_structure,
             "duration_allocation": allocation,
+            "fixed_preset_defs": fixed_preset_defs,
+            "fixed_duration_sum": fixed_duration_sum,
         }
 
         if self._start_background_worker(
@@ -1446,17 +1462,47 @@ class PromptUIMixin:
             self._sb_cuts.append(cut)
             current_time += duration_sec
 
-        # 総尺誤差を最終カットで吸収
+        # LLM生成カット分の総尺誤差を先に吸収する（固定カット挿入の前）
         self._adjust_sb_total_duration(total_duration)
+
+        # テンプレートのプリセット固定カットをLLM生成カットの前に挿入する。
+        # 固定カットは start_sec=0 から始まり、LLM生成カットは固定カット分だけ後方へオフセットする。
+        fixed_preset_defs: list = context.get("fixed_preset_defs") or []
+        fixed_duration_sum: float = float(context.get("fixed_duration_sum") or 0.0)
+        original_total_duration = context.get("original_total_duration")
+
+        if fixed_preset_defs and original_total_duration is not None:
+            fixed_cuts: List[StoryboardCut] = []
+            t = 0.0
+            for p in fixed_preset_defs:
+                dur = round(float(p["duration_sec"]), 2)
+                fixed_cuts.append(StoryboardCut(
+                    index=0,  # reindex で振り直す
+                    start_sec=round(t, 2),
+                    duration_sec=dur,
+                    description=p.get("description", ""),
+                    camera_work="static",
+                    characters=[],
+                    is_image_placeholder=bool(p.get("is_image_placeholder", False)),
+                ))
+                t += dur
+            # LLM生成カットの開始秒を固定カット合計尺分だけ後ろへずらす
+            for cut in self._sb_cuts:
+                cut.start_sec = round(cut.start_sec + fixed_duration_sum, 2)
+            # 結合・インデックス振り直し・最終尺調整
+            self._sb_cuts = fixed_cuts + self._sb_cuts
+            self._sb_reindex_cuts()
+            self._adjust_sb_total_duration(original_total_duration)
+            total_duration = original_total_duration
 
         # 自動構成の結果を保存
         if auto_structure:
             # 総尺はUI設定を厳守するため、LLM由来の総尺は保持しない
             self._clear_sb_duration_override()
-            # UIのカット数表示も結果に合わせる
+            # UIのカット数表示をプリセット固定カット含む合計に合わせる
             try:
                 self.spin_sb_cut_count.blockSignals(True)
-                self.spin_sb_cut_count.setValue(actual_cut_count)
+                self.spin_sb_cut_count.setValue(len(self._sb_cuts))
             finally:
                 self.spin_sb_cut_count.blockSignals(False)
         else:
@@ -1470,11 +1516,13 @@ class PromptUIMixin:
         extra = ""
         if allocation_fallback_to_uniform:
             extra = "\n※ LLM配分を要求しましたが duration_sec が返らなかったため、均等割当で生成しました。"
+        preset_note = f"（うち {len(fixed_preset_defs)} カットはテンプレートの固定カット）\n" if fixed_preset_defs else ""
         QtWidgets.QMessageBox.information(
             self,
             "生成完了",
             f"LLMでプロンプトから {actual_cut_count} カットを生成しました。\n"
-            f"（総尺: {total_duration:.1f}秒 / 尺配分: {allocation_label}）"
+            f"{preset_note}"
+            f"（合計 {len(self._sb_cuts)} カット / 総尺: {total_duration:.1f}秒 / 尺配分: {allocation_label}）"
             f"{extra}",
         )
 
