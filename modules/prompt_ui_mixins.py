@@ -257,14 +257,15 @@ class PromptUIMixin:
         cuts_row = QtWidgets.QHBoxLayout()
         cuts_row.addWidget(QtWidgets.QLabel("カット数(動画用):"))
         self.combo_tail_cut_count = QtWidgets.QComboBox()
-        # planned_cuts は末尾2(content_flags)へ入る値で、1〜6 または "many"（多数カット）を取りうる。
+        # planned_cuts は末尾2(content_flags)へ入る値で、設定レンジ内の整数または "many" を取りうる。
         # QComboBox は addItems() だと userData が入らないため、表示文字列と JSON 用の値を明示的に紐付ける。
         self.combo_tail_cut_count.addItem("未指定", userData=None)
-        for i in range(1, 7):
+        for i in range(config.CONTENT_FLAGS_PLANNED_CUTS_MIN, config.CONTENT_FLAGS_PLANNED_CUTS_MAX + 1):
             self.combo_tail_cut_count.addItem(str(i), userData=i)
         self.combo_tail_cut_count.addItem("とても多い", userData="many")
         self.combo_tail_cut_count.setToolTip(
             "作品全体の構成カット数の目安を指定します。"
+            f"手動指定できる範囲は {config.CONTENT_FLAGS_PLANNED_CUTS_MIN}〜{config.CONTENT_FLAGS_PLANNED_CUTS_MAX} カットです。"
             "「とても多い」は planned_cuts=\"many\"（多数カット）として JSON に反映されます。"
         )
         self.combo_tail_cut_count.currentIndexChanged.connect(self.auto_update)

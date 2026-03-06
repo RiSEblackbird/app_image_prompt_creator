@@ -514,7 +514,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
           - 「とても多い」選択時: person_present=true, person_count="many"
         on_screen_spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されている」ことを、英語の説明文として明示します。
         on_screen_non_dialogue_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイが存在する」ことを、英語の説明文として明示します。
-        planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜6 または "many"）を表します。
+        planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜15 または "many"）を表します。
         spoken_language は「動画内で想定される主な話し言葉の言語」を表し、"ja" または "en" を取ります。
         (Auto) 選択時や未指定時は planned_cuts / spoken_language フィールド自体を省略します。
         """
@@ -573,11 +573,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 "There are on-screen non-dialogue text overlays such as commentary captions, "
                 "labels, or sound-effect text rendered as part of the image."
             )
-        # 構成カット数 (1〜6 / "many") を planned_cuts として追加 (Auto の場合は省略)
+        # 構成カット数 (1〜15 / "many") を planned_cuts として追加 (Auto の場合は省略)
         cut_combo = getattr(self, "combo_tail_cut_count", None)
         if isinstance(cut_combo, QtWidgets.QComboBox):
             data = cut_combo.currentData()
-            if isinstance(data, int) and 1 <= data <= 6:
+            if (
+                isinstance(data, int)
+                and config.CONTENT_FLAGS_PLANNED_CUTS_MIN
+                <= data
+                <= config.CONTENT_FLAGS_PLANNED_CUTS_MAX
+            ):
                 flags["planned_cuts"] = data
             elif data == "many":
                 flags["planned_cuts"] = "many"
