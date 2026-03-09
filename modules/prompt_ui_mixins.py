@@ -27,6 +27,14 @@ from modules.storyboard import (
 class PromptUIMixin:
     """UI構築とフォント制御を担当するミックスイン。"""
 
+    def _sync_tail_media_type_visibility(self) -> None:
+        """末尾プリセット用途に応じて、用途不一致の入力UIを隠す。"""
+
+        media_type = self.combo_tail_media_type.currentText() or config.DEFAULT_TAIL_MEDIA_TYPE
+        is_movie = media_type == "movie"
+        # movie では Midjourney オプションを使わないため、誤入力防止のために非表示にする。
+        self.group_midjourney_options.setVisible(not is_movie)
+
     def _build_ui(self):
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
@@ -402,17 +410,36 @@ class PromptUIMixin:
         direction_row_4.addWidget(self.entry_direction_freeform_constraints, 1)
         direction_layout.addLayout(direction_row_4)
 
+        direction_row_5 = QtWidgets.QHBoxLayout()
+        # 映像の物理的な見え方に関する強い要件を、自由記述へ埋もれない専用フラグとして分離する。
+        self.check_direction_live_action_only = QtWidgets.QCheckBox("完全実写映像")
+        self.check_direction_live_action_only.setToolTip(
+            "ON にすると、CGアニメ調ではなく実写として成立する質感・撮影感を強く要求します。"
+        )
+        self.check_direction_live_action_only.stateChanged.connect(self.auto_update)
+        direction_row_5.addWidget(self.check_direction_live_action_only)
+
+        self.check_direction_ultra_high_resolution_8k = QtWidgets.QCheckBox("8K超高精細映像")
+        self.check_direction_ultra_high_resolution_8k.setToolTip(
+            "ON にすると、映像品質を 8K 相当の超高精細として強く要求します。"
+        )
+        self.check_direction_ultra_high_resolution_8k.stateChanged.connect(self.auto_update)
+        direction_row_5.addWidget(self.check_direction_ultra_high_resolution_8k)
+        direction_row_5.addStretch(1)
+        direction_layout.addLayout(direction_row_5)
+
         tail_form.addRow(direction_group)
         style_layout.addLayout(tail_form)
 
-        mj_group = QtWidgets.QGroupBox("オプション")
-        mj_grid = QtWidgets.QGridLayout(mj_group)
+        self.group_midjourney_options = QtWidgets.QGroupBox("オプション")
+        mj_grid = QtWidgets.QGridLayout(self.group_midjourney_options)
         self.combo_tail_ar = self._add_option_cell(mj_grid, 0, "ar オプション:", config.AR_OPTIONS)
         self.combo_tail_s = self._add_option_cell(mj_grid, 1, "s オプション:", config.S_OPTIONS)
         self.combo_tail_chaos = self._add_option_cell(mj_grid, 2, "chaos オプション:", config.CHAOS_OPTIONS)
         self.combo_tail_q = self._add_option_cell(mj_grid, 3, "q オプション:", config.Q_OPTIONS)
         self.combo_tail_weird = self._add_option_cell(mj_grid, 4, "weird オプション:", config.WEIRD_OPTIONS)
-        style_layout.addWidget(mj_group)
+        style_layout.addWidget(self.group_midjourney_options)
+        self._sync_tail_media_type_visibility()
 
         style_layout.addStretch(1)
         tabs.addTab(style_tab, "スタイル・オプション")

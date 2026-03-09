@@ -150,6 +150,7 @@ class PromptDataMixin:
 
     def _on_tail_media_type_change(self, value: str):
         self._update_tail_free_text_choices(reset_selection=True)
+        self._sync_tail_media_type_visibility()
         self.auto_update()
 
     def _update_tail_free_text_choices(self, reset_selection: bool):
