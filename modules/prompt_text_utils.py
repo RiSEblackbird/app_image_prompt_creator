@@ -6,6 +6,8 @@ import json
 import re
 from typing import List, Tuple
 
+MOVIE_REQUIREMENTS_HEADER = "Video requirements:"
+
 
 def sanitize_to_english(text: str) -> str:
     """プロンプト内の典型的な和語を軽量に英訳する。"""
@@ -232,6 +234,146 @@ def extract_sentence_details(text: str) -> List[str]:
     return details or [text.strip()]
 
 
+def _ensure_sentence(text: str) -> str:
+    """末尾句点を補い、1文として扱いやすい形へ整える。"""
+    normalized = " ".join(str(text or "").split()).strip()
+    if not normalized:
+        return ""
+    if normalized.endswith((".", "!", "?")):
+        return normalized
+    return normalized + "."
+
+
+def strip_compiled_movie_requirements(prompt_text: str) -> str:
+    """prompt 末尾に追記した Video requirements ブロックを取り除く。"""
+    text = (prompt_text or "").strip()
+    marker = f"\n\n{MOVIE_REQUIREMENTS_HEADER}\n"
+    if marker not in text:
+        return text
+    base, _ = text.rsplit(marker, 1)
+    return base.strip()
+
+
+def _compile_content_flags_to_sentences(content_flags: dict | None) -> List[str]:
+    """content_flags を動画モデルが読みやすい自然文へ変換する。"""
+    if not isinstance(content_flags, dict):
+        return []
+
+    sentences: List[str] = []
+    flag_phrases = {
+        "narration": ("Use narration", "Do not use narration"),
+        "bgm": ("Use background music", "Do not use background music"),
+        "ambient_sound": ("Include ambient environmental sound", "Do not use ambient environmental sound"),
+        "dialogue": ("Include spoken dialogue", "Do not use spoken dialogue"),
+    }
+    for key, (positive, negative) in flag_phrases.items():
+        value = content_flags.get(key)
+        if value is True:
+            sentences.append(_ensure_sentence(positive))
+        elif value is False:
+            sentences.append(_ensure_sentence(negative))
+
+    person_present = content_flags.get("person_present")
+    person_count = content_flags.get("person_count")
+    if person_present is False:
+        sentences.append("No people appear on screen.")
+    elif person_present is True:
+        if person_count == "1+":
+            sentences.append("At least one person appears on screen.")
+        elif person_count == "many":
+            sentences.append("Many people appear on screen.")
+        elif isinstance(person_count, int) and person_count >= 1:
+            sentences.append(_ensure_sentence(f"Show {person_count} people on screen"))
+        else:
+            sentences.append("People appear on screen.")
+
+    if content_flags.get("on_screen_spoken_dialogue_subtitles"):
+        sentences.append("Display on-screen subtitles for the spoken dialogue.")
+    if content_flags.get("on_screen_non_dialogue_text_overlays"):
+        sentences.append("Display non-dialogue text overlays on screen.")
+
+    spoken_language = content_flags.get("spoken_language")
+    if isinstance(spoken_language, str) and spoken_language in ("ja", "en"):
+        language_label = "Japanese" if spoken_language == "ja" else "English"
+        sentences.append(_ensure_sentence(f"If speech is present, use {language_label}"))
+
+    return sentences
+
+
+def _compile_direction_constraints_to_sentences(direction_constraints: dict | None) -> List[str]:
+    """direction_constraints を自然文へ変換する。"""
+    if not isinstance(direction_constraints, dict):
+        return []
+
+    sentences: List[str] = []
+
+    environment_scope = direction_constraints.get("environment_scope")
+    if environment_scope == "indoor_only":
+        sentences.append("Keep the entire video indoors only.")
+    elif environment_scope == "outdoor_only":
+        sentences.append("Keep the entire video outdoors only.")
+
+    subject_tags = direction_constraints.get("subject_tags")
+    if isinstance(subject_tags, list):
+        tags = [str(tag).strip() for tag in subject_tags if str(tag).strip()]
+        if tags:
+            readable_map = {
+                "architecture": "architecture",
+                "natural_elements": "natural elements",
+                "outdoor_ruins": "outdoor ruins",
+                "wildlife": "wildlife",
+            }
+            readable_tags = [readable_map.get(tag, tag) for tag in tags]
+            sentences.append(_ensure_sentence(f"Visually focus on these subjects: {', '.join(readable_tags)}"))
+
+    allow_still_frames = direction_constraints.get("allow_still_frames")
+    if allow_still_frames is False:
+        sentences.append("Avoid still or frozen-looking frames.")
+
+    camera_motion = direction_constraints.get("camera_motion")
+    if camera_motion == "mostly_static":
+        sentences.append("Keep camera movement mostly static and restrained.")
+    elif camera_motion == "gentle":
+        sentences.append("Use gentle, continuous camera movement.")
+    elif camera_motion == "continuous":
+        sentences.append("Keep the camera moving continuously.")
+
+    visual_energy = direction_constraints.get("visual_energy")
+    if visual_energy == "calm":
+        sentences.append("Keep the visuals calm and controlled.")
+    elif visual_energy == "vivid":
+        sentences.append("Keep the visuals vivid and full of life.")
+    elif visual_energy == "intense":
+        sentences.append("Keep the visuals intense and highly energetic.")
+
+    cut_duration_policy = direction_constraints.get("cut_duration_policy")
+    if cut_duration_policy == "uniform":
+        sentences.append("Keep cut durations evenly distributed.")
+    elif cut_duration_policy == "weighted":
+        sentences.append("Use intentionally varied cut durations with weighted emphasis.")
+    elif cut_duration_policy == "variable":
+        sentences.append("Cut durations do not need to be evenly distributed.")
+
+    freeform_constraints = direction_constraints.get("freeform_constraints")
+    if isinstance(freeform_constraints, str) and freeform_constraints.strip():
+        sentences.append(_ensure_sentence(freeform_constraints))
+
+    return sentences
+
+
+def compile_movie_instructions(content_flags: dict | None, direction_constraints: dict | None) -> List[str]:
+    """弱い構造化メタデータを、動画モデルが解釈しやすい自然文の文配列へ変換する。"""
+    sentences = _compile_content_flags_to_sentences(content_flags)
+    sentences.extend(_compile_direction_constraints_to_sentences(direction_constraints))
+    return [sentence for sentence in sentences if sentence]
+
+
+def compile_movie_requirements_text(content_flags: dict | None, direction_constraints: dict | None) -> str:
+    """弱い構造化メタデータを、LLM補助用の箇条書きテキストへ変換する。"""
+    sentences = compile_movie_instructions(content_flags, direction_constraints)
+    return "\n".join(f"- {sentence}" for sentence in sentences)
+
+
 def build_movie_json_payload(summary: str, details: List[str], scope: str, key: str) -> str:
     """動画用コアを最小化したJSON文字列にする。
 
@@ -308,6 +450,17 @@ def compose_movie_prompt(
     direction_constraints = _parse_json_block(direction_tail)
     if direction_constraints and "direction_constraints" in direction_constraints:
         base_payload["video_prompt"]["direction_constraints"] = direction_constraints["direction_constraints"]
+
+    prompt_text = strip_compiled_movie_requirements(base_payload["video_prompt"].get("prompt", ""))
+    if prompt_text or "prompt" in base_payload["video_prompt"]:
+        base_payload["video_prompt"]["prompt"] = prompt_text
+
+    compiled_instructions = compile_movie_instructions(
+        base_payload["video_prompt"].get("content_flags"),
+        base_payload["video_prompt"].get("direction_constraints"),
+    )
+    if compiled_instructions:
+        base_payload["video_prompt"]["instructions"] = compiled_instructions
 
     # Sora Web/iOS では --ar などのMJオプションは不要なので options_tail は無視する
 

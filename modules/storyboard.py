@@ -14,6 +14,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from . import config
 from .prompt_data import SoraCharacter, StoryboardCut, load_sora_characters
+from .prompt_text_utils import strip_compiled_movie_requirements
 
 
 def _adjust_last_cut_duration(cuts: List[StoryboardCut], total_duration_sec: float) -> List[StoryboardCut]:
@@ -60,7 +61,7 @@ def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[di
         # この関数は「自由記述欄のテキスト」から本文プロンプトを抽出するために使われる。
         # video_prompt 形式のJSONが入力されることもあるが、どんな構造でも本文が空扱いにならないように
         # 既知の場所から順に復元し、最後は全文フォールバックする。
-        remaining = vp.get("prompt") or ""
+        remaining = strip_compiled_movie_requirements(vp.get("prompt") or "")
         if not remaining and isinstance(vp.get("world_description"), dict):
             remaining = vp["world_description"].get("summary", "")
 

@@ -58,6 +58,7 @@ from modules.settings_loader import (
 )
 from modules.prompt_text_utils import (
     build_movie_json_payload,
+    strip_compiled_movie_requirements,
     compose_movie_prompt,
     detach_content_flags_tail,
     detach_direction_constraints_tail,
@@ -278,6 +279,44 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 return
         combo.setCurrentIndex(0)
 
+    def _set_checkbox_group_from_tags(self, tags: List[str]) -> List[str]:
+        """頻出対象タグに対応するチェックボックスへ反映し、残りタグを返す。"""
+        normalized_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+        tag_map = {
+            "architecture": self.check_direction_subject_architecture,
+            "natural_elements": self.check_direction_subject_natural_elements,
+            "outdoor_ruins": self.check_direction_subject_outdoor_ruins,
+            "wildlife": self.check_direction_subject_wildlife,
+        }
+        for value, checkbox in tag_map.items():
+            checkbox.setChecked(value in normalized_tags)
+        return [tag for tag in normalized_tags if tag not in tag_map]
+
+    def _collect_direction_subject_tags(self) -> List[str]:
+        """頻出対象チェックと追加タグ入力を統合し、重複なく返す。"""
+        tags: List[str] = []
+
+        def push(value: str) -> None:
+            if value and value not in tags:
+                tags.append(value)
+
+        if self.check_direction_subject_architecture.isChecked():
+            push("architecture")
+        if self.check_direction_subject_natural_elements.isChecked():
+            push("natural_elements")
+        if self.check_direction_subject_outdoor_ruins.isChecked():
+            push("outdoor_ruins")
+        if self.check_direction_subject_wildlife.isChecked():
+            push("wildlife")
+
+        raw_subject_tags = self.entry_direction_subject_tags.text().strip()
+        if raw_subject_tags:
+            for tag in re.split(r"[,、\n]+", raw_subject_tags):
+                cleaned = tag.strip()
+                if cleaned:
+                    push(cleaned)
+        return tags
+
     def _apply_content_flags_defaults(self, defaults: dict) -> None:
         """movie プリセットの content_flags 既定値を UI に反映する。"""
         widgets = [
@@ -329,6 +368,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         widgets = [
             self.check_direction_constraints_enabled,
             self.combo_direction_environment_scope,
+            self.check_direction_subject_architecture,
+            self.check_direction_subject_natural_elements,
+            self.check_direction_subject_outdoor_ruins,
+            self.check_direction_subject_wildlife,
             self.entry_direction_subject_tags,
             self.check_direction_allow_still_frames,
             self.combo_direction_camera_motion,
@@ -347,10 +390,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
 
             subject_tags = defaults.get("subject_tags")
             if isinstance(subject_tags, list):
-                subject_tags_text = ", ".join(str(tag).strip() for tag in subject_tags if str(tag).strip())
+                remaining_tags = self._set_checkbox_group_from_tags(subject_tags)
+                subject_tags_text = ", ".join(remaining_tags)
             else:
                 primary_subject = defaults.get("primary_subject", "")
-                subject_tags_text = str(primary_subject).strip() if primary_subject else ""
+                if primary_subject:
+                    remaining_tags = self._set_checkbox_group_from_tags([primary_subject])
+                    subject_tags_text = ", ".join(remaining_tags)
+                else:
+                    self._set_checkbox_group_from_tags([])
+                    subject_tags_text = ""
             self.entry_direction_subject_tags.setText(subject_tags_text)
 
             self.check_direction_allow_still_frames.setChecked(bool(defaults.get("allow_still_frames", True)))
@@ -749,15 +798,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         if isinstance(environment_scope, str) and environment_scope:
             constraints["environment_scope"] = environment_scope
 
-        raw_subject_tags = self.entry_direction_subject_tags.text().strip()
-        if raw_subject_tags:
-            subject_tags = [
-                tag.strip()
-                for tag in re.split(r"[,、\n]+", raw_subject_tags)
-                if tag.strip()
-            ]
-            if subject_tags:
-                constraints["subject_tags"] = subject_tags
+        subject_tags = self._collect_direction_subject_tags()
+        if subject_tags:
+            constraints["subject_tags"] = subject_tags
 
         camera_motion = self.combo_direction_camera_motion.currentData()
         if isinstance(camera_motion, str) and camera_motion:
@@ -1612,7 +1655,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             parsed = None
         if isinstance(parsed, dict) and isinstance(parsed.get("video_prompt"), dict):
             vp = parsed["video_prompt"]
-            main_text = vp.get("prompt") or ""
+            main_text = strip_compiled_movie_requirements(vp.get("prompt") or "")
             if not main_text and isinstance(vp.get("world_description"), dict):
                 main_text = vp["world_description"].get("summary", "")
             movie_tail = ""
@@ -1754,7 +1797,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             vp = parsed["video_prompt"]
             summary = ""
             if isinstance(vp.get("prompt"), str):
-                summary = vp["prompt"]
+                summary = strip_compiled_movie_requirements(vp["prompt"])
             elif isinstance(vp.get("world_description"), dict):
                 summary = vp["world_description"].get("summary", "")
             self.main_prompt = summary

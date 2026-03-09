@@ -210,14 +210,14 @@ def test_extract_metadata_from_prompt_video_prompt_without_body_falls_back_to_fu
 
 
 def test_compose_movie_prompt_keeps_direction_constraints():
-    """動画JSON統合時に direction_constraints が video_prompt 直下へ保持されること。"""
+    """動画JSON統合時に prompt を汚さず、自然文要件は instructions に分離すること。"""
 
     from modules.prompt_text_utils import compose_movie_prompt
 
     result = compose_movie_prompt(
         core_json='{"prompt":"A vast interior atrium."}',
         movie_tail='{"video_style":{"scope":"full_movie","format":"8K"}}',
-        flags_tail='{"content_flags":{"bgm":true,"person_present":false}}',
+        flags_tail='{"content_flags":{"bgm":true,"dialogue":false,"person_present":false}}',
         direction_tail='{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["ruins","wildlife"],"camera_motion":"continuous"}}',
         options_tail="",
     )
@@ -228,6 +228,32 @@ def test_compose_movie_prompt_keeps_direction_constraints():
     assert payload["video_prompt"]["direction_constraints"]["environment_scope"] == "outdoor_only"
     assert payload["video_prompt"]["direction_constraints"]["subject_tags"] == ["ruins", "wildlife"]
     assert payload["video_prompt"]["direction_constraints"]["camera_motion"] == "continuous"
+    assert payload["video_prompt"]["prompt"] == "A vast interior atrium."
+    assert "Do not use spoken dialogue." in payload["video_prompt"]["instructions"]
+    assert "No people appear on screen." in payload["video_prompt"]["instructions"]
+    assert "Keep the entire video outdoors only." in payload["video_prompt"]["instructions"]
+    assert "Visually focus on these subjects: ruins, wildlife." in payload["video_prompt"]["instructions"]
+
+
+def test_extract_metadata_from_prompt_strips_compiled_requirements_block():
+    """旧形式の polluted prompt でも本文抽出時に要件ブロックを除去できること。"""
+
+    from modules.storyboard import extract_metadata_from_prompt
+
+    raw = """
+    {
+      "video_prompt": {
+        "prompt": "A ruined stone gate in moonlight.\\n\\nVideo requirements:\\n- Keep the entire video outdoors only.\\n- Visually focus on these subjects: ruins, wildlife.",
+        "direction_constraints": {
+          "environment_scope": "outdoor_only",
+          "subject_tags": ["ruins", "wildlife"]
+        }
+      }
+    }
+    """
+    _, _, direction_constraints, prompt_text = extract_metadata_from_prompt(raw)
+    assert direction_constraints == {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"]}
+    assert prompt_text == "A ruined stone gate in moonlight."
 
 
 def test_make_direction_constraints_json_from_ui(prompt_generator):
@@ -236,7 +262,9 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
     prompt_generator.check_direction_constraints_enabled.setChecked(True)
     prompt_generator.combo_direction_environment_scope.setCurrentText("屋外のみ")
     prompt_generator.check_direction_allow_still_frames.setChecked(False)
-    prompt_generator.entry_direction_subject_tags.setText("ruins, wildlife")
+    prompt_generator.check_direction_subject_outdoor_ruins.setChecked(True)
+    prompt_generator.check_direction_subject_wildlife.setChecked(True)
+    prompt_generator.entry_direction_subject_tags.setText("coral reef")
     prompt_generator.combo_direction_camera_motion.setCurrentText("常時動く")
     prompt_generator.combo_direction_visual_energy.setCurrentText("生き生き")
     prompt_generator.combo_direction_cut_duration_policy.setCurrentText("可変")
@@ -248,7 +276,7 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
         "direction_constraints": {
             "allow_still_frames": False,
             "environment_scope": "outdoor_only",
-            "subject_tags": ["ruins", "wildlife"],
+            "subject_tags": ["outdoor_ruins", "wildlife", "coral reef"],
             "camera_motion": "continuous",
             "visual_energy": "vivid",
             "cut_duration_policy": "variable",

@@ -50,6 +50,12 @@ DIRECTION_ENVIRONMENT_SCOPE_CHOICES = [
     ("屋内のみ", "indoor_only"),
     ("屋外のみ", "outdoor_only"),
 ]
+DIRECTION_COMMON_SUBJECT_TAGS = [
+    ("建築物", "architecture"),
+    ("自然物", "natural_elements"),
+    ("屋外の遺跡", "outdoor_ruins"),
+    ("野生生物", "wildlife"),
+]
 DIRECTION_CAMERA_MOTION_CHOICES = [
     ("未指定", ""),
     ("固定寄り", "mostly_static"),

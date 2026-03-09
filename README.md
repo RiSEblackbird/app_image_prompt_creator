@@ -132,6 +132,8 @@ tails:
 
 `description_ja` はUI表示専用です。`prompt` は `video_style` の実体です。`content_flags_defaults` / `direction_constraints_defaults` は任意項目で、定義したプリセットだけが選択時に UI へ既定値を反映します。アプリ起動中にYAMLを保存すると自動でリロードされます。
 
+なお、`content_flags` や `direction_constraints` のうち動画モデルが解釈しづらい項目（`false` 系フラグ、対象タグ、自由制約など）は、最終出力時に `video_prompt.instructions` へ自然文の配列として自動展開されます。`video_prompt.prompt` 本文は汚さず、構造化JSONと自然文の補助情報を分離する設計です。
+
 ---
 
 ## content_flags（動画専用）
@@ -163,17 +165,20 @@ tails:
 |------|------|
 | 演出制約を反映 | マスタースイッチ。ONにしないとJSONは付与されません |
 | 環境 | `indoor_only` / `outdoor_only` |
-| 対象タグ | カンマ区切りの自由タグ。`ruins, wildlife, architecture` のように複数指定できます |
+| 頻出対象 | `建築物` / `自然物` / `屋外の遺跡` / `野生生物` を個別にONできます |
+| 追加対象タグ | 頻出対象にないものだけをカンマ区切りで追加します。例: `coral reef, volcanic landscape` |
 | 静止画カットを許可 | OFF で `allow_still_frames=false` |
 | カメラ運動 | `mostly_static` / `gentle` / `continuous` |
 | 映像の活力 | `calm` / `vivid` / `intense` |
 | カット尺 | `uniform` / `weighted` / `variable` |
-| 自由制約 | 定型キーに収まらない条件を自然文で補足 |
+| 追加自由制約 | 上の専用項目にない条件だけを自然文で補足 |
 
 出力例:
 ```json
-{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["ruins","wildlife"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","freeform_constraints":"Avoid modern urban elements."}}
+{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","freeform_constraints":"Avoid modern urban elements."}}
 ```
+
+このブロックは内部的にはJSONで保持され、必要に応じて `video_prompt.instructions` に自然文の補助情報としても反映されます。
 
 ---
 
@@ -203,7 +208,11 @@ tails:
     "prompt": "A serene zen garden at dawn with soft mist.",
     "video_style": {"scope": "full_movie", "description": "gentle cinematic look"},
     "content_flags": {"narration": true, "bgm": true, "planned_cuts": 3},
-    "direction_constraints": {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"]}
+    "direction_constraints": {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"]},
+    "instructions": [
+      "Keep the entire video outdoors only.",
+      "Visually focus on these subjects: ruins, wildlife."
+    ]
   }
 }
 ```

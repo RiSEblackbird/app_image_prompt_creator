@@ -312,16 +312,32 @@ class PromptUIMixin:
         self.combo_direction_environment_scope.currentIndexChanged.connect(self.auto_update)
         direction_row_1.addWidget(self.combo_direction_environment_scope)
 
-        direction_row_1.addWidget(QtWidgets.QLabel("対象タグ:"))
-        self.entry_direction_subject_tags = QtWidgets.QLineEdit()
-        self.entry_direction_subject_tags.setPlaceholderText("例: architecture, ruins, wildlife")
-        self.entry_direction_subject_tags.setToolTip(
-            "対象や主題をカンマ区切りで自由入力します。自然物・遺跡・野生生物など任意のタグを指定できます。"
-        )
-        self.entry_direction_subject_tags.textChanged.connect(self.auto_update)
-        direction_row_1.addWidget(self.entry_direction_subject_tags, 1)
+        direction_row_1.addWidget(QtWidgets.QLabel("頻出対象:"))
+        self.check_direction_subject_architecture = QtWidgets.QCheckBox("建築物")
+        self.check_direction_subject_natural_elements = QtWidgets.QCheckBox("自然物")
+        self.check_direction_subject_outdoor_ruins = QtWidgets.QCheckBox("屋外の遺跡")
+        self.check_direction_subject_wildlife = QtWidgets.QCheckBox("野生生物")
+        for chk in (
+            self.check_direction_subject_architecture,
+            self.check_direction_subject_natural_elements,
+            self.check_direction_subject_outdoor_ruins,
+            self.check_direction_subject_wildlife,
+        ):
+            chk.stateChanged.connect(self.auto_update)
+            direction_row_1.addWidget(chk)
         direction_row_1.addStretch(1)
         direction_layout.addLayout(direction_row_1)
+
+        direction_row_1b = QtWidgets.QHBoxLayout()
+        direction_row_1b.addWidget(QtWidgets.QLabel("追加対象タグ:"))
+        self.entry_direction_subject_tags = QtWidgets.QLineEdit()
+        self.entry_direction_subject_tags.setPlaceholderText("例: coral reef, volcanic landscape")
+        self.entry_direction_subject_tags.setToolTip(
+            "上の頻出対象にない対象だけを、カンマ区切りで追加します。"
+        )
+        self.entry_direction_subject_tags.textChanged.connect(self.auto_update)
+        direction_row_1b.addWidget(self.entry_direction_subject_tags, 1)
+        direction_layout.addLayout(direction_row_1b)
 
         direction_row_2 = QtWidgets.QHBoxLayout()
         self.check_direction_allow_still_frames = QtWidgets.QCheckBox("静止画カットを許可")
@@ -368,11 +384,11 @@ class PromptUIMixin:
         direction_layout.addLayout(direction_row_3)
 
         direction_row_4 = QtWidgets.QHBoxLayout()
-        direction_row_4.addWidget(QtWidgets.QLabel("自由制約:"))
+        direction_row_4.addWidget(QtWidgets.QLabel("追加自由制約:"))
         self.entry_direction_freeform_constraints = QtWidgets.QLineEdit()
-        self.entry_direction_freeform_constraints.setPlaceholderText("例: Avoid modern buildings and keep wildlife undisturbed")
+        self.entry_direction_freeform_constraints.setPlaceholderText("例: Avoid modern buildings")
         self.entry_direction_freeform_constraints.setToolTip(
-            "定型キーに収まらない演出制約を自然文で補足します。"
+            "上の専用項目にない条件だけを自然文で補足します。"
         )
         self.entry_direction_freeform_constraints.textChanged.connect(self.auto_update)
         direction_row_4.addWidget(self.entry_direction_freeform_constraints, 1)
