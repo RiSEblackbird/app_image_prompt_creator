@@ -635,7 +635,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
             return
         movie_tail = (context.get("movie_tail") or "").strip()
-        direction_tail = (context.get("direction_tail") or "").strip()
+        direction_tail = self._make_direction_constraints_json()
         options_tail = (context.get("options_tail") or "").strip()
         flags_tail = self._make_tail_flags_json()
 
@@ -1447,7 +1447,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             prepared = self._prepare_movie_prompt_parts()
             if not prepared:
                 return
-            main_text, options_tail, movie_tail, _, direction_tail = prepared
+            main_text, options_tail, movie_tail, _, _ = prepared
             details = extract_sentence_details(main_text)
             world_json = build_movie_json_payload(
                 summary=main_text.strip(),
@@ -1456,6 +1456,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 key="world_description",
             )
             flags_tail = self._make_tail_flags_json()
+            direction_tail = self._make_direction_constraints_json()
             result = compose_movie_prompt(world_json, movie_tail, flags_tail, direction_tail, options_tail)
             self.text_output.setPlainText(result)
             self._update_internal_prompt_from_text(result)
@@ -1618,7 +1619,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             return
         mode = context.get("mode", "world")
         movie_tail = context.get("movie_tail", "")
-        direction_tail = context.get("direction_tail", "")
+        direction_tail = self._make_direction_constraints_json()
         options_tail = context.get("options_tail", "")
         scope = "single_continuous_world" if mode == "world" else "single_shot_storyboard"
         json_key = "world_description" if mode == "world" else "storyboard"
