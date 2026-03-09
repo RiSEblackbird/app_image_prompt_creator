@@ -169,7 +169,7 @@ def test_storyboard_auto_structure_prompt_keeps_total_duration_fixed(qt_applicat
 
 
 def test_extract_metadata_from_prompt_fallbacks_to_storyboard_cut_descriptions():
-    """video_prompt.prompt が無いストーリーボードJSONでも、cuts[].description を本文として復元できること。"""
+    """video_prompt.prompt が無いストーリーボードJSONでも、メタ情報と本文を復元できること。"""
 
     from modules.storyboard import extract_metadata_from_prompt
 
@@ -178,6 +178,7 @@ def test_extract_metadata_from_prompt_fallbacks_to_storyboard_cut_descriptions()
       "video_prompt": {
         "video_style": {"genre": "tv_news_special"},
         "content_flags": {"bgm": true},
+        "direction_constraints": {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"]},
         "storyboard": {
           "total_duration_sec": 10.0,
           "template": "none",
@@ -189,9 +190,10 @@ def test_extract_metadata_from_prompt_fallbacks_to_storyboard_cut_descriptions()
       }
     }
     """
-    video_style, content_flags, prompt_text = extract_metadata_from_prompt(raw)
+    video_style, content_flags, direction_constraints, prompt_text = extract_metadata_from_prompt(raw)
     assert video_style == {"genre": "tv_news_special"}
     assert content_flags == {"bgm": True}
+    assert direction_constraints == {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"]}
     assert "東京の夜" in prompt_text
     assert "路地を走るタクシー" in prompt_text
 
@@ -202,9 +204,132 @@ def test_extract_metadata_from_prompt_video_prompt_without_body_falls_back_to_fu
     from modules.storyboard import extract_metadata_from_prompt
 
     raw = '{"video_prompt":{"storyboard":{"cuts":[{"index":0,"description":""}]}}}'
-    _, _, prompt_text = extract_metadata_from_prompt(raw)
+    _, _, _, prompt_text = extract_metadata_from_prompt(raw)
     assert prompt_text  # empty にはならない
     assert "video_prompt" in prompt_text
+
+
+def test_compose_movie_prompt_keeps_direction_constraints():
+    """動画JSON統合時に prompt を汚さず、自然文要件は instructions に分離すること。"""
+
+    from modules.prompt_text_utils import compose_movie_prompt
+
+    result = compose_movie_prompt(
+        core_json='{"prompt":"A vast interior atrium."}',
+        movie_tail='{"video_style":{"scope":"full_movie","format":"8K"}}',
+        flags_tail='{"content_flags":{"bgm":true,"dialogue":false,"person_present":false}}',
+        direction_tail='{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["ruins","wildlife"],"camera_motion":"continuous"}}',
+        options_tail="",
+    )
+
+    payload = qt_app.json.loads(result)
+    assert payload["video_prompt"]["video_style"]["format"] == "8K"
+    assert payload["video_prompt"]["content_flags"]["bgm"] is True
+    assert payload["video_prompt"]["direction_constraints"]["environment_scope"] == "outdoor_only"
+    assert payload["video_prompt"]["direction_constraints"]["subject_tags"] == ["ruins", "wildlife"]
+    assert payload["video_prompt"]["direction_constraints"]["camera_motion"] == "continuous"
+    assert payload["video_prompt"]["prompt"] == "A vast interior atrium."
+    assert "Do not use spoken dialogue." in payload["video_prompt"]["instructions"]
+    assert "No people appear on screen." in payload["video_prompt"]["instructions"]
+    assert "Keep the entire video outdoors only." in payload["video_prompt"]["instructions"]
+    assert "Visually focus on these subjects: ruins, wildlife." in payload["video_prompt"]["instructions"]
+
+
+def test_extract_metadata_from_prompt_strips_compiled_requirements_block():
+    """旧形式の polluted prompt でも本文抽出時に要件ブロックを除去できること。"""
+
+    from modules.storyboard import extract_metadata_from_prompt
+
+    raw = """
+    {
+      "video_prompt": {
+        "prompt": "A ruined stone gate in moonlight.\\n\\nVideo requirements:\\n- Keep the entire video outdoors only.\\n- Visually focus on these subjects: ruins, wildlife.",
+        "direction_constraints": {
+          "environment_scope": "outdoor_only",
+          "subject_tags": ["ruins", "wildlife"]
+        }
+      }
+    }
+    """
+    _, _, direction_constraints, prompt_text = extract_metadata_from_prompt(raw)
+    assert direction_constraints == {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"]}
+    assert prompt_text == "A ruined stone gate in moonlight."
+
+
+def test_make_direction_constraints_json_from_ui(prompt_generator):
+    """演出制約UIの選択が direction_constraints JSON として出力されること。"""
+
+    prompt_generator.check_direction_constraints_enabled.setChecked(True)
+    prompt_generator.combo_direction_environment_scope.setCurrentText("水中")
+    prompt_generator.check_direction_allow_still_frames.setChecked(False)
+    prompt_generator.direction_common_subject_actions["water_features"].setChecked(True)
+    prompt_generator.direction_common_subject_actions["celestial_bodies"].setChecked(True)
+    prompt_generator.entry_direction_subject_tags.setText("coral reef")
+    prompt_generator.combo_direction_camera_motion.setCurrentText("常時動く")
+    prompt_generator.combo_direction_visual_energy.setCurrentText("生き生き")
+    prompt_generator.combo_direction_cut_duration_policy.setCurrentText("可変")
+    prompt_generator.entry_direction_freeform_constraints.setText("Avoid modern urban elements.")
+
+    payload = qt_app.json.loads(prompt_generator._make_direction_constraints_json().strip())
+
+    assert payload == {
+        "direction_constraints": {
+            "allow_still_frames": False,
+            "environment_scope": "underwater",
+            "subject_tags": ["water_features", "celestial_bodies", "coral reef"],
+            "camera_motion": "continuous",
+            "visual_energy": "vivid",
+            "cut_duration_policy": "variable",
+            "freeform_constraints": "Avoid modern urban elements.",
+        }
+    }
+    assert prompt_generator.label_direction_common_subjects.text() in ("水辺・水域 / 天体", "天体 / 水辺・水域")
+
+
+def test_make_tail_flags_json_supports_explicit_zero_people(prompt_generator):
+    """0人選択時は未指定ではなく person_count=0 を明示出力すること。"""
+
+    prompt_generator.check_tail_flags_enabled.setChecked(True)
+    prompt_generator.combo_tail_person_count.setCurrentText("0人")
+
+    payload = qt_app.json.loads(prompt_generator._make_tail_flags_json().strip())
+
+    assert payload["content_flags"]["person_present"] is False
+    assert payload["content_flags"]["person_count"] == 0
+
+
+def test_update_option_does_not_restore_cleared_prompt(prompt_generator):
+    """出力欄を空にした後の部分更新で、直前の本文が復活しないこと。"""
+
+    prompt_generator.main_prompt = "Revived prompt should not return."
+    prompt_generator.option_prompt = " --ar 16:9"
+    prompt_generator.tail_free_texts = " cinematic lighting"
+    prompt_generator.text_output.setPlainText("")
+
+    prompt_generator.update_option()
+
+    assert prompt_generator.main_prompt == ""
+    assert prompt_generator.option_prompt == ""
+    assert prompt_generator.text_output.toPlainText() == ""
+
+
+def test_update_option_button_click_keeps_cleared_output_empty(prompt_generator):
+    """Qt の clicked(bool) 経由でも、空欄更新で旧本文が復活しないこと。"""
+
+    prompt_generator.main_prompt = "Revived prompt should not return."
+    prompt_generator.option_prompt = " --ar 16:9"
+    prompt_generator.tail_free_texts = " cinematic lighting"
+    prompt_generator.text_output.setPlainText("")
+
+    update_button = next(
+        button for button in prompt_generator.findChildren(QtWidgets.QPushButton)
+        if button.text() == "オプションのみ更新"
+    )
+    update_button.click()
+
+    assert prompt_generator.main_prompt == ""
+    assert prompt_generator.option_prompt == ""
+    assert prompt_generator.text_output.toPlainText() == ""
 
 
 def test_storyboard_time_edit_start_updates_prev_duration_and_ripples(prompt_generator, monkeypatch):

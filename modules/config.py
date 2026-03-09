@@ -14,8 +14,7 @@ WINDOW_TITLE = "画像プロンプトランダム生成ツール (PySide6)"
 DEFAULT_ROW_NUM = 10
 DEFAULT_TAIL_MEDIA_TYPE = "image"
 AVAILABLE_LLM_MODELS = [
-    "gpt-5.2",
-    "gpt-5.1",
+    "gpt-5.4",
     "gpt-4o-mini",
     "gpt-4o",
 ]
@@ -43,6 +42,50 @@ STORYBOARD_AUTO_DEFAULT_DURATION = 12.0
 # content_flags.planned_cuts の手動候補レンジ
 CONTENT_FLAGS_PLANNED_CUTS_MIN = 1
 CONTENT_FLAGS_PLANNED_CUTS_MAX = 15
+
+# direction_constraints の選択肢
+DIRECTION_ENVIRONMENT_SCOPE_CHOICES = [
+    ("未指定", ""),
+    ("屋内のみ", "indoor_only"),
+    ("屋外のみ", "outdoor_only"),
+    ("屋内外混在", "indoor_outdoor_mixed"),
+    ("地下", "underground"),
+    ("水中", "underwater"),
+    ("水上", "water_surface"),
+    ("空中", "aerial"),
+    ("宇宙空間", "space"),
+]
+DIRECTION_COMMON_SUBJECT_TAGS = [
+    ("建築物", "architecture"),
+    ("室内空間", "interior_space"),
+    ("都市インフラ", "urban_infrastructure"),
+    ("屋外の遺跡", "outdoor_ruins"),
+    ("地形・岩場", "natural_landforms"),
+    ("植物", "vegetation"),
+    ("水辺・水域", "water_features"),
+    ("野生生物", "wildlife"),
+    ("乗り物", "vehicles"),
+    ("機械", "machinery"),
+    ("天体", "celestial_bodies"),
+]
+DIRECTION_CAMERA_MOTION_CHOICES = [
+    ("未指定", ""),
+    ("固定寄り", "mostly_static"),
+    ("緩やかに動く", "gentle"),
+    ("常時動く", "continuous"),
+]
+DIRECTION_VISUAL_ENERGY_CHOICES = [
+    ("未指定", ""),
+    ("落ち着き", "calm"),
+    ("生き生き", "vivid"),
+    ("激しい", "intense"),
+]
+DIRECTION_CUT_DURATION_POLICY_CHOICES = [
+    ("未指定", ""),
+    ("均等", "uniform"),
+    ("強弱あり", "weighted"),
+    ("可変", "variable"),
+]
 
 # カメラワークの選択肢
 CAMERA_WORK_CHOICES = [

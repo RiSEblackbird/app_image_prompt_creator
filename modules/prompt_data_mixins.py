@@ -164,14 +164,14 @@ class PromptDataMixin:
         self.combo_tail_free.clear()
         for preset in presets:
             description = str(preset.get("description_ja", ""))
-            prompt = str(preset.get("prompt", ""))
-            self.combo_tail_free.addItem(description, userData=prompt)
+            self.combo_tail_free.addItem(description, userData=dict(preset))
 
         target_index = 0
         if not reset_selection and previous_prompt:
             for i in range(self.combo_tail_free.count()):
                 data = self.combo_tail_free.itemData(i)
-                if isinstance(data, str) and data == previous_prompt:
+                prompt = data.get("prompt", "") if isinstance(data, dict) else ""
+                if isinstance(prompt, str) and prompt == previous_prompt:
                     target_index = i
                     break
         self.combo_tail_free.setCurrentIndex(target_index)
@@ -491,7 +491,8 @@ class PromptDataMixin:
         if previous_prompt:
             for i in range(self.combo_tail_free.count()):
                 data = self.combo_tail_free.itemData(i)
-                if isinstance(data, str) and data == previous_prompt:
+                prompt = data.get("prompt", "") if isinstance(data, dict) else ""
+                if isinstance(prompt, str) and prompt == previous_prompt:
                     self.combo_tail_free.setCurrentIndex(i)
                     break
 

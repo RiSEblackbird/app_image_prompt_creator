@@ -34,6 +34,9 @@ tails:
     - id: movie_8k_master
       description_ja: "8Kマスターで滑らかな編集リズムを持つ高解像度シネマティック作品"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an 8K-mastered cinematic video with smooth editing rhythm across the entire piece, delivering intensely polished visual storytelling\",\"format\":\"8K\"}}"
+    - id: movie_architecture_dynamic_8k
+      description_ja: "8Kシネマティックベース（制約は手動指定）"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an 8K-mastered cinematic video with smooth editing rhythm across the entire piece, delivering intensely polished visual storytelling\",\"format\":\"8K\"}}"
     - id: movie_60s_film
       description_ja: "1960年代のフィルムプリント風グレーディングで仕上げた雰囲気重視のカット群"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is atmospheric footage graded to look like an authentic 1960s film print, delivering intensely polished visual storytelling\",\"grade\":\"film emulation\"}}"

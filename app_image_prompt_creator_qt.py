@@ -58,8 +58,10 @@ from modules.settings_loader import (
 )
 from modules.prompt_text_utils import (
     build_movie_json_payload,
+    strip_compiled_movie_requirements,
     compose_movie_prompt,
     detach_content_flags_tail,
+    detach_direction_constraints_tail,
     detach_movie_tail_for_llm,
     extract_sentence_details,
     inherit_options_if_present,
@@ -257,6 +259,192 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         """プリセット変更時にガイダンスのプレースホルダーなどを更新する（必要に応じて実装）。"""
         pass
 
+    def _get_selected_tail_preset(self) -> Optional[dict]:
+        """末尾プリセットの選択項目が YAML 由来なら、その辞書を返す。"""
+        index = self.combo_tail_free.currentIndex()
+        if not (0 <= index < self.combo_tail_free.count()):
+            return None
+        if self.combo_tail_free.currentText().strip() != self.combo_tail_free.itemText(index).strip():
+            return None
+        data = self.combo_tail_free.itemData(index)
+        if isinstance(data, dict):
+            return data
+        return None
+
+    def _set_combo_to_data(self, combo: QtWidgets.QComboBox, target_value) -> None:
+        """userData を基準にコンボボックスを設定し、無ければ先頭へ戻す。"""
+        for i in range(combo.count()):
+            if combo.itemData(i) == target_value:
+                combo.setCurrentIndex(i)
+                return
+        combo.setCurrentIndex(0)
+
+    def _update_direction_common_subjects_summary(self) -> None:
+        """頻出対象の選択内容を短いラベルへ集約表示する。"""
+        actions = getattr(self, "direction_common_subject_actions", {})
+        selected_labels = [
+            action.text()
+            for action in actions.values()
+            if isinstance(action, QtGui.QAction) and action.isChecked()
+        ]
+        label = getattr(self, "label_direction_common_subjects", None)
+        if label is None:
+            return
+        if not selected_labels:
+            label.setText("未選択")
+        elif len(selected_labels) <= 2:
+            label.setText(" / ".join(selected_labels))
+        else:
+            label.setText(f"{selected_labels[0]} / {selected_labels[1]} / 他{len(selected_labels) - 2}件")
+
+    def _on_direction_common_subjects_changed(self, checked: bool = False) -> None:
+        """頻出対象メニュー変更時に要約表示と自動反映を更新する。"""
+        self._update_direction_common_subjects_summary()
+        self.auto_update()
+
+    def _set_common_subject_actions_from_tags(self, tags: List[str]) -> List[str]:
+        """頻出対象タグに対応するメニュー項目へ反映し、残りタグを返す。"""
+        normalized_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+        action_map = getattr(self, "direction_common_subject_actions", {})
+        for value, action in action_map.items():
+            action.setChecked(value in normalized_tags)
+        self._update_direction_common_subjects_summary()
+        return [tag for tag in normalized_tags if tag not in action_map]
+
+    def _collect_direction_subject_tags(self) -> List[str]:
+        """頻出対象メニューと追加タグ入力を統合し、重複なく返す。"""
+        tags: List[str] = []
+
+        def push(value: str) -> None:
+            if value and value not in tags:
+                tags.append(value)
+
+        for value, action in getattr(self, "direction_common_subject_actions", {}).items():
+            if isinstance(action, QtGui.QAction) and action.isChecked():
+                push(value)
+
+        raw_subject_tags = self.entry_direction_subject_tags.text().strip()
+        if raw_subject_tags:
+            for tag in re.split(r"[,、\n]+", raw_subject_tags):
+                cleaned = tag.strip()
+                if cleaned:
+                    push(cleaned)
+        return tags
+
+    def _apply_content_flags_defaults(self, defaults: dict) -> None:
+        """movie プリセットの content_flags 既定値を UI に反映する。"""
+        widgets = [
+            self.check_tail_flags_enabled,
+            self.check_tail_flag_narration,
+            self.check_tail_flag_bgm,
+            self.check_tail_flag_ambient,
+            self.check_tail_flag_dialogue,
+            self.check_tail_flag_dialogue_subtitle,
+            self.check_tail_flag_telop,
+            self.combo_tail_person_count,
+            self.combo_tail_cut_count,
+            self.combo_tail_language,
+        ]
+        blockers = [QtCore.QSignalBlocker(widget) for widget in widgets]
+        try:
+            self.check_tail_flags_enabled.setChecked(bool(defaults))
+            self.check_tail_flag_narration.setChecked(bool(defaults.get("narration", False)))
+            self.check_tail_flag_bgm.setChecked(bool(defaults.get("bgm", False)))
+            self.check_tail_flag_ambient.setChecked(bool(defaults.get("ambient_sound", False)))
+            self.check_tail_flag_dialogue.setChecked(bool(defaults.get("dialogue", False)))
+            self.check_tail_flag_dialogue_subtitle.setChecked(bool(defaults.get("on_screen_spoken_dialogue_subtitles")))
+            self.check_tail_flag_telop.setChecked(bool(defaults.get("on_screen_non_dialogue_text_overlays")))
+
+            person_present = defaults.get("person_present")
+            person_count = defaults.get("person_count")
+            if person_count == 0:
+                self._set_combo_to_data(self.combo_tail_person_count, 0)
+            elif person_present is False or person_count in (None, ""):
+                self._set_combo_to_data(self.combo_tail_person_count, None)
+            elif person_count in ("1+", "many", 1, 2, 3, 4):
+                self._set_combo_to_data(self.combo_tail_person_count, person_count)
+            elif person_present:
+                self._set_combo_to_data(self.combo_tail_person_count, "1+")
+            else:
+                self._set_combo_to_data(self.combo_tail_person_count, None)
+
+            planned_cuts = defaults.get("planned_cuts")
+            if planned_cuts == "many" or isinstance(planned_cuts, int):
+                self._set_combo_to_data(self.combo_tail_cut_count, planned_cuts)
+            else:
+                self._set_combo_to_data(self.combo_tail_cut_count, None)
+
+            spoken_language = defaults.get("spoken_language", "")
+            self._set_combo_to_data(self.combo_tail_language, spoken_language if spoken_language in ("ja", "en") else "")
+        finally:
+            del blockers
+
+    def _apply_direction_constraints_defaults(self, defaults: dict) -> None:
+        """movie プリセットの演出制約既定値を UI に反映する。"""
+        widgets = [
+            self.check_direction_constraints_enabled,
+            self.combo_direction_environment_scope,
+            self.entry_direction_subject_tags,
+            self.check_direction_allow_still_frames,
+            self.combo_direction_camera_motion,
+            self.combo_direction_visual_energy,
+            self.combo_direction_cut_duration_policy,
+            self.entry_direction_freeform_constraints,
+        ]
+        blockers = [QtCore.QSignalBlocker(widget) for widget in widgets]
+        action_blockers = [
+            QtCore.QSignalBlocker(action)
+            for action in getattr(self, "direction_common_subject_actions", {}).values()
+        ]
+        try:
+            self.check_direction_constraints_enabled.setChecked(bool(defaults))
+
+            environment_scope = defaults.get("environment_scope", "")
+            if not environment_scope and defaults.get("allow_outdoor") is False:
+                environment_scope = "indoor_only"
+            self._set_combo_to_data(self.combo_direction_environment_scope, environment_scope)
+
+            subject_tags = defaults.get("subject_tags")
+            if isinstance(subject_tags, list):
+                remaining_tags = self._set_common_subject_actions_from_tags(subject_tags)
+                subject_tags_text = ", ".join(remaining_tags)
+            else:
+                primary_subject = defaults.get("primary_subject", "")
+                if primary_subject:
+                    remaining_tags = self._set_common_subject_actions_from_tags([primary_subject])
+                    subject_tags_text = ", ".join(remaining_tags)
+                else:
+                    self._set_common_subject_actions_from_tags([])
+                    subject_tags_text = ""
+            self.entry_direction_subject_tags.setText(subject_tags_text)
+
+            self.check_direction_allow_still_frames.setChecked(bool(defaults.get("allow_still_frames", True)))
+            self._set_combo_to_data(self.combo_direction_camera_motion, defaults.get("camera_motion", ""))
+            self._set_combo_to_data(self.combo_direction_visual_energy, defaults.get("visual_energy", ""))
+            self._set_combo_to_data(
+                self.combo_direction_cut_duration_policy,
+                defaults.get("cut_duration_policy", ""),
+            )
+            self.entry_direction_freeform_constraints.setText(str(defaults.get("freeform_constraints", "")).strip())
+        finally:
+            del action_blockers
+            del blockers
+
+    def _on_tail_preset_change(self, index: int) -> None:
+        """movie プリセット選択時に付随する既定パラメータを UI へ反映する。"""
+        if index < 0:
+            return
+        if (self.combo_tail_media_type.currentText() or config.DEFAULT_TAIL_MEDIA_TYPE) != "movie":
+            return
+        preset = self._get_selected_tail_preset()
+        if not preset:
+            return
+        if isinstance(preset.get("content_flags_defaults"), dict):
+            self._apply_content_flags_defaults(preset["content_flags_defaults"])
+        if isinstance(preset.get("direction_constraints_defaults"), dict):
+            self._apply_direction_constraints_defaults(preset["direction_constraints_defaults"])
+        self.auto_update()
+
     def _on_strength_change(self, value):
         labels = {0: "0 (微細)", 1: "1 (弱)", 2: "2 (標準)", 3: "3 (強)"}
         self.label_strength_val.setText(labels.get(value, str(value)))
@@ -318,21 +506,27 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         prepared = self._prepare_movie_prompt_parts()
         if not prepared:
             return
-        main_text, options_tail, movie_tail, content_flags_tail = prepared
+        main_text, options_tail, movie_tail, content_flags_tail, direction_tail = prepared
         if not main_text.strip():
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
             return
         fragments = extract_sentence_details(main_text)
-        video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
+        video_style_arg, content_flags_arg, direction_constraints_arg = self._resolve_style_reflection_contexts(
+            movie_tail,
+            content_flags_tail,
+            direction_tail,
+        )
         length_limit = self._get_selected_movie_length_limit()
         output_language = combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_chaos_mix_llm_worker(
             main_text=main_text,
             fragments=fragments,
             movie_tail=movie_tail,
+            direction_tail=direction_tail,
             options_tail=options_tail,
             video_style_context=video_style_arg,
             content_flags_context=content_flags_arg,
+            direction_constraints_context=direction_constraints_arg,
             length_limit=length_limit,
             output_language=output_language,
         )
@@ -375,9 +569,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             return
         # オプション継承処理 + 末尾2(content_flags)の再付与
         merged = inherit_options_if_present(self.text_output.toPlainText(), result)
-        base_without_flags, _ = detach_content_flags_tail(merged)
+        base_without_direction, _ = detach_direction_constraints_tail(merged)
+        base_without_flags, _ = detach_content_flags_tail(base_without_direction)
         flags_tail = self._make_tail_flags_json()
-        clean = (base_without_flags or "").rstrip() + flags_tail
+        direction_tail = self._make_direction_constraints_json()
+        clean = (base_without_flags or "").rstrip() + flags_tail + direction_tail
 
         # アレンジ後の全文を内部状態の最新版として反映し、後続操作でメイン部が巻き戻らないようにする。
         self._update_internal_prompt_from_text(clean)
@@ -398,9 +594,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         main_text: str,
         fragments: List[str],
         movie_tail: str,
+        direction_tail: str,
         options_tail: str,
         video_style_context: str,
         content_flags_context: str,
+        direction_constraints_context: str,
         length_limit: int,
         output_language: str,
     ):
@@ -413,11 +611,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             model=self.combo_llm_model.currentText(),
             video_style=video_style_context,
             content_flags=content_flags_context,
+            direction_constraints=direction_constraints_context,
             length_limit=length_limit,
             output_language=output_language,
         )
         context = {
             "movie_tail": movie_tail,
+            "direction_tail": direction_tail,
             "options_tail": options_tail,
         }
         if self._start_background_worker(worker, self._handle_chaos_mix_success, self._handle_chaos_mix_failure):
@@ -435,6 +635,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
             return
         movie_tail = (context.get("movie_tail") or "").strip()
+        direction_tail = self._make_direction_constraints_json()
         options_tail = (context.get("options_tail") or "").strip()
         flags_tail = self._make_tail_flags_json()
 
@@ -446,7 +647,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             scope="single_chaotic_scene",
             key="world_description",
         )
-        combined = compose_movie_prompt(chaos_json, movie_tail, flags_tail, options_tail)
+        combined = compose_movie_prompt(chaos_json, movie_tail, flags_tail, direction_tail, options_tail)
 
         self.text_output.setPlainText(combined)
         self._update_internal_prompt_from_text(combined)
@@ -507,8 +708,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         
         narration / bgm / ambient_sound / dialogue は音声要素。
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ（true/false）。
-        person_count は人数指定で、"1+"（1人以上）/ "many"（群衆・5人以上）または具体的な人数（1〜4の整数）を取る。
+        person_count は人数指定で、0 / "1+"（1人以上）/ "many"（群衆・5人以上）または具体的な人数（1〜4の整数）を取る。
           - 「(なし)」選択時: person_present=false, person_count は省略
+          - 「0人」選択時: person_present=false, person_count=0
           - 「1人以上」選択時: person_present=true, person_count="1+"
           - 「1人」〜「4人」選択時: person_present=true, person_count=N
           - 「とても多い」選択時: person_present=true, person_count="many"
@@ -531,7 +733,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         }
 
         # 登場人物の人数を person_present / person_count として設定
-        # - "(なし)" → person_present: false のみ
+        # - "(なし)" → person_present: false のみ（未指定寄り）
+        # - "0人" → person_present: false, person_count: 0
         # - "1人以上" → person_present: true, person_count: "1+"
         # - "1人"〜"4人" → person_present: true, person_count: N
         # - "とても多い" → person_present: true, person_count: "many"
@@ -539,8 +742,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         if isinstance(person_combo, QtWidgets.QComboBox):
             person_data = person_combo.currentData()
             if person_data is None:
-                # (なし) の場合: 人物なし
+                # (なし) の場合: 人物なしだが、人数は未指定のままにする
                 flags["person_present"] = False
+            elif person_data == 0:
+                # 0人の場合: 明示的に人物ゼロを指定する
+                flags["person_present"] = False
+                flags["person_count"] = 0
             elif person_data == "1+":
                 # 1人以上の場合: 人数を限定しない
                 flags["person_present"] = True
@@ -598,6 +805,48 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             return ""
         return " " + json_text
 
+    def _make_direction_constraints_json(self) -> str:
+        """演出制約 UI の現在値から direction_constraints JSON を生成する。"""
+        if (
+            not getattr(self, "check_direction_constraints_enabled", None)
+            or not self.check_direction_constraints_enabled.isChecked()
+        ):
+            return ""
+
+        constraints = {
+            "allow_still_frames": bool(self.check_direction_allow_still_frames.isChecked()),
+        }
+
+        environment_scope = self.combo_direction_environment_scope.currentData()
+        if isinstance(environment_scope, str) and environment_scope:
+            constraints["environment_scope"] = environment_scope
+
+        subject_tags = self._collect_direction_subject_tags()
+        if subject_tags:
+            constraints["subject_tags"] = subject_tags
+
+        camera_motion = self.combo_direction_camera_motion.currentData()
+        if isinstance(camera_motion, str) and camera_motion:
+            constraints["camera_motion"] = camera_motion
+
+        visual_energy = self.combo_direction_visual_energy.currentData()
+        if isinstance(visual_energy, str) and visual_energy:
+            constraints["visual_energy"] = visual_energy
+
+        cut_duration_policy = self.combo_direction_cut_duration_policy.currentData()
+        if isinstance(cut_duration_policy, str) and cut_duration_policy:
+            constraints["cut_duration_policy"] = cut_duration_policy
+
+        freeform_constraints = self.entry_direction_freeform_constraints.text().strip()
+        if freeform_constraints:
+            constraints["freeform_constraints"] = freeform_constraints
+
+        try:
+            json_text = json.dumps({"direction_constraints": constraints}, ensure_ascii=False)
+        except Exception:
+            return ""
+        return " " + json_text
+
     def _resolve_tail_free_prompt(self) -> str:
         """末尾プリセットの現在値を「出力用プロンプト文字列」として解決する。
 
@@ -614,8 +863,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             preset_prompt = self.combo_tail_free.itemData(index)
             # itemText と UI 上のテキストが一致している場合のみ「プリセット選択」とみなし、
             # 実プロンプト文字列を優先して返す。
-            if isinstance(preset_prompt, str) and preset_prompt and text == self.combo_tail_free.itemText(index):
-                return preset_prompt
+            if text == self.combo_tail_free.itemText(index):
+                if isinstance(preset_prompt, dict):
+                    prompt = preset_prompt.get("prompt", "")
+                    if isinstance(prompt, str) and prompt:
+                        return prompt
+                elif isinstance(preset_prompt, str) and preset_prompt:
+                    return preset_prompt
 
         # 上記条件を満たさない場合は、ユーザーの自由入力をそのまま利用する。
         return text
@@ -1143,6 +1397,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             main_text = (self.main_prompt or "").strip()
             movie_tail = self._resolve_tail_free_prompt()
             flags_tail = self._make_tail_flags_json()
+            direction_tail = self._make_direction_constraints_json()
             details = extract_sentence_details(main_text)
             core_json = build_movie_json_payload(
                 summary=main_text,
@@ -1150,7 +1405,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 scope="single_continuous_world",
                 key="world_description",
             )
-            result = compose_movie_prompt(core_json, movie_tail, flags_tail, options_tail="")
+            result = compose_movie_prompt(core_json, movie_tail, flags_tail, direction_tail, options_tail="")
             self.text_output.setPlainText(result)
             # JSONを基準に内部状態も再同期
             self._update_internal_prompt_from_text(result)
@@ -1192,7 +1447,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             prepared = self._prepare_movie_prompt_parts()
             if not prepared:
                 return
-            main_text, options_tail, movie_tail, _ = prepared
+            main_text, options_tail, movie_tail, _, _ = prepared
             details = extract_sentence_details(main_text)
             world_json = build_movie_json_payload(
                 summary=main_text.strip(),
@@ -1201,7 +1456,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 key="world_description",
             )
             flags_tail = self._make_tail_flags_json()
-            result = compose_movie_prompt(world_json, movie_tail, flags_tail, options_tail)
+            direction_tail = self._make_direction_constraints_json()
+            result = compose_movie_prompt(world_json, movie_tail, flags_tail, direction_tail, options_tail)
             self.text_output.setPlainText(result)
             self._update_internal_prompt_from_text(result)
             QtGui.QGuiApplication.clipboard().setText(result)
@@ -1213,9 +1469,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         prepared = self._prepare_movie_prompt_parts()
         if not prepared:
             return
-        main_text, options_tail, movie_tail, content_flags_tail = prepared
+        main_text, options_tail, movie_tail, content_flags_tail, direction_tail = prepared
         details = extract_sentence_details(main_text)
-        video_style_arg, content_flags_arg = self._resolve_style_reflection_contexts(movie_tail, content_flags_tail)
+        video_style_arg, content_flags_arg, direction_constraints_arg = self._resolve_style_reflection_contexts(
+            movie_tail,
+            content_flags_tail,
+            direction_tail,
+        )
         length_limit = self._get_selected_movie_length_limit()
         output_language = combo_language_code(getattr(self, "combo_movie_output_lang", None))
         self._start_movie_llm_transformation(
@@ -1223,9 +1483,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             main_text,
             details,
             movie_tail,
+            direction_tail,
             options_tail,
             video_style_arg,
             content_flags_arg,
+            direction_constraints_arg,
             length_limit,
             output_language=output_language,
         )
@@ -1292,9 +1554,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         main_text: str,
         details: List[str],
         movie_tail: str,
+        direction_tail: str,
         options_tail: str,
         video_style_context: str = "",
         content_flags_context: str = "",
+        direction_constraints_context: str = "",
         length_limit: int = 0,
         output_language: str = "en",
     ):
@@ -1308,12 +1572,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             details=details,
             video_style=video_style_context,
             content_flags=content_flags_context,
+            direction_constraints=direction_constraints_context,
             length_limit=length_limit,
             output_language=output_language,
         )
         context = {
             "mode": mode,
             "movie_tail": movie_tail,
+            "direction_tail": direction_tail,
             "options_tail": options_tail,
         }
         if self._start_background_worker(worker, self._handle_movie_llm_success, self._handle_movie_llm_failure):
@@ -1329,9 +1595,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             QtWidgets.QMessageBox.warning(self, "注意", "LLM から空のレスポンスが返されました。")
             return
         merged = inherit_options_if_present(self.text_output.toPlainText(), result)
-        base_without_flags, _ = detach_content_flags_tail(merged)
+        base_without_direction, _ = detach_direction_constraints_tail(merged)
+        base_without_flags, _ = detach_content_flags_tail(base_without_direction)
         flags_tail = self._make_tail_flags_json()
-        clean = (base_without_flags or "").rstrip() + flags_tail
+        direction_tail = self._make_direction_constraints_json()
+        clean = (base_without_flags or "").rstrip() + flags_tail + direction_tail
         # 文字数調整の結果も内部状態へ反映し、後続操作で旧テキストへ巻き戻らないようにする。
         self._update_internal_prompt_from_text(clean)
         self.text_output.setPlainText(clean)
@@ -1351,13 +1619,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             return
         mode = context.get("mode", "world")
         movie_tail = context.get("movie_tail", "")
+        direction_tail = self._make_direction_constraints_json()
         options_tail = context.get("options_tail", "")
         scope = "single_continuous_world" if mode == "world" else "single_shot_storyboard"
         json_key = "world_description" if mode == "world" else "storyboard"
         details = extract_sentence_details(result)
         world_json = build_movie_json_payload(result, details, scope=scope, key=json_key)
         flags_tail = self._make_tail_flags_json()
-        combined = compose_movie_prompt(world_json, movie_tail, flags_tail, options_tail)
+        combined = compose_movie_prompt(world_json, movie_tail, flags_tail, direction_tail, options_tail)
         self.text_output.setPlainText(combined)
         self._update_internal_prompt_from_text(combined)
         QtGui.QGuiApplication.clipboard().setText(combined)
@@ -1396,8 +1665,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
     # =============================
     # オプション整形系ヘルパー
     # =============================
-    def _prepare_movie_prompt_parts(self) -> Optional[Tuple[str, str, str, str]]:
-        """動画用整形で共通となる入力分解を行い、メインテキストと末尾要素（末尾2含む）を返す。"""
+    def _prepare_movie_prompt_parts(self) -> Optional[Tuple[str, str, str, str, str]]:
+        """動画用整形で共通となる入力分解を行い、メインテキストと各種メタ要素を返す。"""
         src = self.text_output.toPlainText().strip()
         if not src:
             QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
@@ -1410,7 +1679,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             parsed = None
         if isinstance(parsed, dict) and isinstance(parsed.get("video_prompt"), dict):
             vp = parsed["video_prompt"]
-            main_text = vp.get("prompt") or ""
+            main_text = strip_compiled_movie_requirements(vp.get("prompt") or "")
             if not main_text and isinstance(vp.get("world_description"), dict):
                 main_text = vp["world_description"].get("summary", "")
             movie_tail = ""
@@ -1419,27 +1688,39 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             flags_tail = ""
             if isinstance(vp.get("content_flags"), dict):
                 flags_tail = json.dumps({"content_flags": vp["content_flags"]}, ensure_ascii=False)
-            return main_text, "", movie_tail, flags_tail
+            direction_tail = ""
+            if isinstance(vp.get("direction_constraints"), dict):
+                direction_tail = json.dumps({"direction_constraints": vp["direction_constraints"]}, ensure_ascii=False)
+            return main_text, "", movie_tail, flags_tail, direction_tail
 
-        # 末尾2(JSONフラグ)はLLM用のメインテキストからは除外する
-        core_without_flags, flags_tail = detach_content_flags_tail(src)
+        # JSON メタ要素は LLM 用のメインテキストから除外する
+        core_without_direction, direction_tail = detach_direction_constraints_tail(src)
+        core_without_flags, flags_tail = detach_content_flags_tail(core_without_direction)
         core_without_movie, movie_tail = detach_movie_tail_for_llm(core_without_flags)
         main_text, options_tail, _ = split_prompt_and_options(core_without_movie)
         if not main_text:
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
             return None
-        return main_text, options_tail, movie_tail, flags_tail
+        return main_text, options_tail, movie_tail, flags_tail, direction_tail
 
-    def _resolve_style_reflection_contexts(self, movie_tail: str, content_flags_tail: str) -> Tuple[str, str]:
-        """スタイル反映ON時にLLMへ渡す video_style / content_flags を同時に解決する。"""
+    def _resolve_style_reflection_contexts(
+        self,
+        movie_tail: str,
+        content_flags_tail: str,
+        direction_tail: str,
+    ) -> Tuple[str, str, str]:
+        """スタイル反映ON時にLLMへ渡す動画メタデータを同時に解決する。"""
         checkbox = getattr(self, "check_use_video_style", None)
         if not checkbox or not checkbox.isChecked():
-            return "", ""
+            return "", "", ""
         video_style = (movie_tail or "").strip()
         content_flags = (content_flags_tail or "").strip()
+        direction_constraints = (direction_tail or "").strip()
         if not content_flags:
             content_flags = self._make_tail_flags_json().strip()
-        return video_style, content_flags
+        if not direction_constraints:
+            direction_constraints = self._make_direction_constraints_json().strip()
+        return video_style, content_flags, direction_constraints
 
     def _detach_content_flags_tail(self, text: str) -> Tuple[str, str]:
         return detach_content_flags_tail(text)
@@ -1530,6 +1811,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
     def _update_internal_prompt_from_text(self, full_text: str):
         normalized = (full_text or "").strip()
         if not normalized:
+            # 出力欄が空なら、部分更新時に旧プロンプトを再利用しないよう内部状態も空へ戻す。
+            self.main_prompt = ""
+            self.tail_free_texts = ""
+            self.option_prompt = ""
             return
         try:
             parsed = json.loads(normalized)
@@ -1540,7 +1825,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             vp = parsed["video_prompt"]
             summary = ""
             if isinstance(vp.get("prompt"), str):
-                summary = vp["prompt"]
+                summary = strip_compiled_movie_requirements(vp["prompt"])
             elif isinstance(vp.get("world_description"), dict):
                 summary = vp["world_description"].get("summary", "")
             self.main_prompt = summary
@@ -1552,8 +1837,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             return
 
         main_text, options_tail, _ = self._split_prompt_and_options(normalized)
-        # 末尾2(JSONフラグ)は内部状態の main_prompt からは外す
-        core_without_flags, _ = self._detach_content_flags_tail(main_text)
+        # 動画メタ要素(JSON)は内部状態の main_prompt から外す
+        core_without_direction, _ = detach_direction_constraints_tail(main_text)
+        core_without_flags, _ = self._detach_content_flags_tail(core_without_direction)
         core, movie_tail = self._detach_movie_tail_for_llm(core_without_flags)
         self.main_prompt = core
         self.tail_free_texts = f" {movie_tail}" if movie_tail else ""

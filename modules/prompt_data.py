@@ -94,7 +94,19 @@ def _normalize_tail_presets(raw_presets: dict) -> dict:
                 continue
             prompt = str(item.get("prompt", ""))
             description = str(item.get("description_ja", prompt))
-            bucket.append({"description_ja": description, "prompt": prompt})
+            normalized_item = {"description_ja": description, "prompt": prompt}
+
+            # movie プリセットは、選択時に既定の content_flags / direction_constraints を
+            # UI に流し込めるよう任意フィールドを保持する。
+            content_flags_defaults = item.get("content_flags_defaults")
+            if isinstance(content_flags_defaults, dict):
+                normalized_item["content_flags_defaults"] = deepcopy(content_flags_defaults)
+
+            direction_constraints_defaults = item.get("direction_constraints_defaults")
+            if isinstance(direction_constraints_defaults, dict):
+                normalized_item["direction_constraints_defaults"] = deepcopy(direction_constraints_defaults)
+
+            bucket.append(normalized_item)
         if bucket:
             normalized[str(media_type)] = bucket
 

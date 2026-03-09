@@ -12,6 +12,7 @@ from PySide6 import QtCore
 
 from . import config
 from .logging_utils import get_exception_trace
+from .prompt_text_utils import compile_movie_requirements_text
 
 
 def _normalize_language_code(code: Optional[str]) -> str:
@@ -83,6 +84,24 @@ def _append_temperature_hint(prompt_text: str, model_name: str, temperature: flo
     if hint:
         return f"{prompt_text}{hint}"
     return prompt_text
+
+
+def _parse_movie_metadata_block(raw, expected_key: str) -> dict | None:
+    """JSON文字列または辞書から指定キー配下の辞書を安全に取り出す。"""
+    if isinstance(raw, dict):
+        value = raw.get(expected_key)
+        return value if isinstance(value, dict) else None
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return None
+    if isinstance(parsed, dict):
+        value = parsed.get(expected_key)
+        return value if isinstance(value, dict) else None
+    return None
 
 
 def _compose_openai_payload(
@@ -503,6 +522,7 @@ class MovieLLMWorker(QtCore.QObject):
         details: List[str],
         video_style: str = "",
         content_flags: str = "",
+        direction_constraints: str = "",
         length_limit: int = 0,
         output_language: str = "en",
     ):
@@ -513,6 +533,7 @@ class MovieLLMWorker(QtCore.QObject):
         self.details = details or []
         self.video_style = video_style
         self.content_flags = content_flags
+        self.direction_constraints = direction_constraints
         self.length_limit = length_limit
         self.output_language = _normalize_language_code(output_language)
 
@@ -548,6 +569,11 @@ class MovieLLMWorker(QtCore.QObject):
 
     def _build_prompts(self) -> Tuple[str, str]:
         detail_lines = "\n".join(f"- {d}" for d in self.details)
+        parsed_content_flags = _parse_movie_metadata_block(self.content_flags, "content_flags")
+        parsed_direction_constraints = _parse_movie_metadata_block(
+            self.direction_constraints,
+            "direction_constraints",
+        )
 
         style_instruction = ""
         if self.video_style:
@@ -562,9 +588,27 @@ class MovieLLMWorker(QtCore.QObject):
                 f"\n\n[Content Flags]\n{self.content_flags}\n"
                 "IMPORTANT: Reflect these audio/subtitle/text overlay indicators explicitly in the rewritten description."
             )
+        direction_instruction = ""
+        if self.direction_constraints:
+            direction_instruction = (
+                f"\n\n[Direction Constraints]\n{self.direction_constraints}\n"
+                "IMPORTANT: Treat these as hard direction constraints for subject focus, outdoor usage, camera motion, and pacing."
+            )
+        natural_language_requirements = compile_movie_requirements_text(
+            parsed_content_flags,
+            parsed_direction_constraints,
+        )
+        natural_language_instruction = ""
+        if natural_language_requirements:
+            natural_language_instruction = (
+                f"\n\n[Natural Language Requirements]\n{natural_language_requirements}\n"
+                "IMPORTANT: Respect these plain-language requirements when rewriting the scene."
+            )
         style_context_block = ""
-        if style_instruction or content_flags_instruction:
-            style_context_block = f"{style_instruction}{content_flags_instruction}\n"
+        if style_instruction or content_flags_instruction or direction_instruction or natural_language_instruction:
+            style_context_block = (
+                f"{style_instruction}{content_flags_instruction}{direction_instruction}{natural_language_instruction}\n"
+            )
 
         limit_instruction = ""
         if self.length_limit > 0:
@@ -605,6 +649,7 @@ class ChaosMixLLMWorker(QtCore.QObject):
         model: str,
         video_style: str = "",
         content_flags: str = "",
+        direction_constraints: str = "",
         length_limit: int = 0,
         output_language: str = "en",
     ):
@@ -614,6 +659,7 @@ class ChaosMixLLMWorker(QtCore.QObject):
         self.model = model
         self.video_style = video_style
         self.content_flags = content_flags
+        self.direction_constraints = direction_constraints
         self.length_limit = length_limit
         self.output_language = _normalize_language_code(output_language)
 
@@ -663,6 +709,11 @@ class ChaosMixLLMWorker(QtCore.QObject):
         anchor_terms = _extract_anchor_terms(self.text, max_terms=8)
         anchor_line = ", ".join(anchor_terms) if anchor_terms else "(none)"
         nonce = uuid.uuid4().hex[:8]
+        parsed_content_flags = _parse_movie_metadata_block(self.content_flags, "content_flags")
+        parsed_direction_constraints = _parse_movie_metadata_block(
+            self.direction_constraints,
+            "direction_constraints",
+        )
 
         style_instruction = ""
         if self.video_style:
@@ -677,9 +728,27 @@ class ChaosMixLLMWorker(QtCore.QObject):
                 f"\n\n[Content Flags]\n{self.content_flags}\n"
                 "IMPORTANT: Preserve these audio/subtitle/text overlay requirements within the chaotic blended scene."
             )
+        direction_instruction = ""
+        if self.direction_constraints:
+            direction_instruction = (
+                f"\n\n[Direction Constraints]\n{self.direction_constraints}\n"
+                "IMPORTANT: Preserve these hard direction constraints even while blending fragments into one scene."
+            )
+        natural_language_requirements = compile_movie_requirements_text(
+            parsed_content_flags,
+            parsed_direction_constraints,
+        )
+        natural_language_instruction = ""
+        if natural_language_requirements:
+            natural_language_instruction = (
+                f"\n\n[Natural Language Requirements]\n{natural_language_requirements}\n"
+                "IMPORTANT: Preserve these plain-language requirements while blending the scene."
+            )
         style_context_block = ""
-        if style_instruction or content_flags_instruction:
-            style_context_block = f"{style_instruction}{content_flags_instruction}\n"
+        if style_instruction or content_flags_instruction or direction_instruction or natural_language_instruction:
+            style_context_block = (
+                f"{style_instruction}{content_flags_instruction}{direction_instruction}{natural_language_instruction}\n"
+            )
 
         system_prompt = _append_temperature_hint(
             "You are a chaotic scene blender. Force every fragment from a Midjourney prompt to coexist in the same physical location and the same moment. "
@@ -1036,6 +1105,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         continuity_enhanced: bool = False,
         video_style: dict | None = None,
         content_flags: dict | None = None,
+        direction_constraints: dict | None = None,
         additional_request: str | None = None,
         length_limit: int = config.SORA_PROMPT_SAFE_CHARS,
         auto_structure: bool = False,
@@ -1056,6 +1126,7 @@ class StoryboardLLMWorker(QtCore.QObject):
         self.continuity_enhanced = continuity_enhanced
         self.video_style = video_style
         self.content_flags = content_flags
+        self.direction_constraints = direction_constraints
         self.additional_request = (additional_request or "").strip()
         self.length_limit = length_limit
         self.auto_structure = auto_structure
@@ -1122,9 +1193,9 @@ class StoryboardLLMWorker(QtCore.QObject):
 
         # スタイル反映時の追加指示
         style_instruction = ""
-        if self.video_style or self.content_flags:
+        if self.video_style or self.content_flags or self.direction_constraints:
             style_instruction = (
-                "STYLE REFLECTION MODE: Use the provided video_style and/or content_flags as background context. "
+                "STYLE REFLECTION MODE: Use the provided video_style, content_flags, and/or direction_constraints as background context. "
                 "Let these guide the mood, lighting, camera preferences, and presence of characters or audio elements "
                 "in each cut description. Do NOT simply repeat this metadata; instead, subtly incorporate it into "
                 "the visual description so the generated cuts naturally align with the intended style and constraints. "
@@ -1157,15 +1228,29 @@ class StoryboardLLMWorker(QtCore.QObject):
 
         # スタイル反映時のコンテキスト追加
         style_context = ""
-        if self.video_style or self.content_flags:
+        if self.video_style or self.content_flags or self.direction_constraints:
             style_parts = []
             if self.video_style:
                 style_parts.append(f"video_style: {json.dumps(self.video_style, ensure_ascii=False)}")
             if self.content_flags:
                 style_parts.append(f"content_flags: {json.dumps(self.content_flags, ensure_ascii=False)}")
+            if self.direction_constraints:
+                style_parts.append(
+                    f"direction_constraints: {json.dumps(self.direction_constraints, ensure_ascii=False)}"
+                )
             style_context = (
                 "Background context (use subtly, do NOT copy verbatim):\n"
                 + "\n".join(style_parts)
+                + "\n\n"
+            )
+        natural_language_requirements = compile_movie_requirements_text(
+            self.content_flags,
+            self.direction_constraints,
+        )
+        if natural_language_requirements:
+            style_context += (
+                "Natural language requirements (apply faithfully, do not copy verbatim):\n"
+                + natural_language_requirements
                 + "\n\n"
             )
 
