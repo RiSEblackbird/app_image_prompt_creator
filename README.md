@@ -32,8 +32,10 @@
 
 ### 動画生成向け
 - **末尾プリセット（movie）**: `{"video_style": ...}` JSON で動画スタイルを指定
+- **添付画像世界プリセット**: 添付画像に写る世界をそのまま動画として展開する `movie` 末尾1を選択可能
 - **content_flags**: ナレーション・BGM・字幕・カット数などをJSONで付与
 - **用途別UI切替**: 末尾プリセット用途を `movie` にすると Midjourney 用「オプション」を非表示化
+- **演出制約の品質指定**: `完全実写映像` と `8K超高精細映像` を個別にON/OFF可能
 - **JSON整形**: メインテキストを `world_description` や `storyboard` に変換
 - **LLM改良**: 世界観整形 / カオスミックス
 
@@ -108,7 +110,7 @@ python app_image_prompt_creator/app_image_prompt_creator_qt.py
 高解像度写真、8K、イラスト系の文末テキストを収録しています。
 
 ### movie プリセット
-JSON形式で `video_style` を定義します。プリセットによっては `content_flags_defaults` と `direction_constraints_defaults` も同時に持ち、選択した瞬間に動画向けの既定パラメータを UI へ流し込めます。TV番組系（ニュース、旅番組、ドキュメンタリー等）、映画系（歴史超大作、青春映画、ファンタジー等）、報道・現地リポート、ロケ・体験番組など多数のカテゴリから選択できます。
+JSON形式で `video_style` を定義します。プリセットによっては `content_flags_defaults` と `direction_constraints_defaults` も同時に持ち、選択した瞬間に動画向けの既定パラメータを UI へ流し込めます。TV番組系（ニュース、旅番組、ドキュメンタリー等）、映画系（歴史超大作、青春映画、ファンタジー等）、報道・現地リポート、ロケ・体験番組など多数のカテゴリに加え、`添付画像に写る世界についての動画` のように添付画像の世界観を動かす専用プリセットも選べます。
 
 > **注意**: `movie` 用プリセットを使う場合は、末尾プリセット用途を `movie` に切り替えてから選択してください。`image` のままだとJSONが正しく付与されません。
 
@@ -174,11 +176,13 @@ tails:
 | カメラ運動 | `mostly_static` / `gentle` / `continuous` |
 | 映像の活力 | `calm` / `vivid` / `intense` |
 | カット尺 | `uniform` / `weighted` / `variable` |
+| 完全実写映像 | ON で `live_action_only=true` |
+| 8K超高精細映像 | ON で `ultra_high_resolution_8k=true` |
 | 追加自由制約 | 上の専用項目にない条件だけを自然文で補足 |
 
 出力例:
 ```json
-{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","freeform_constraints":"Avoid modern urban elements."}}
+{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","live_action_only":true,"ultra_high_resolution_8k":true,"freeform_constraints":"Avoid modern urban elements."}}
 ```
 
 `環境` はプロンプト本文の内容に依存しにくい「場所・層」の指定だけに寄せています。`頻出対象` は視覚的に主役になりやすい対象群をまとめたもので、必要に応じて複数選択できます。

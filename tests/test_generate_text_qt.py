@@ -269,6 +269,8 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
     prompt_generator.combo_direction_visual_energy.setCurrentText("生き生き")
     prompt_generator.combo_direction_cut_duration_policy.setCurrentText("可変")
     prompt_generator.entry_direction_freeform_constraints.setText("Avoid modern urban elements.")
+    prompt_generator.check_direction_live_action_only.setChecked(True)
+    prompt_generator.check_direction_ultra_high_resolution_8k.setChecked(True)
 
     payload = qt_app.json.loads(prompt_generator._make_direction_constraints_json().strip())
 
@@ -281,9 +283,28 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
             "visual_energy": "vivid",
             "cut_duration_policy": "variable",
             "freeform_constraints": "Avoid modern urban elements.",
+            "live_action_only": True,
+            "ultra_high_resolution_8k": True,
         }
     }
     assert prompt_generator.label_direction_common_subjects.text() in ("水辺・水域 / 天体", "天体 / 水辺・水域")
+
+
+def test_movie_direction_constraints_compile_new_quality_flags():
+    """新しい演出制約フラグが instructions に自然文として反映されること。"""
+
+    from modules.prompt_text_utils import compile_movie_instructions
+
+    instructions = compile_movie_instructions(
+        None,
+        {
+            "live_action_only": True,
+            "ultra_high_resolution_8k": True,
+        },
+    )
+
+    assert "Render the entire video as fully live-action footage with no animated or illustrative look." in instructions
+    assert "Render the entire video in ultra high resolution 8K quality." in instructions
 
 
 def test_make_tail_flags_json_supports_explicit_zero_people(prompt_generator):
@@ -310,6 +331,15 @@ def test_movie_tail_media_type_hides_midjourney_options(prompt_generator):
     prompt_generator.combo_tail_media_type.setCurrentText("image")
 
     assert not prompt_generator.group_midjourney_options.isHidden()
+
+
+def test_movie_tail_preset_contains_attached_image_world_option(prompt_generator):
+    """movie 末尾1に、添付画像の世界を動画化する専用プリセットが存在すること。"""
+
+    prompt_generator.combo_tail_media_type.setCurrentText("movie")
+    labels = [prompt_generator.combo_tail_free.itemText(i) for i in range(prompt_generator.combo_tail_free.count())]
+
+    assert "添付画像に写る世界についての動画" in labels
 
 
 def test_update_option_does_not_restore_cleared_prompt(prompt_generator):

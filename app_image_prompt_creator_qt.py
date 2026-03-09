@@ -390,6 +390,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             self.combo_direction_visual_energy,
             self.combo_direction_cut_duration_policy,
             self.entry_direction_freeform_constraints,
+            self.check_direction_live_action_only,
+            self.check_direction_ultra_high_resolution_8k,
         ]
         blockers = [QtCore.QSignalBlocker(widget) for widget in widgets]
         action_blockers = [
@@ -426,6 +428,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 defaults.get("cut_duration_policy", ""),
             )
             self.entry_direction_freeform_constraints.setText(str(defaults.get("freeform_constraints", "")).strip())
+            self.check_direction_live_action_only.setChecked(bool(defaults.get("live_action_only", False)))
+            self.check_direction_ultra_high_resolution_8k.setChecked(
+                bool(defaults.get("ultra_high_resolution_8k", False))
+            )
         finally:
             del action_blockers
             del blockers
@@ -840,6 +846,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         freeform_constraints = self.entry_direction_freeform_constraints.text().strip()
         if freeform_constraints:
             constraints["freeform_constraints"] = freeform_constraints
+
+        if self.check_direction_live_action_only.isChecked():
+            constraints["live_action_only"] = True
+
+        if self.check_direction_ultra_high_resolution_8k.isChecked():
+            constraints["ultra_high_resolution_8k"] = True
 
         try:
             json_text = json.dumps({"direction_constraints": constraints}, ensure_ascii=False)

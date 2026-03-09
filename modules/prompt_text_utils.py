@@ -377,6 +377,12 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
     if isinstance(freeform_constraints, str) and freeform_constraints.strip():
         sentences.append(_ensure_sentence(freeform_constraints))
 
+    if direction_constraints.get("live_action_only") is True:
+        sentences.append("Render the entire video as fully live-action footage with no animated or illustrative look.")
+
+    if direction_constraints.get("ultra_high_resolution_8k") is True:
+        sentences.append("Render the entire video in ultra high resolution 8K quality.")
+
     return sentences
 
 

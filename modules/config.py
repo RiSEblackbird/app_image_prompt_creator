@@ -162,6 +162,10 @@ DEFAULT_TAIL_PRESETS = {
     "movie": [
         {"description_ja": "（なし）", "prompt": ""},
         {
+            "description_ja": "添付画像に写る世界についての動画",
+            "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a cinematic video that expands the world shown in the attached image into a coherent moving scene, preserving its atmosphere, place, and visual logic\",\"source\":\"attached image world\"}}",
+        },
+        {
             "description_ja": "70mmフィルムのシネマティック全編",
             "prompt": "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"sweeping cinematic sequence shot on 70mm film\",\"look\":\"dramatic lighting\"}}",
         },

@@ -410,6 +410,24 @@ class PromptUIMixin:
         direction_row_4.addWidget(self.entry_direction_freeform_constraints, 1)
         direction_layout.addLayout(direction_row_4)
 
+        direction_row_5 = QtWidgets.QHBoxLayout()
+        # 映像の物理的な見え方に関する強い要件を、自由記述へ埋もれない専用フラグとして分離する。
+        self.check_direction_live_action_only = QtWidgets.QCheckBox("完全実写映像")
+        self.check_direction_live_action_only.setToolTip(
+            "ON にすると、CGアニメ調ではなく実写として成立する質感・撮影感を強く要求します。"
+        )
+        self.check_direction_live_action_only.stateChanged.connect(self.auto_update)
+        direction_row_5.addWidget(self.check_direction_live_action_only)
+
+        self.check_direction_ultra_high_resolution_8k = QtWidgets.QCheckBox("8K超高精細映像")
+        self.check_direction_ultra_high_resolution_8k.setToolTip(
+            "ON にすると、映像品質を 8K 相当の超高精細として強く要求します。"
+        )
+        self.check_direction_ultra_high_resolution_8k.stateChanged.connect(self.auto_update)
+        direction_row_5.addWidget(self.check_direction_ultra_high_resolution_8k)
+        direction_row_5.addStretch(1)
+        direction_layout.addLayout(direction_row_5)
+
         tail_form.addRow(direction_group)
         style_layout.addLayout(tail_form)
 
