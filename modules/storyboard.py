@@ -28,20 +28,22 @@ def _adjust_last_cut_duration(cuts: List[StoryboardCut], total_duration_sec: flo
     return cuts
 
 
-def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[dict], str]:
-    """プロンプトテキストから video_style と content_flags を抽出する。
+def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[dict], Optional[dict], str]:
+    """プロンプトテキストから動画メタデータを抽出する。
 
     Args:
         text: 入力テキスト（プロンプト全文）
 
     Returns:
-        (video_style, content_flags, remaining_text) のタプル
+        (video_style, content_flags, direction_constraints, remaining_text) のタプル
         - video_style: {"video_style": {...}} の中身、または None
         - content_flags: {"content_flags": {...}} の中身、または None
+        - direction_constraints: {"direction_constraints": {...}} の中身、または None
         - remaining_text: メタデータを除去した残りのテキスト
     """
     video_style = None
     content_flags = None
+    direction_constraints = None
     remaining = text
 
     # Sora向け新形式 (video_prompt ルート) を優先して解釈
@@ -53,6 +55,7 @@ def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[di
         vp = parsed["video_prompt"]
         video_style = vp.get("video_style")
         content_flags = vp.get("content_flags")
+        direction_constraints = vp.get("direction_constraints")
         # NOTE:
         # この関数は「自由記述欄のテキスト」から本文プロンプトを抽出するために使われる。
         # video_prompt 形式のJSONが入力されることもあるが、どんな構造でも本文が空扱いにならないように
@@ -82,7 +85,7 @@ def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[di
             remaining = text
 
         remaining = " ".join(str(remaining).split()).strip()
-        return video_style, content_flags, remaining
+        return video_style, content_flags, direction_constraints, remaining
 
     # video_style を抽出
     # {"video_style": {...}} のパターンを探す
@@ -108,10 +111,21 @@ def extract_metadata_from_prompt(text: str) -> Tuple[Optional[dict], Optional[di
         except json.JSONDecodeError:
             pass
 
+    # direction_constraints を抽出
+    dc_pattern = r'\{[^{}]*"direction_constraints"\s*:\s*\{[^{}]*\}[^{}]*\}'
+    dc_match = re.search(dc_pattern, remaining)
+    if dc_match:
+        try:
+            dc_json = json.loads(dc_match.group())
+            direction_constraints = dc_json.get("direction_constraints")
+            remaining = remaining[:dc_match.start()] + remaining[dc_match.end():]
+        except json.JSONDecodeError:
+            pass
+
     # 連続する空白を正規化
     remaining = " ".join(remaining.split()).strip()
 
-    return video_style, content_flags, remaining
+    return video_style, content_flags, direction_constraints, remaining
 
 
 class SoraCharacterListDialog(QtWidgets.QDialog):
@@ -338,6 +352,7 @@ def build_storyboard_json(
     template_id: str = "none",
     video_style: Optional[dict] = None,
     content_flags: Optional[dict] = None,
+    direction_constraints: Optional[dict] = None,
     continuity_enhanced: bool = False,
 ) -> str:
     """ストーリーボードのカットリストをSora向け video_prompt 形式でJSON化する。"""
@@ -369,6 +384,8 @@ def build_storyboard_json(
         payload["video_prompt"]["video_style"] = video_style
     if content_flags:
         payload["video_prompt"]["content_flags"] = content_flags
+    if direction_constraints:
+        payload["video_prompt"]["direction_constraints"] = direction_constraints
 
     return json.dumps(payload, ensure_ascii=False, indent=2)
 

@@ -164,13 +164,12 @@ def strip_all_options(text: str) -> str:
         return (text or "").strip()
 
 
-def detach_content_flags_tail(text: str) -> Tuple[str, str]:
-    """
-    content_flags を含む JSON ブロック({...})を末尾から探して取り出す。
-    見つかった場合は (残りテキスト, content_flags JSON) を返す。
-    """
+def _detach_named_json_tail(text: str, key_name: str) -> Tuple[str, str]:
+    """指定キーを含む JSON ブロックを末尾側から1つ抽出する。"""
     text = (text or "").strip()
     search_end = len(text) - 1
+    marker_double = f'"{key_name}"'
+    marker_single = f"'{key_name}'"
 
     while search_end >= 0:
         end_idx = text.rfind("}", 0, search_end + 1)
@@ -191,16 +190,23 @@ def detach_content_flags_tail(text: str) -> Tuple[str, str]:
 
         if start_idx != -1:
             candidate = text[start_idx : end_idx + 1]
-            if '"content_flags"' in candidate or "'content_flags'" in candidate:
-                flags_tail = candidate
+            if marker_double in candidate or marker_single in candidate:
                 remaining = (text[:start_idx] + " " + text[end_idx + 1 :]).strip()
                 remaining = " ".join(remaining.split())
-                return remaining, flags_tail
+                return remaining, candidate
             search_end = start_idx - 1
         else:
             search_end = end_idx - 1
 
     return text, ""
+
+
+def detach_content_flags_tail(text: str) -> Tuple[str, str]:
+    """
+    content_flags を含む JSON ブロック({...})を末尾から探して取り出す。
+    見つかった場合は (残りテキスト, content_flags JSON) を返す。
+    """
+    return _detach_named_json_tail(text, "content_flags")
 
 
 def detach_movie_tail_for_llm(text: str) -> Tuple[str, str]:
@@ -208,38 +214,15 @@ def detach_movie_tail_for_llm(text: str) -> Tuple[str, str]:
     video_style を含む JSON ブロック({...})を末尾から探して取り出す。
     見つかった場合は (残りテキスト, video_style JSON) を返す。
     """
-    text = (text or "").strip()
-    search_end = len(text) - 1
+    return _detach_named_json_tail(text, "video_style")
 
-    while search_end >= 0:
-        end_idx = text.rfind("}", 0, search_end + 1)
-        if end_idx == -1:
-            break
 
-        depth = 0
-        start_idx = -1
-        for i in range(end_idx, -1, -1):
-            char = text[i]
-            if char == "}":
-                depth += 1
-            elif char == "{":
-                depth -= 1
-                if depth == 0:
-                    start_idx = i
-                    break
-
-        if start_idx != -1:
-            candidate = text[start_idx : end_idx + 1]
-            if '"video_style"' in candidate or "'video_style'" in candidate:
-                movie_tail = candidate
-                remaining = (text[:start_idx] + " " + text[end_idx + 1 :]).strip()
-                remaining = " ".join(remaining.split())
-                return remaining, movie_tail
-            search_end = start_idx - 1
-        else:
-            search_end = end_idx - 1
-
-    return text, ""
+def detach_direction_constraints_tail(text: str) -> Tuple[str, str]:
+    """
+    direction_constraints を含む JSON ブロック({...})を末尾から探して取り出す。
+    見つかった場合は (残りテキスト, direction_constraints JSON) を返す。
+    """
+    return _detach_named_json_tail(text, "direction_constraints")
 
 
 def extract_sentence_details(text: str) -> List[str]:
@@ -259,13 +242,20 @@ def build_movie_json_payload(summary: str, details: List[str], scope: str, key: 
     return json.dumps(payload, ensure_ascii=False)
 
 
-def compose_movie_prompt(core_json: str, movie_tail: str, flags_tail: str, options_tail: str) -> str:
+def compose_movie_prompt(
+    core_json: str,
+    movie_tail: str,
+    flags_tail: str,
+    direction_tail: str,
+    options_tail: str,
+) -> str:
     """Sora向けに video_prompt ルートへ統合したJSONを返す（最小構造）。
 
     - core_json   : prompt または storyboard を含むJSON文字列/辞書/プレーンテキスト
     - movie_tail  : {"video_style": {...}}
     - flags_tail  : {"content_flags": {...}}
-    - options_tail: MJオプション（動画では無視）
+    - direction_tail: {"direction_constraints": {...}}
+    - options_tail : MJオプション（動画では無視）
     """
 
     def _parse_json_block(raw):
@@ -314,6 +304,10 @@ def compose_movie_prompt(core_json: str, movie_tail: str, flags_tail: str, optio
     flags = _parse_json_block(flags_tail)
     if flags and "content_flags" in flags:
         base_payload["video_prompt"]["content_flags"] = flags["content_flags"]
+
+    direction_constraints = _parse_json_block(direction_tail)
+    if direction_constraints and "direction_constraints" in direction_constraints:
+        base_payload["video_prompt"]["direction_constraints"] = direction_constraints["direction_constraints"]
 
     # Sora Web/iOS では --ar などのMJオプションは不要なので options_tail は無視する
 

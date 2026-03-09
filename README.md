@@ -107,7 +107,7 @@ python app_image_prompt_creator/app_image_prompt_creator_qt.py
 高解像度写真、8K、イラスト系の文末テキストを収録しています。
 
 ### movie プリセット
-JSON形式で `video_style` を定義します。TV番組系（ニュース、旅番組、ドキュメンタリー等）、映画系（歴史超大作、青春映画、ファンタジー等）、報道・現地リポート、ロケ・体験番組など多数のカテゴリから選択できます。
+JSON形式で `video_style` を定義します。プリセットによっては `content_flags_defaults` と `direction_constraints_defaults` も同時に持ち、選択した瞬間に動画向けの既定パラメータを UI へ流し込めます。TV番組系（ニュース、旅番組、ドキュメンタリー等）、映画系（歴史超大作、青春映画、ファンタジー等）、報道・現地リポート、ロケ・体験番組など多数のカテゴリから選択できます。
 
 > **注意**: `movie` 用プリセットを使う場合は、末尾プリセット用途を `movie` に切り替えてから選択してください。`image` のままだとJSONが正しく付与されません。
 
@@ -125,9 +125,12 @@ tails:
     - id: "movie_70mm"
       description_ja: "70mmフィルムのシネマティック全編"
       prompt: "{\"video_style\":{...}}"
+    - id: "movie_architecture_dynamic_8k"
+      description_ja: "8Kシネマティックベース（制約は手動指定）"
+      prompt: "{\"video_style\":{...}}"
 ```
 
-`description_ja` はUI表示専用で、プロンプトには `prompt` フィールドのみが付与されます。アプリ起動中にYAMLを保存すると自動でリロードされます。
+`description_ja` はUI表示専用です。`prompt` は `video_style` の実体です。`content_flags_defaults` / `direction_constraints_defaults` は任意項目で、定義したプリセットだけが選択時に UI へ既定値を反映します。アプリ起動中にYAMLを保存すると自動でリロードされます。
 
 ---
 
@@ -152,6 +155,28 @@ tails:
 
 ---
 
+## direction_constraints（動画専用）
+
+左ペイン「スタイル・オプション」タブの「演出制約 (direction_constraints)」グループで、映像演出の制約をJSONとして付与します。
+
+| 項目 | 説明 |
+|------|------|
+| 演出制約を反映 | マスタースイッチ。ONにしないとJSONは付与されません |
+| 環境 | `indoor_only` / `outdoor_only` |
+| 対象タグ | カンマ区切りの自由タグ。`ruins, wildlife, architecture` のように複数指定できます |
+| 静止画カットを許可 | OFF で `allow_still_frames=false` |
+| カメラ運動 | `mostly_static` / `gentle` / `continuous` |
+| 映像の活力 | `calm` / `vivid` / `intense` |
+| カット尺 | `uniform` / `weighted` / `variable` |
+| 自由制約 | 定型キーに収まらない条件を自然文で補足 |
+
+出力例:
+```json
+{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["ruins","wildlife"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","freeform_constraints":"Avoid modern urban elements."}}
+```
+
+---
+
 ## 動画用JSON整形
 
 「動画用に整形(JSON)」パネルで、メインテキストをJSON構造に変換します。
@@ -162,7 +187,7 @@ tails:
 | 世界観整形 | 断片を自然な世界描写へ変換 |
 | カオスミックス | 全要素を1つの場面に押し込む |
 
-「スタイル反映」をONにすると、選択中の `video_style` と `content_flags` がLLMへ伝達され、スタイルに沿った描写が生成されます。出力言語は英語/日本語から選択できます。
+「スタイル反映」をONにすると、選択中の `video_style`・`content_flags`・`direction_constraints` がLLMへ伝達され、スタイルに沿った描写が生成されます。出力言語は英語/日本語から選択できます。
 
 ---
 
@@ -177,7 +202,8 @@ tails:
   "video_prompt": {
     "prompt": "A serene zen garden at dawn with soft mist.",
     "video_style": {"scope": "full_movie", "description": "gentle cinematic look"},
-    "content_flags": {"narration": true, "bgm": true, "planned_cuts": 3}
+    "content_flags": {"narration": true, "bgm": true, "planned_cuts": 3},
+    "direction_constraints": {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"]}
   }
 }
 ```
@@ -289,7 +315,7 @@ tails:
 
 ### スタイル反映
 
-「スタイル反映」チェックボックスを有効にすると、入力プロンプトから抽出した `video_style`（カメラ・照明・雰囲気）と `content_flags`（音声・人物・テロップ情報）をLLMに背景補足情報として渡します。
+「スタイル反映」チェックボックスを有効にすると、入力プロンプトから抽出した `video_style`（カメラ・照明・雰囲気）・`content_flags`（音声・人物・テロップ情報）・`direction_constraints`（環境スコープ、対象タグ、カメラ運動、尺配分方針、自由制約）をLLMに背景補足情報として渡します。
 
 **効果**: 各カットの説明がスタイルや制約に自然に沿った内容になります。LLMはこれらの情報をそのまま出力するのではなく、雰囲気や演出意図を描写に反映させます。
 
@@ -297,7 +323,7 @@ tails:
 
 ### 出力例
 
-入力プロンプトに含まれる `video_style` や `content_flags` は自動抽出され、`video_prompt` ルートにまとめて配置されます。これにより各カットの説明に冗長なメタデータを含めずに済みます。
+入力プロンプトに含まれる `video_style`・`content_flags`・`direction_constraints` は自動抽出され、`video_prompt` ルートにまとめて配置されます。これにより各カットの説明に冗長なメタデータを含めずに済みます。
 
 ```json
 {
@@ -312,6 +338,11 @@ tails:
       "bgm": true,
       "ambient_sound": true,
       "dialogue": true
+    },
+    "direction_constraints": {
+      "environment_scope": "outdoor_only",
+      "subject_tags": ["ruins", "wildlife"],
+      "camera_motion": "continuous"
     },
     "storyboard": {
       "total_duration_sec": 10,

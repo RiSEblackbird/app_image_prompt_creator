@@ -44,6 +44,31 @@ STORYBOARD_AUTO_DEFAULT_DURATION = 12.0
 CONTENT_FLAGS_PLANNED_CUTS_MIN = 1
 CONTENT_FLAGS_PLANNED_CUTS_MAX = 15
 
+# direction_constraints の選択肢
+DIRECTION_ENVIRONMENT_SCOPE_CHOICES = [
+    ("未指定", ""),
+    ("屋内のみ", "indoor_only"),
+    ("屋外のみ", "outdoor_only"),
+]
+DIRECTION_CAMERA_MOTION_CHOICES = [
+    ("未指定", ""),
+    ("固定寄り", "mostly_static"),
+    ("緩やかに動く", "gentle"),
+    ("常時動く", "continuous"),
+]
+DIRECTION_VISUAL_ENERGY_CHOICES = [
+    ("未指定", ""),
+    ("落ち着き", "calm"),
+    ("生き生き", "vivid"),
+    ("激しい", "intense"),
+]
+DIRECTION_CUT_DURATION_POLICY_CHOICES = [
+    ("未指定", ""),
+    ("均等", "uniform"),
+    ("強弱あり", "weighted"),
+    ("可変", "variable"),
+]
+
 # カメラワークの選択肢
 CAMERA_WORK_CHOICES = [
     ("固定", "static"),

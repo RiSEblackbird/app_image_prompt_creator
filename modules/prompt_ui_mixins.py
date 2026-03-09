@@ -195,6 +195,8 @@ class PromptUIMixin:
         self.combo_tail_free = QtWidgets.QComboBox()
         self.combo_tail_free.setEditable(True)
         self.combo_tail_free.setToolTip("末尾固定文を選択または編集できます。")
+        self.combo_tail_free.currentTextChanged.connect(self.auto_update)
+        self.combo_tail_free.currentIndexChanged.connect(self._on_tail_preset_change)
         tail_row.addWidget(self.check_tail_free)
         tail_row.addWidget(self.combo_tail_free, 1)
         tail_form.addRow(tail_row)
@@ -288,6 +290,95 @@ class PromptUIMixin:
         tail2_layout.addLayout(lang_row)
 
         tail_form.addRow(tail2_group)
+
+        direction_group = QtWidgets.QGroupBox("演出制約 (direction_constraints)")
+        direction_layout = QtWidgets.QVBoxLayout(direction_group)
+
+        self.check_direction_constraints_enabled = QtWidgets.QCheckBox("演出制約を反映")
+        self.check_direction_constraints_enabled.setToolTip(
+            "ON にすると direction_constraints JSON を動画プロンプトへ付与します。"
+        )
+        self.check_direction_constraints_enabled.stateChanged.connect(self.auto_update)
+        direction_layout.addWidget(self.check_direction_constraints_enabled)
+
+        direction_row_1 = QtWidgets.QHBoxLayout()
+        direction_row_1.addWidget(QtWidgets.QLabel("環境:"))
+        self.combo_direction_environment_scope = QtWidgets.QComboBox()
+        for label, value in config.DIRECTION_ENVIRONMENT_SCOPE_CHOICES:
+            self.combo_direction_environment_scope.addItem(label, userData=value)
+        self.combo_direction_environment_scope.setToolTip(
+            "屋内のみ・屋外のみのような環境スコープを指定します。未指定なら本文と他制約に委ねます。"
+        )
+        self.combo_direction_environment_scope.currentIndexChanged.connect(self.auto_update)
+        direction_row_1.addWidget(self.combo_direction_environment_scope)
+
+        direction_row_1.addWidget(QtWidgets.QLabel("対象タグ:"))
+        self.entry_direction_subject_tags = QtWidgets.QLineEdit()
+        self.entry_direction_subject_tags.setPlaceholderText("例: architecture, ruins, wildlife")
+        self.entry_direction_subject_tags.setToolTip(
+            "対象や主題をカンマ区切りで自由入力します。自然物・遺跡・野生生物など任意のタグを指定できます。"
+        )
+        self.entry_direction_subject_tags.textChanged.connect(self.auto_update)
+        direction_row_1.addWidget(self.entry_direction_subject_tags, 1)
+        direction_row_1.addStretch(1)
+        direction_layout.addLayout(direction_row_1)
+
+        direction_row_2 = QtWidgets.QHBoxLayout()
+        self.check_direction_allow_still_frames = QtWidgets.QCheckBox("静止画カットを許可")
+        self.check_direction_allow_still_frames.setChecked(True)
+        self.check_direction_allow_still_frames.setToolTip(
+            "OFF にすると allow_still_frames=false として、静止画のような停止カットを禁止します。"
+        )
+        self.check_direction_allow_still_frames.stateChanged.connect(self.auto_update)
+        direction_row_2.addWidget(self.check_direction_allow_still_frames)
+
+        direction_row_2.addWidget(QtWidgets.QLabel("カメラ運動:"))
+        self.combo_direction_camera_motion = QtWidgets.QComboBox()
+        for label, value in config.DIRECTION_CAMERA_MOTION_CHOICES:
+            self.combo_direction_camera_motion.addItem(label, userData=value)
+        self.combo_direction_camera_motion.setToolTip(
+            "カメラの動き方を制約として指定します。"
+        )
+        self.combo_direction_camera_motion.currentIndexChanged.connect(self.auto_update)
+        direction_row_2.addWidget(self.combo_direction_camera_motion)
+        direction_row_2.addStretch(1)
+        direction_layout.addLayout(direction_row_2)
+
+        direction_row_3 = QtWidgets.QHBoxLayout()
+        direction_row_3.addWidget(QtWidgets.QLabel("映像の活力:"))
+        self.combo_direction_visual_energy = QtWidgets.QComboBox()
+        for label, value in config.DIRECTION_VISUAL_ENERGY_CHOICES:
+            self.combo_direction_visual_energy.addItem(label, userData=value)
+        self.combo_direction_visual_energy.setToolTip(
+            "映像全体の勢い・生命感を指定します。"
+        )
+        self.combo_direction_visual_energy.currentIndexChanged.connect(self.auto_update)
+        direction_row_3.addWidget(self.combo_direction_visual_energy)
+
+        direction_row_3.addWidget(QtWidgets.QLabel("カット尺:"))
+        self.combo_direction_cut_duration_policy = QtWidgets.QComboBox()
+        for label, value in config.DIRECTION_CUT_DURATION_POLICY_CHOICES:
+            self.combo_direction_cut_duration_policy.addItem(label, userData=value)
+        self.combo_direction_cut_duration_policy.setToolTip(
+            "カットごとの尺配分方針を指定します。"
+        )
+        self.combo_direction_cut_duration_policy.currentIndexChanged.connect(self.auto_update)
+        direction_row_3.addWidget(self.combo_direction_cut_duration_policy)
+        direction_row_3.addStretch(1)
+        direction_layout.addLayout(direction_row_3)
+
+        direction_row_4 = QtWidgets.QHBoxLayout()
+        direction_row_4.addWidget(QtWidgets.QLabel("自由制約:"))
+        self.entry_direction_freeform_constraints = QtWidgets.QLineEdit()
+        self.entry_direction_freeform_constraints.setPlaceholderText("例: Avoid modern buildings and keep wildlife undisturbed")
+        self.entry_direction_freeform_constraints.setToolTip(
+            "定型キーに収まらない演出制約を自然文で補足します。"
+        )
+        self.entry_direction_freeform_constraints.textChanged.connect(self.auto_update)
+        direction_row_4.addWidget(self.entry_direction_freeform_constraints, 1)
+        direction_layout.addLayout(direction_row_4)
+
+        tail_form.addRow(direction_group)
         style_layout.addLayout(tail_form)
 
         mj_group = QtWidgets.QGroupBox("オプション")
@@ -721,6 +812,7 @@ class PromptUIMixin:
         self._sb_current_index: int = -1
         self._sb_video_style: dict = None  # 抽出した video_style
         self._sb_content_flags: dict = None  # 抽出した content_flags
+        self._sb_direction_constraints: dict = None  # 抽出した direction_constraints
         self._sb_total_duration_override: float | None = None  # LLM自動決定した総尺
         self._sb_detected_characters: List[str] = []  # テキストから検出したキャラクターID
         # NOTE:
@@ -1161,13 +1253,14 @@ class PromptUIMixin:
         total_duration = self._get_sb_total_duration()
         continuity = self.check_sb_continuity.isChecked()
 
-        # メタデータ（video_style, content_flags）と連続性強化フラグを含めてJSON生成
+        # メタデータ（video_style, content_flags, direction_constraints）と連続性強化フラグを含めてJSON生成
         json_text = build_storyboard_json(
             self._sb_cuts,
             total_duration,
             template_id,
             video_style=self._sb_video_style,
             content_flags=self._sb_content_flags,
+            direction_constraints=self._sb_direction_constraints,
             continuity_enhanced=continuity,
         )
         QtGui.QGuiApplication.clipboard().setText(json_text)
@@ -1195,11 +1288,12 @@ class PromptUIMixin:
             )
             return
 
-        # メタデータ（video_style, content_flags）を抽出して保持
+        # メタデータ（video_style, content_flags, direction_constraints）を抽出して保持
         # これらはカットの説明に含めず、ストーリーボードと並列に配置する
-        video_style, content_flags, prompt_text = extract_metadata_from_prompt(raw_text)
+        video_style, content_flags, direction_constraints, prompt_text = extract_metadata_from_prompt(raw_text)
         self._sb_video_style = video_style
         self._sb_content_flags = content_flags
+        self._sb_direction_constraints = direction_constraints
 
         # NOTE:
         # text_output は自由記述欄のため、文章/JSON/任意の構造が入力されうる。
@@ -1294,6 +1388,7 @@ class PromptUIMixin:
             continuity_enhanced=continuity,
             video_style=video_style_ctx,
             content_flags=content_flags_ctx,
+            direction_constraints=self._sb_direction_constraints,
             additional_request=additional_request,
             length_limit=getattr(config, "SORA_PROMPT_SAFE_CHARS", 1900),
             auto_structure=auto_structure,
@@ -1555,13 +1650,14 @@ class PromptUIMixin:
         total_duration = self._get_sb_total_duration()
         continuity = self.check_sb_continuity.isChecked()
 
-        # メタデータ（video_style, content_flags）と連続性強化フラグを含めてJSON生成
+        # メタデータ（video_style, content_flags, direction_constraints）と連続性強化フラグを含めてJSON生成
         json_text = build_storyboard_json(
             self._sb_cuts,
             total_duration,
             template_id,
             video_style=self._sb_video_style,
             content_flags=self._sb_content_flags,
+            direction_constraints=self._sb_direction_constraints,
             continuity_enhanced=continuity,
         )
 
