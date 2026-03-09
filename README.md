@@ -436,12 +436,11 @@ characters:
 ### 対応モデル
 | モデル | API |
 |--------|-----|
-| gpt-5.2 | Responses API（デフォルト） |
-| gpt-5.1 | Responses API |
+| gpt-5.4 | Responses API（デフォルト） |
 | gpt-4o | Chat Completions |
 | gpt-4o-mini | Chat Completions |
 
-画面右上のドロップダウンでモデルを即時切替できます。gpt-5系（gpt-5.2 / gpt-5.1）は Responses API を使用するため、temperature の代わりにシステムプロンプトで強弱を指示します。
+画面右上のドロップダウンでモデルを即時切替できます。gpt-5系（gpt-5.4 / gpt-5.1）は Responses API を使用するため、temperature の代わりにシステムプロンプトで強弱を指示します。
 
 ---
 
@@ -492,7 +491,7 @@ app_image_prompt_creator:
   ARRANGE_PRESETS_YAML: "app_image_prompt_creator/arrange_presets.yaml"
   SORA_CHARACTERS_YAML: "app_image_prompt_creator/sora_characters.yaml"
   LLM_ENABLED: true
-  LLM_MODEL: "gpt-5.2"
+  LLM_MODEL: "gpt-5.4"
   LLM_MAX_COMPLETION_TOKENS: 4500
   LLM_TIMEOUT: 30
   OPENAI_API_KEY_ENV: "OPENAI_API_KEY"
