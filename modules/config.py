@@ -49,12 +49,25 @@ DIRECTION_ENVIRONMENT_SCOPE_CHOICES = [
     ("未指定", ""),
     ("屋内のみ", "indoor_only"),
     ("屋外のみ", "outdoor_only"),
+    ("屋内外混在", "indoor_outdoor_mixed"),
+    ("地下", "underground"),
+    ("水中", "underwater"),
+    ("水上", "water_surface"),
+    ("空中", "aerial"),
+    ("宇宙空間", "space"),
 ]
 DIRECTION_COMMON_SUBJECT_TAGS = [
     ("建築物", "architecture"),
-    ("自然物", "natural_elements"),
+    ("室内空間", "interior_space"),
+    ("都市インフラ", "urban_infrastructure"),
     ("屋外の遺跡", "outdoor_ruins"),
+    ("地形・岩場", "natural_landforms"),
+    ("植物", "vegetation"),
+    ("水辺・水域", "water_features"),
     ("野生生物", "wildlife"),
+    ("乗り物", "vehicles"),
+    ("機械", "machinery"),
+    ("天体", "celestial_bodies"),
 ]
 DIRECTION_CAMERA_MOTION_CHOICES = [
     ("未指定", ""),

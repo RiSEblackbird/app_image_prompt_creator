@@ -164,8 +164,8 @@ tails:
 | 項目 | 説明 |
 |------|------|
 | 演出制約を反映 | マスタースイッチ。ONにしないとJSONは付与されません |
-| 環境 | `indoor_only` / `outdoor_only` |
-| 頻出対象 | `建築物` / `自然物` / `屋外の遺跡` / `野生生物` を個別にONできます |
+| 環境 | `indoor_only` / `outdoor_only` / `indoor_outdoor_mixed` / `underground` / `underwater` / `water_surface` / `aerial` / `space` |
+| 頻出対象 | `選択` メニューから `建築物` / `室内空間` / `都市インフラ` / `屋外の遺跡` / `地形・岩場` / `植物` / `水辺・水域` / `野生生物` / `乗り物` / `機械` / `天体` を複数選択できます |
 | 追加対象タグ | 頻出対象にないものだけをカンマ区切りで追加します。例: `coral reef, volcanic landscape` |
 | 静止画カットを許可 | OFF で `allow_still_frames=false` |
 | カメラ運動 | `mostly_static` / `gentle` / `continuous` |
@@ -177,6 +177,8 @@ tails:
 ```json
 {"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","freeform_constraints":"Avoid modern urban elements."}}
 ```
+
+`環境` はプロンプト本文の内容に依存しにくい「場所・層」の指定だけに寄せています。`頻出対象` は視覚的に主役になりやすい対象群をまとめたもので、必要に応じて複数選択できます。
 
 このブロックは内部的にはJSONで保持され、必要に応じて `video_prompt.instructions` に自然文の補助情報としても反映されます。
 

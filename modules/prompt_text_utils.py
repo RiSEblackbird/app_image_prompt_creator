@@ -312,6 +312,18 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
         sentences.append("Keep the entire video indoors only.")
     elif environment_scope == "outdoor_only":
         sentences.append("Keep the entire video outdoors only.")
+    elif environment_scope == "indoor_outdoor_mixed":
+        sentences.append("Allow both indoor and outdoor settings within the same piece.")
+    elif environment_scope == "underground":
+        sentences.append("Keep the setting underground.")
+    elif environment_scope == "underwater":
+        sentences.append("Keep the setting underwater.")
+    elif environment_scope == "water_surface":
+        sentences.append("Keep the setting on or immediately above the water surface.")
+    elif environment_scope == "aerial":
+        sentences.append("Keep the viewpoint in the air or high above the ground.")
+    elif environment_scope == "space":
+        sentences.append("Keep the setting in outer space.")
 
     subject_tags = direction_constraints.get("subject_tags")
     if isinstance(subject_tags, list):
@@ -319,9 +331,16 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
         if tags:
             readable_map = {
                 "architecture": "architecture",
-                "natural_elements": "natural elements",
+                "interior_space": "interior spaces",
+                "urban_infrastructure": "urban infrastructure",
                 "outdoor_ruins": "outdoor ruins",
+                "natural_landforms": "natural landforms",
+                "vegetation": "vegetation",
+                "water_features": "water features",
                 "wildlife": "wildlife",
+                "vehicles": "vehicles",
+                "machinery": "machinery",
+                "celestial_bodies": "celestial bodies",
             }
             readable_tags = [readable_map.get(tag, tag) for tag in tags]
             sentences.append(_ensure_sentence(f"Visually focus on these subjects: {', '.join(readable_tags)}"))

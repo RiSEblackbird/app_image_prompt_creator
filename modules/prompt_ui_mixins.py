@@ -313,19 +313,25 @@ class PromptUIMixin:
         direction_row_1.addWidget(self.combo_direction_environment_scope)
 
         direction_row_1.addWidget(QtWidgets.QLabel("頻出対象:"))
-        self.check_direction_subject_architecture = QtWidgets.QCheckBox("建築物")
-        self.check_direction_subject_natural_elements = QtWidgets.QCheckBox("自然物")
-        self.check_direction_subject_outdoor_ruins = QtWidgets.QCheckBox("屋外の遺跡")
-        self.check_direction_subject_wildlife = QtWidgets.QCheckBox("野生生物")
-        for chk in (
-            self.check_direction_subject_architecture,
-            self.check_direction_subject_natural_elements,
-            self.check_direction_subject_outdoor_ruins,
-            self.check_direction_subject_wildlife,
-        ):
-            chk.stateChanged.connect(self.auto_update)
-            direction_row_1.addWidget(chk)
-        direction_row_1.addStretch(1)
+        self.button_direction_common_subjects = QtWidgets.QToolButton()
+        self.button_direction_common_subjects.setText("選択")
+        self.button_direction_common_subjects.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.button_direction_common_subjects.setToolTip(
+            "よく使う対象を複数選択します。項目数が増えても UI を圧迫しないためのメニュー式です。"
+        )
+        self.menu_direction_common_subjects = QtWidgets.QMenu(self.button_direction_common_subjects)
+        self.direction_common_subject_actions = {}
+        for label, value in config.DIRECTION_COMMON_SUBJECT_TAGS:
+            action = self.menu_direction_common_subjects.addAction(label)
+            action.setCheckable(True)
+            action.toggled.connect(self._on_direction_common_subjects_changed)
+            self.direction_common_subject_actions[value] = action
+        self.button_direction_common_subjects.setMenu(self.menu_direction_common_subjects)
+        direction_row_1.addWidget(self.button_direction_common_subjects)
+
+        self.label_direction_common_subjects = QtWidgets.QLabel("未選択")
+        self.label_direction_common_subjects.setToolTip("選択中の頻出対象を要約表示します。")
+        direction_row_1.addWidget(self.label_direction_common_subjects, 1)
         direction_layout.addLayout(direction_row_1)
 
         direction_row_1b = QtWidgets.QHBoxLayout()

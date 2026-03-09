@@ -279,35 +279,49 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 return
         combo.setCurrentIndex(0)
 
-    def _set_checkbox_group_from_tags(self, tags: List[str]) -> List[str]:
-        """頻出対象タグに対応するチェックボックスへ反映し、残りタグを返す。"""
+    def _update_direction_common_subjects_summary(self) -> None:
+        """頻出対象の選択内容を短いラベルへ集約表示する。"""
+        actions = getattr(self, "direction_common_subject_actions", {})
+        selected_labels = [
+            action.text()
+            for action in actions.values()
+            if isinstance(action, QtGui.QAction) and action.isChecked()
+        ]
+        label = getattr(self, "label_direction_common_subjects", None)
+        if label is None:
+            return
+        if not selected_labels:
+            label.setText("未選択")
+        elif len(selected_labels) <= 2:
+            label.setText(" / ".join(selected_labels))
+        else:
+            label.setText(f"{selected_labels[0]} / {selected_labels[1]} / 他{len(selected_labels) - 2}件")
+
+    def _on_direction_common_subjects_changed(self, checked: bool = False) -> None:
+        """頻出対象メニュー変更時に要約表示と自動反映を更新する。"""
+        self._update_direction_common_subjects_summary()
+        self.auto_update()
+
+    def _set_common_subject_actions_from_tags(self, tags: List[str]) -> List[str]:
+        """頻出対象タグに対応するメニュー項目へ反映し、残りタグを返す。"""
         normalized_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
-        tag_map = {
-            "architecture": self.check_direction_subject_architecture,
-            "natural_elements": self.check_direction_subject_natural_elements,
-            "outdoor_ruins": self.check_direction_subject_outdoor_ruins,
-            "wildlife": self.check_direction_subject_wildlife,
-        }
-        for value, checkbox in tag_map.items():
-            checkbox.setChecked(value in normalized_tags)
-        return [tag for tag in normalized_tags if tag not in tag_map]
+        action_map = getattr(self, "direction_common_subject_actions", {})
+        for value, action in action_map.items():
+            action.setChecked(value in normalized_tags)
+        self._update_direction_common_subjects_summary()
+        return [tag for tag in normalized_tags if tag not in action_map]
 
     def _collect_direction_subject_tags(self) -> List[str]:
-        """頻出対象チェックと追加タグ入力を統合し、重複なく返す。"""
+        """頻出対象メニューと追加タグ入力を統合し、重複なく返す。"""
         tags: List[str] = []
 
         def push(value: str) -> None:
             if value and value not in tags:
                 tags.append(value)
 
-        if self.check_direction_subject_architecture.isChecked():
-            push("architecture")
-        if self.check_direction_subject_natural_elements.isChecked():
-            push("natural_elements")
-        if self.check_direction_subject_outdoor_ruins.isChecked():
-            push("outdoor_ruins")
-        if self.check_direction_subject_wildlife.isChecked():
-            push("wildlife")
+        for value, action in getattr(self, "direction_common_subject_actions", {}).items():
+            if isinstance(action, QtGui.QAction) and action.isChecked():
+                push(value)
 
         raw_subject_tags = self.entry_direction_subject_tags.text().strip()
         if raw_subject_tags:
@@ -368,10 +382,6 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         widgets = [
             self.check_direction_constraints_enabled,
             self.combo_direction_environment_scope,
-            self.check_direction_subject_architecture,
-            self.check_direction_subject_natural_elements,
-            self.check_direction_subject_outdoor_ruins,
-            self.check_direction_subject_wildlife,
             self.entry_direction_subject_tags,
             self.check_direction_allow_still_frames,
             self.combo_direction_camera_motion,
@@ -380,6 +390,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             self.entry_direction_freeform_constraints,
         ]
         blockers = [QtCore.QSignalBlocker(widget) for widget in widgets]
+        action_blockers = [
+            QtCore.QSignalBlocker(action)
+            for action in getattr(self, "direction_common_subject_actions", {}).values()
+        ]
         try:
             self.check_direction_constraints_enabled.setChecked(bool(defaults))
 
@@ -390,15 +404,15 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
 
             subject_tags = defaults.get("subject_tags")
             if isinstance(subject_tags, list):
-                remaining_tags = self._set_checkbox_group_from_tags(subject_tags)
+                remaining_tags = self._set_common_subject_actions_from_tags(subject_tags)
                 subject_tags_text = ", ".join(remaining_tags)
             else:
                 primary_subject = defaults.get("primary_subject", "")
                 if primary_subject:
-                    remaining_tags = self._set_checkbox_group_from_tags([primary_subject])
+                    remaining_tags = self._set_common_subject_actions_from_tags([primary_subject])
                     subject_tags_text = ", ".join(remaining_tags)
                 else:
-                    self._set_checkbox_group_from_tags([])
+                    self._set_common_subject_actions_from_tags([])
                     subject_tags_text = ""
             self.entry_direction_subject_tags.setText(subject_tags_text)
 
@@ -411,6 +425,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             )
             self.entry_direction_freeform_constraints.setText(str(defaults.get("freeform_constraints", "")).strip())
         finally:
+            del action_blockers
             del blockers
 
     def _on_tail_preset_change(self, index: int) -> None:

@@ -260,10 +260,10 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
     """演出制約UIの選択が direction_constraints JSON として出力されること。"""
 
     prompt_generator.check_direction_constraints_enabled.setChecked(True)
-    prompt_generator.combo_direction_environment_scope.setCurrentText("屋外のみ")
+    prompt_generator.combo_direction_environment_scope.setCurrentText("水中")
     prompt_generator.check_direction_allow_still_frames.setChecked(False)
-    prompt_generator.check_direction_subject_outdoor_ruins.setChecked(True)
-    prompt_generator.check_direction_subject_wildlife.setChecked(True)
+    prompt_generator.direction_common_subject_actions["water_features"].setChecked(True)
+    prompt_generator.direction_common_subject_actions["celestial_bodies"].setChecked(True)
     prompt_generator.entry_direction_subject_tags.setText("coral reef")
     prompt_generator.combo_direction_camera_motion.setCurrentText("常時動く")
     prompt_generator.combo_direction_visual_energy.setCurrentText("生き生き")
@@ -275,14 +275,15 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
     assert payload == {
         "direction_constraints": {
             "allow_still_frames": False,
-            "environment_scope": "outdoor_only",
-            "subject_tags": ["outdoor_ruins", "wildlife", "coral reef"],
+            "environment_scope": "underwater",
+            "subject_tags": ["water_features", "celestial_bodies", "coral reef"],
             "camera_motion": "continuous",
             "visual_energy": "vivid",
             "cut_duration_policy": "variable",
             "freeform_constraints": "Avoid modern urban elements.",
         }
     }
+    assert prompt_generator.label_direction_common_subjects.text() in ("水辺・水域 / 天体", "天体 / 水辺・水域")
 
 
 def test_storyboard_time_edit_start_updates_prev_duration_and_ripples(prompt_generator, monkeypatch):
