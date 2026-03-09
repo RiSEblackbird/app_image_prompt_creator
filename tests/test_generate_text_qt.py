@@ -298,6 +298,40 @@ def test_make_tail_flags_json_supports_explicit_zero_people(prompt_generator):
     assert payload["content_flags"]["person_count"] == 0
 
 
+def test_update_option_does_not_restore_cleared_prompt(prompt_generator):
+    """出力欄を空にした後の部分更新で、直前の本文が復活しないこと。"""
+
+    prompt_generator.main_prompt = "Revived prompt should not return."
+    prompt_generator.option_prompt = " --ar 16:9"
+    prompt_generator.tail_free_texts = " cinematic lighting"
+    prompt_generator.text_output.setPlainText("")
+
+    prompt_generator.update_option()
+
+    assert prompt_generator.main_prompt == ""
+    assert prompt_generator.option_prompt == ""
+    assert prompt_generator.text_output.toPlainText() == ""
+
+
+def test_update_option_button_click_keeps_cleared_output_empty(prompt_generator):
+    """Qt の clicked(bool) 経由でも、空欄更新で旧本文が復活しないこと。"""
+
+    prompt_generator.main_prompt = "Revived prompt should not return."
+    prompt_generator.option_prompt = " --ar 16:9"
+    prompt_generator.tail_free_texts = " cinematic lighting"
+    prompt_generator.text_output.setPlainText("")
+
+    update_button = next(
+        button for button in prompt_generator.findChildren(QtWidgets.QPushButton)
+        if button.text() == "オプションのみ更新"
+    )
+    update_button.click()
+
+    assert prompt_generator.main_prompt == ""
+    assert prompt_generator.option_prompt == ""
+    assert prompt_generator.text_output.toPlainText() == ""
+
+
 def test_storyboard_time_edit_start_updates_prev_duration_and_ripples(prompt_generator, monkeypatch):
     """開始時刻の編集が、直前カットの尺に反映され、以降の start が累積で再計算されること。"""
 

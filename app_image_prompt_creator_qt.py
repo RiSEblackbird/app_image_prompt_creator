@@ -1810,6 +1810,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
     def _update_internal_prompt_from_text(self, full_text: str):
         normalized = (full_text or "").strip()
         if not normalized:
+            # 出力欄が空なら、部分更新時に旧プロンプトを再利用しないよう内部状態も空へ戻す。
+            self.main_prompt = ""
+            self.tail_free_texts = ""
+            self.option_prompt = ""
             return
         try:
             parsed = json.loads(normalized)

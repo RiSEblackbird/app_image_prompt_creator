@@ -499,7 +499,8 @@ class PromptUIMixin:
         sub_action_layout.addWidget(update_tail_btn)
 
         update_option_btn = QtWidgets.QPushButton("オプションのみ更新")
-        update_option_btn.clicked.connect(self.update_option)
+        # clicked(bool) の checked 値を sync_from_text 引数へ誤って渡さないようにする。
+        update_option_btn.clicked.connect(lambda _checked=False: self.update_option())
         sub_action_layout.addWidget(update_option_btn)
 
         layout.addLayout(sub_action_layout)
