@@ -286,6 +286,18 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
     assert prompt_generator.label_direction_common_subjects.text() in ("水辺・水域 / 天体", "天体 / 水辺・水域")
 
 
+def test_make_tail_flags_json_supports_explicit_zero_people(prompt_generator):
+    """0人選択時は未指定ではなく person_count=0 を明示出力すること。"""
+
+    prompt_generator.check_tail_flags_enabled.setChecked(True)
+    prompt_generator.combo_tail_person_count.setCurrentText("0人")
+
+    payload = qt_app.json.loads(prompt_generator._make_tail_flags_json().strip())
+
+    assert payload["content_flags"]["person_present"] is False
+    assert payload["content_flags"]["person_count"] == 0
+
+
 def test_storyboard_time_edit_start_updates_prev_duration_and_ripples(prompt_generator, monkeypatch):
     """開始時刻の編集が、直前カットの尺に反映され、以降の start が累積で再計算されること。"""
 

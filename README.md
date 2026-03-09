@@ -146,7 +146,7 @@ tails:
 | ナレーション / BGM / 環境音 | 音声要素の有無 |
 | 人物 / 人物のセリフ | 映像内の人物とセリフの有無 |
 | セリフ字幕 / テロップ | 画面上のテキスト要素 |
-| 登場人物 | なし / 1+ / 1〜4 / many（群衆） |
+| 登場人物 | なし / 0人 / 1+ / 1〜4 / many（群衆） |
 | 構成カット数 | Auto / 1〜15 / many（高速モンタージュ） |
 | 動画中の言語 | Auto / 日本語 / 英語 |
 
@@ -154,6 +154,8 @@ tails:
 ```json
 {"content_flags":{"narration":true,"bgm":true,"ambient_sound":true,"planned_cuts":3,"spoken_language":"ja"}}
 ```
+
+`(なし)` は人物なしを示しつつ人数は未指定のままにします。`0人` は `person_present=false` に加えて `person_count=0` を出力し、明示的に人物ゼロを指定します。
 
 ---
 

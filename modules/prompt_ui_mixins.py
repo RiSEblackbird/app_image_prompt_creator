@@ -243,12 +243,14 @@ class PromptUIMixin:
         person_row.addWidget(QtWidgets.QLabel("登場人物(動画用):"))
         self.combo_tail_person_count = QtWidgets.QComboBox()
         self.combo_tail_person_count.addItem("(なし)", userData=None)
+        self.combo_tail_person_count.addItem("0人", userData=0)
         self.combo_tail_person_count.addItem("1人以上", userData="1+")
         for i in range(1, 5):
             self.combo_tail_person_count.addItem(f"{i}人", userData=i)
         self.combo_tail_person_count.addItem("とても多い", userData="many")
         self.combo_tail_person_count.setToolTip(
             "映像内に人物が映っているかどうかと、おおよその人数を指定します。"
+            "「0人」は person_present=false, person_count=0 として明示的に人物ゼロを出力します。"
             "「とても多い」は person_count=\"many\"（群衆・大人数）として JSON に反映されます。"
         )
         self.combo_tail_person_count.currentIndexChanged.connect(self.auto_update)

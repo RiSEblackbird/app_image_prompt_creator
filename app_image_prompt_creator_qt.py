@@ -357,7 +357,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
 
             person_present = defaults.get("person_present")
             person_count = defaults.get("person_count")
-            if person_present is False or person_count in (None, "", 0):
+            if person_count == 0:
+                self._set_combo_to_data(self.combo_tail_person_count, 0)
+            elif person_present is False or person_count in (None, ""):
                 self._set_combo_to_data(self.combo_tail_person_count, None)
             elif person_count in ("1+", "many", 1, 2, 3, 4):
                 self._set_combo_to_data(self.combo_tail_person_count, person_count)
@@ -706,8 +708,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         
         narration / bgm / ambient_sound / dialogue は音声要素。
         person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ（true/false）。
-        person_count は人数指定で、"1+"（1人以上）/ "many"（群衆・5人以上）または具体的な人数（1〜4の整数）を取る。
+        person_count は人数指定で、0 / "1+"（1人以上）/ "many"（群衆・5人以上）または具体的な人数（1〜4の整数）を取る。
           - 「(なし)」選択時: person_present=false, person_count は省略
+          - 「0人」選択時: person_present=false, person_count=0
           - 「1人以上」選択時: person_present=true, person_count="1+"
           - 「1人」〜「4人」選択時: person_present=true, person_count=N
           - 「とても多い」選択時: person_present=true, person_count="many"
@@ -730,7 +733,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         }
 
         # 登場人物の人数を person_present / person_count として設定
-        # - "(なし)" → person_present: false のみ
+        # - "(なし)" → person_present: false のみ（未指定寄り）
+        # - "0人" → person_present: false, person_count: 0
         # - "1人以上" → person_present: true, person_count: "1+"
         # - "1人"〜"4人" → person_present: true, person_count: N
         # - "とても多い" → person_present: true, person_count: "many"
@@ -738,8 +742,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         if isinstance(person_combo, QtWidgets.QComboBox):
             person_data = person_combo.currentData()
             if person_data is None:
-                # (なし) の場合: 人物なし
+                # (なし) の場合: 人物なしだが、人数は未指定のままにする
                 flags["person_present"] = False
+            elif person_data == 0:
+                # 0人の場合: 明示的に人物ゼロを指定する
+                flags["person_present"] = False
+                flags["person_count"] = 0
             elif person_data == "1+":
                 # 1人以上の場合: 人数を限定しない
                 flags["person_present"] = True
