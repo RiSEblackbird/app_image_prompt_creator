@@ -298,6 +298,20 @@ def test_make_tail_flags_json_supports_explicit_zero_people(prompt_generator):
     assert payload["content_flags"]["person_count"] == 0
 
 
+def test_movie_tail_media_type_hides_midjourney_options(prompt_generator):
+    """movie 用途では、無効な Midjourney オプションUIを隠して誤操作を防ぐこと。"""
+
+    assert not prompt_generator.group_midjourney_options.isHidden()
+
+    prompt_generator.combo_tail_media_type.setCurrentText("movie")
+
+    assert prompt_generator.group_midjourney_options.isHidden()
+
+    prompt_generator.combo_tail_media_type.setCurrentText("image")
+
+    assert not prompt_generator.group_midjourney_options.isHidden()
+
+
 def test_update_option_does_not_restore_cleared_prompt(prompt_generator):
     """出力欄を空にした後の部分更新で、直前の本文が復活しないこと。"""
 

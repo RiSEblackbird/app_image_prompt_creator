@@ -33,6 +33,7 @@
 ### 動画生成向け
 - **末尾プリセット（movie）**: `{"video_style": ...}` JSON で動画スタイルを指定
 - **content_flags**: ナレーション・BGM・字幕・カット数などをJSONで付与
+- **用途別UI切替**: 末尾プリセット用途を `movie` にすると Midjourney 用「オプション」を非表示化
 - **JSON整形**: メインテキストを `world_description` や `storyboard` に変換
 - **LLM改良**: 世界観整形 / カオスミックス
 
