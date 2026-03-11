@@ -7,6 +7,10 @@ import re
 from typing import List, Tuple
 
 MOVIE_REQUIREMENTS_HEADER = "Video requirements:"
+ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX = (
+    "Expand the world shown in the attached image into a coherent moving scene "
+    "while preserving its atmosphere, place, and visual logic."
+)
 
 
 def sanitize_to_english(text: str) -> str:
@@ -406,6 +410,42 @@ def build_movie_json_payload(summary: str, details: List[str], scope: str, key: 
     `scope`/`key` 引数は呼び出し互換のため残すが、実体は prompt に集約する。
     """
     payload = {"prompt": (summary or "").strip()}
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def prepend_attached_image_world_description(movie_tail: str, enabled: bool) -> str:
+    """添付画像世界トグルON時に、video_style.description の先頭へ前置きを加える。"""
+    normalized_tail = str(movie_tail or "").strip()
+    if not enabled:
+        return normalized_tail
+
+    if not normalized_tail:
+        return json.dumps(
+            {"video_style": {"description": ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX}},
+            ensure_ascii=False,
+        )
+
+    try:
+        payload = json.loads(normalized_tail)
+    except Exception:
+        return normalized_tail
+
+    if not isinstance(payload, dict):
+        return normalized_tail
+
+    video_style = payload.get("video_style")
+    if not isinstance(video_style, dict):
+        video_style = {}
+        payload["video_style"] = video_style
+
+    current_description = " ".join(str(video_style.get("description", "")).split()).strip()
+    if current_description.startswith(ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX):
+        return json.dumps(payload, ensure_ascii=False)
+
+    if current_description:
+        video_style["description"] = f"{ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX} {current_description}"
+    else:
+        video_style["description"] = ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX
     return json.dumps(payload, ensure_ascii=False)
 
 

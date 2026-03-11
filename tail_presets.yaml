@@ -17,9 +17,6 @@ tails:
     - id: none
       description_ja: "（末尾の動画スタイル指定を付けない）"
       prompt: ""
-    - id: movie_attached_image_world
-      description_ja: "添付画像に写る世界についての動画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a cinematic video that expands the world shown in the attached image into a coherent moving scene, preserving its atmosphere, place, and visual logic\",\"source\":\"attached image world\"}}"
     # ---- シネマティック基礎スタイル（撮影・演出・編集テンプレ）----
     - id: section_movie_core
       description_ja: "===【カテゴリ】シネマティック基礎スタイル（撮影・演出・編集テンプレ）"

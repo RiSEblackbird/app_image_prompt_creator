@@ -65,6 +65,7 @@ from modules.prompt_text_utils import (
     detach_movie_tail_for_llm,
     extract_sentence_details,
     inherit_options_if_present,
+    prepend_attached_image_world_description,
     split_prompt_and_options,
     strip_all_options,
 )
@@ -897,6 +898,15 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         # 上記条件を満たさない場合は、ユーザーの自由入力をそのまま利用する。
         return text
 
+    def _resolve_movie_tail_prompt(self, base_movie_tail: Optional[str] = None) -> str:
+        """動画用の末尾1に、添付画像世界トグルの前置きを反映して返す。"""
+        raw_movie_tail = self._resolve_tail_free_prompt() if base_movie_tail is None else str(base_movie_tail or "").strip()
+        checkbox = getattr(self, "check_attached_image_world_prefix", None)
+        return prepend_attached_image_world_description(
+            raw_movie_tail,
+            bool(checkbox and checkbox.isChecked()),
+        )
+
     def _normalize_sentences(self, texts: Iterable[str]) -> List[str]:
         """文末の句読点を軽く整形し、Midjourney向けの短文として扱いやすい形に揃える。"""
         processed: List[str] = []
@@ -1418,7 +1428,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         media_type = self.combo_tail_media_type.currentText() or config.DEFAULT_TAIL_MEDIA_TYPE
         if media_type == "movie":
             main_text = (self.main_prompt or "").strip()
-            movie_tail = self._resolve_tail_free_prompt()
+            movie_tail = self._resolve_movie_tail_prompt()
             flags_tail = self._make_tail_flags_json()
             direction_tail = self._make_direction_constraints_json()
             details = extract_sentence_details(main_text)
@@ -1708,6 +1718,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             movie_tail = ""
             if isinstance(vp.get("video_style"), dict):
                 movie_tail = json.dumps({"video_style": vp["video_style"]}, ensure_ascii=False)
+            movie_tail = self._resolve_movie_tail_prompt(movie_tail)
             flags_tail = ""
             if isinstance(vp.get("content_flags"), dict):
                 flags_tail = json.dumps({"content_flags": vp["content_flags"]}, ensure_ascii=False)
@@ -1720,6 +1731,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         core_without_direction, direction_tail = detach_direction_constraints_tail(src)
         core_without_flags, flags_tail = detach_content_flags_tail(core_without_direction)
         core_without_movie, movie_tail = detach_movie_tail_for_llm(core_without_flags)
+        movie_tail = self._resolve_movie_tail_prompt(movie_tail)
         main_text, options_tail, _ = split_prompt_and_options(core_without_movie)
         if not main_text:
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")

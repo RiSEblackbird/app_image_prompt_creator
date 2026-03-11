@@ -37,6 +37,7 @@ class PromptUIMixin:
         is_movie = media_type == "movie"
         # movie では Midjourney オプションを使わないため、誤入力防止のために非表示にする。
         self.group_midjourney_options.setVisible(not is_movie)
+        self.check_attached_image_world_prefix.setVisible(is_movie)
 
     def _build_ui(self):
         central = QtWidgets.QWidget()
@@ -364,6 +365,14 @@ class PromptUIMixin:
         tail_row.addWidget(self.check_tail_free)
         tail_row.addWidget(self.combo_tail_free, 1)
         tail_form.addRow(tail_row)
+
+        self.check_attached_image_world_prefix = QtWidgets.QCheckBox("添付画像に写る世界についての動画")
+        self.check_attached_image_world_prefix.setToolTip(
+            "ON にすると、選択中の video_style.description の先頭へ"
+            "『添付画像に写る世界を動画として展開する』要件を前置きします。"
+        )
+        self.check_attached_image_world_prefix.stateChanged.connect(self.auto_update)
+        tail_form.addRow(self.check_attached_image_world_prefix)
 
         tail2_group = QtWidgets.QGroupBox("末尾2 (JSONフラグ)")
         tail2_layout = QtWidgets.QVBoxLayout(tail2_group)

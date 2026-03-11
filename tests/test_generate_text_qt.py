@@ -420,6 +420,25 @@ def test_compose_movie_prompt_keeps_direction_constraints():
     assert "Visually focus on these subjects: ruins, wildlife." in payload["video_prompt"]["instructions"]
 
 
+def test_prepend_attached_image_world_description_updates_video_style_description():
+    """添付画像世界トグル用の前置きが video_style.description の先頭に入ること。"""
+
+    from modules.prompt_text_utils import (
+        ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX,
+        prepend_attached_image_world_description,
+    )
+
+    result = prepend_attached_image_world_description(
+        '{"video_style":{"scope":"full_movie","description":"this is sweeping cinematic footage"}}',
+        enabled=True,
+    )
+
+    payload = qt_app.json.loads(result)
+    assert payload["video_style"]["description"] == (
+        f"{ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX} this is sweeping cinematic footage"
+    )
+
+
 def test_extract_metadata_from_prompt_strips_compiled_requirements_block():
     """旧形式の polluted prompt でも本文抽出時に要件ブロックを除去できること。"""
 
@@ -518,13 +537,36 @@ def test_movie_tail_media_type_hides_midjourney_options(prompt_generator):
     assert not prompt_generator.group_midjourney_options.isHidden()
 
 
-def test_movie_tail_preset_contains_attached_image_world_option(prompt_generator):
-    """movie 末尾1に、添付画像の世界を動画化する専用プリセットが存在すること。"""
+def test_movie_tail_preset_detaches_attached_image_world_option(prompt_generator):
+    """添付画像世界の指定はプリセット一覧ではなく独立トグルで扱うこと。"""
 
     prompt_generator.combo_tail_media_type.setCurrentText("movie")
     labels = [prompt_generator.combo_tail_free.itemText(i) for i in range(prompt_generator.combo_tail_free.count())]
 
-    assert "添付画像に写る世界についての動画" in labels
+    assert "添付画像に写る世界についての動画" not in labels
+    assert not prompt_generator.check_attached_image_world_prefix.isHidden()
+
+
+def test_attached_image_world_toggle_prepends_movie_description_in_output(prompt_generator):
+    """独立トグルON時は、選択中 style の description 先頭へ要件を前置きすること。"""
+
+    from modules.prompt_text_utils import ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX
+
+    prompt_generator.combo_tail_media_type.setCurrentText("movie")
+    target_index = prompt_generator.combo_tail_free.findText(
+        "70mmフィルムで撮影された、ドラマチック照明の横移動シネマティック全編"
+    )
+    assert target_index >= 0
+    prompt_generator.combo_tail_free.setCurrentIndex(target_index)
+    prompt_generator.main_prompt = "A ruined city under moonlight."
+    prompt_generator.check_attached_image_world_prefix.setChecked(True)
+
+    prompt_generator.update_option(sync_from_text=False)
+
+    payload = qt_app.json.loads(prompt_generator.text_output.toPlainText())
+    description = payload["video_prompt"]["video_style"]["description"]
+    assert description.startswith(ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX)
+    assert "this is sweeping cinematic footage" in description
 
 
 def test_update_option_does_not_restore_cleared_prompt(prompt_generator):
