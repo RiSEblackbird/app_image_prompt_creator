@@ -145,8 +145,19 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         if self._main_splitter_default_applied:
             return
 
-        self._main_splitter_default_applied = True
-        QtCore.QTimer.singleShot(0, self._apply_default_main_splitter_sizes)
+        QtCore.QTimer.singleShot(0, self._try_apply_default_main_splitter_sizes)
+
+    def _try_apply_default_main_splitter_sizes(self) -> None:
+        """主スプリッタの既定幅が有効になるまで再試行し、成功時のみ適用済みとして扱う。"""
+
+        if self._main_splitter_default_applied:
+            return
+
+        if self._apply_default_main_splitter_sizes():
+            self._main_splitter_default_applied = True
+            return
+
+        QtCore.QTimer.singleShot(0, self._try_apply_default_main_splitter_sizes)
 
     def _ensure_model_choice_alignment(self) -> None:
         """設定値とコンボボックスの候補がズレた場合に警告し、UIを有効モデルへ合わせる。"""
