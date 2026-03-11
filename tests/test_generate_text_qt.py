@@ -172,6 +172,20 @@ def test_collapsed_attribute_section_recomputes_height_after_font_scale(prompt_g
     assert scaled_max_height >= scaled_button_height
 
 
+def test_main_splitter_starts_with_wider_left_pane(prompt_generator):
+    """初期表示時の左ペインは、最小幅ではなく操作しやすい既定幅で始まること。"""
+
+    prompt_generator.show()
+    _process_events()
+
+    splitter = prompt_generator.main_splitter
+    sizes = splitter.sizes()
+
+    assert sizes[0] >= 700
+    assert sizes[1] >= 280
+    assert sizes[0] > 220
+
+
 def test_left_splitter_can_change_sizes_when_attribute_section_expanded(prompt_generator):
     """左スプリッタは展開後も上下サイズを変更できること。"""
 

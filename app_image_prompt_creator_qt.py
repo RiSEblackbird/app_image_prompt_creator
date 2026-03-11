@@ -105,6 +105,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         self.font_scale_level = 0
         self._ui_font_family = self.font().family()
         self.button_font_scale: Optional[QtWidgets.QPushButton] = None
+        self._main_splitter_default_applied = False
         
         # 末尾プリセット・アレンジプリセットのロード（設定ファイル反映後のパスを使用）
         load_tail_presets_from_yaml()
@@ -135,6 +136,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 "db_path": config.DEFAULT_DB_PATH,
             },
         )
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        """初回表示後にレイアウトを確定させ、主スプリッタの既定位置を適用する。"""
+
+        super().showEvent(event)
+        if self._main_splitter_default_applied:
+            return
+
+        self._main_splitter_default_applied = True
+        QtCore.QTimer.singleShot(0, self._apply_default_main_splitter_sizes)
 
     def _ensure_model_choice_alignment(self) -> None:
         """設定値とコンボボックスの候補がズレた場合に警告し、UIを有効モデルへ合わせる。"""

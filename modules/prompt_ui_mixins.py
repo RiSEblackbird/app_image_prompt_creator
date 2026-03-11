@@ -24,6 +24,7 @@ from modules.storyboard import (
 )
 
 WIDGET_SIZE_MAX = 16777215
+DEFAULT_MAIN_SPLITTER_LEFT_WIDTH = 720
 
 
 class PromptUIMixin:
@@ -53,6 +54,7 @@ class PromptUIMixin:
         splitter.setChildrenCollapsible(False)
         splitter.setHandleWidth(6)
         main_layout.addWidget(splitter, 1)
+        self.main_splitter = splitter
 
         left_widget = QtWidgets.QWidget()
         left_layout = QtWidgets.QVBoxLayout(left_widget)
@@ -82,6 +84,29 @@ class PromptUIMixin:
         self.loading_progress.setMaximumHeight(15)
         self.loading_progress.setVisible(False)
         self.status_bar.addPermanentWidget(self.loading_progress)
+
+    def _apply_default_main_splitter_sizes(self) -> None:
+        """初回表示時の主スプリッタ位置を、操作しやすい既定幅へそろえる。"""
+
+        splitter = getattr(self, "main_splitter", None)
+        if not isinstance(splitter, QtWidgets.QSplitter) or splitter.count() != 2:
+            return
+
+        sizes = splitter.sizes()
+        total = sum(sizes)
+        if total <= 0:
+            return
+
+        left_widget = splitter.widget(0)
+        right_widget = splitter.widget(1)
+        if left_widget is None or right_widget is None:
+            return
+
+        left_min = left_widget.minimumWidth()
+        right_min = right_widget.minimumWidth()
+        left = max(left_min, min(DEFAULT_MAIN_SPLITTER_LEFT_WIDTH, total - right_min))
+        right = max(right_min, total - left)
+        splitter.setSizes([left, right])
 
     def _set_loading_state(self, is_loading: bool, message: str = ""):
         """LLM処理中のローディング表示を制御する。"""
