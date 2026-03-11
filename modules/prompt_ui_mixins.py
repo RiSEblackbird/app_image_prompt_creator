@@ -103,6 +103,15 @@ class PromptUIMixin:
         self.button_font_scale.clicked.connect(self.cycle_font_scale)
         header_layout.addWidget(self.button_font_scale)
 
+    def _on_attr_group_toggled(self, checked: bool) -> None:
+        """属性選択セクションの折りたたみ状態を切り替える。
+
+        GroupBox 自体は常に表示しつつ、中身のスクロールエリアだけを表示/非表示にする。
+        これにより、タイトル行をクリックして展開できる「折りたたみセクション」として扱える。
+        """
+        if hasattr(self, "attribute_area") and self.attribute_area is not None:
+            self.attribute_area.setVisible(checked)
+
     def _build_left_pane_content(self, layout):
         basic_group = QtWidgets.QGroupBox("基本設定")
         basic_grid = QtWidgets.QGridLayout(basic_group)
@@ -175,15 +184,23 @@ class PromptUIMixin:
 
         layout.addWidget(basic_group)
 
-        attr_group = QtWidgets.QGroupBox("属性選択")
-        attr_layout = QtWidgets.QVBoxLayout(attr_group)
+        self.attr_group = QtWidgets.QGroupBox("属性選択")
+        self.attr_group.setCheckable(True)
+        # デフォルトでは折りたたみ状態とし、必要なときだけ展開して使う。
+        self.attr_group.setChecked(False)
+        self.attr_group.toggled.connect(self._on_attr_group_toggled)
+
+        attr_layout = QtWidgets.QVBoxLayout(self.attr_group)
         self.attribute_area = QtWidgets.QScrollArea()
         self.attribute_area.setWidgetResizable(True)
         self.attribute_container = QtWidgets.QWidget()
         self.attribute_layout = QtWidgets.QFormLayout(self.attribute_container)
         self.attribute_area.setWidget(self.attribute_container)
         attr_layout.addWidget(self.attribute_area)
-        layout.addWidget(attr_group, 1)
+        layout.addWidget(self.attr_group, 1)
+
+        # 初期状態の折りたたみ反映
+        self._on_attr_group_toggled(self.attr_group.isChecked())
 
         tabs = QtWidgets.QTabWidget()
         layout.addWidget(tabs)
