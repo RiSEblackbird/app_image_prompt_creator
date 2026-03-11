@@ -186,6 +186,25 @@ def test_main_splitter_starts_with_wider_left_pane(prompt_generator):
     assert sizes[0] > 220
 
 
+def test_main_splitter_default_sizes_retries_until_success(prompt_generator, monkeypatch):
+    """初回適用が未確定でも、既定サイズの再試行で最終的に適用済みになること。"""
+
+    call_count = 0
+
+    def fake_apply_default_sizes():
+        nonlocal call_count
+        call_count += 1
+        return call_count >= 2
+
+    monkeypatch.setattr(prompt_generator, "_apply_default_main_splitter_sizes", fake_apply_default_sizes)
+
+    prompt_generator.show()
+    _process_events()
+
+    assert call_count >= 2
+    assert prompt_generator._main_splitter_default_applied is True
+
+
 def test_left_splitter_can_change_sizes_when_attribute_section_expanded(prompt_generator):
     """左スプリッタは展開後も上下サイズを変更できること。"""
 

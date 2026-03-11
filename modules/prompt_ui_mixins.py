@@ -85,28 +85,29 @@ class PromptUIMixin:
         self.loading_progress.setVisible(False)
         self.status_bar.addPermanentWidget(self.loading_progress)
 
-    def _apply_default_main_splitter_sizes(self) -> None:
+    def _apply_default_main_splitter_sizes(self) -> bool:
         """初回表示時の主スプリッタ位置を、操作しやすい既定幅へそろえる。"""
 
         splitter = getattr(self, "main_splitter", None)
         if not isinstance(splitter, QtWidgets.QSplitter) or splitter.count() != 2:
-            return
+            return False
 
         sizes = splitter.sizes()
         total = sum(sizes)
         if total <= 0:
-            return
+            return False
 
         left_widget = splitter.widget(0)
         right_widget = splitter.widget(1)
         if left_widget is None or right_widget is None:
-            return
+            return False
 
         left_min = left_widget.minimumWidth()
         right_min = right_widget.minimumWidth()
         left = max(left_min, min(DEFAULT_MAIN_SPLITTER_LEFT_WIDTH, total - right_min))
         right = max(right_min, total - left)
         splitter.setSizes([left, right])
+        return True
 
     def _set_loading_state(self, is_loading: bool, message: str = ""):
         """LLM処理中のローディング表示を制御する。"""
