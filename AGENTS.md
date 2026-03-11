@@ -14,9 +14,25 @@ python app_image_prompt_creator_qt.py
 # テスト
 python -m pytest tests/test_generate_text_qt.py -v
 
+# UIレイアウト/Qt挙動まわりを重点確認
+python -m pytest tests/test_generate_text_qt.py -k "splitter or attribute" -v
+
 # 必須ファイル確認
 python scripts/check_required_files.py
 ```
+
+## Testing Policy
+
+- UIに限らず、改修時は「何が壊れていたか」を先に言語化し、その失敗を再現できるテストを優先して追加する
+- 不具合修正では、対症療法ではなく根本原因を検知できる観点でテストを書く
+- 新機能追加では、正例だけでなく主要な境界値・無効入力・回帰リスクも最低1つ確認する
+- 既存不具合の再発防止として、修正コードだけでなく利用者操作や公開メソッド経由でも期待どおりになるかを確認する
+- 完了報告前に、変更範囲に関係するテストを実行し、実行していない場合は未実行であることを明示する
+- このリポジトリでは少なくとも `python -m pytest tests/test_generate_text_qt.py -v` を実行候補として確認する
+- PySide6 のUI改修では、見た目だけで完了扱いにせず `tests/test_generate_text_qt.py` に再現テストを追加する
+- レイアウト不具合では `isVisible()` だけでなく `sizes()` / `height()` / ハンドルのドラッグ結果まで確認する
+- `QSplitter` の不具合確認では `moveSplitter()` だけでなく、可能なら `QtTest.QTest` で実ドラッグも検証する
+- 折りたたみUIでは「展開時」「格納時」「格納後も仕切り操作可能か」を別ケースで確認する
 
 ## Project Structure
 

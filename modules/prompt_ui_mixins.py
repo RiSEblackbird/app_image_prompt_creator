@@ -23,6 +23,8 @@ from modules.storyboard import (
     extract_metadata_from_prompt,
 )
 
+WIDGET_SIZE_MAX = 16777215
+
 
 class PromptUIMixin:
     """UI構築とフォント制御を担当するミックスイン。"""
@@ -46,6 +48,10 @@ class PromptUIMixin:
         self._build_header(main_layout)
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        # 左右ペインの幅をドラッグで柔軟に調整できるようにする設定。
+        splitter.setOpaqueResize(True)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(6)
         main_layout.addWidget(splitter, 1)
 
         left_widget = QtWidgets.QWidget()
@@ -62,8 +68,11 @@ class PromptUIMixin:
         self._build_right_pane_content(right_layout)
         splitter.addWidget(right_widget)
 
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 6)
+        # 初期比率は 1:2 としつつ、どちらのペインも十分に狭くできるよう最小幅を抑えておく。
+        left_widget.setMinimumWidth(220)
+        right_widget.setMinimumWidth(280)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
 
         self.status_bar = self.statusBar()
         self.loading_progress = QtWidgets.QProgressBar()
@@ -103,9 +112,88 @@ class PromptUIMixin:
         self.button_font_scale.clicked.connect(self.cycle_font_scale)
         header_layout.addWidget(self.button_font_scale)
 
+    def _on_attr_group_toggled(self, checked: bool) -> None:
+        """属性選択セクションの折りたたみ状態を切り替える。"""
+        attr_container = getattr(self, "attr_section_container", None)
+        attr_body = getattr(self, "attr_body_container", None)
+        attr_toggle = getattr(self, "attr_toggle_button", None)
+        if attr_container is None or attr_body is None or attr_toggle is None:
+            return
+
+        if checked:
+            attr_toggle.setArrowType(QtCore.Qt.DownArrow)
+            attr_body.setVisible(True)
+            attr_container.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+            attr_container.setMinimumHeight(160)
+            attr_container.setMaximumHeight(WIDGET_SIZE_MAX)
+            attr_container.updateGeometry()
+            self._schedule_left_splitter_resize(expanded=True)
+            return
+
+        current_height = attr_container.height()
+        if current_height > 80:
+            self._attr_group_expanded_height = current_height
+
+        attr_toggle.setArrowType(QtCore.Qt.RightArrow)
+        attr_body.setVisible(False)
+        attr_container.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        attr_container.setMinimumHeight(0)
+        self._refresh_attr_group_collapsed_height()
+        attr_container.updateGeometry()
+
+    def _refresh_attr_group_collapsed_height(self) -> None:
+        """属性選択が格納状態のときに、ヘッダ高に合わせて最大高さを再計算する。"""
+        attr_container = getattr(self, "attr_section_container", None)
+        attr_toggle = getattr(self, "attr_toggle_button", None)
+        if attr_container is None or attr_toggle is None:
+            return
+
+        attr_container.setMaximumHeight(self._get_attr_collapsed_height())
+
+    def _get_attr_collapsed_height(self) -> int:
+        """属性選択セクションを格納したときの高さを返す。"""
+        attr_toggle = getattr(self, "attr_toggle_button", None)
+        if attr_toggle is not None:
+            return attr_toggle.sizeHint().height() + 8
+        return 36
+
+    def _schedule_left_splitter_resize(self, expanded: bool) -> None:
+        """レイアウト反映後に左スプリッタの高さ配分を調整する。"""
+        QtCore.QTimer.singleShot(0, lambda: self._resize_left_splitter(expanded))
+
+    def _resize_left_splitter(self, expanded: bool) -> None:
+        """属性選択の展開状態に応じて左スプリッタの高さ配分を整える。"""
+        splitter = getattr(self, "left_splitter", None)
+        attr_container = getattr(self, "attr_section_container", None)
+        if not isinstance(splitter, QtWidgets.QSplitter) or splitter.count() != 2 or attr_container is None:
+            return
+
+        total = max(1, splitter.height())
+        left_tabs = getattr(self, "left_tabs", None)
+        lower_min = 24
+        if isinstance(left_tabs, QtWidgets.QTabWidget):
+            # タブ本文はスプリッタで十分に縮められる前提とし、最低限タブバーが見える量だけ確保する。
+            lower_min = max(lower_min, left_tabs.tabBar().sizeHint().height() + 6)
+
+        if expanded:
+            preferred = getattr(self, "_attr_group_expanded_height", 0) or 0
+            minimum_expanded = max(220, attr_container.sizeHint().height(), 160)
+            upper = max(minimum_expanded, preferred)
+            # 展開時は下側タブの最低表示量だけ確保し、残りはできるだけ属性選択へ配分する。
+            upper = min(total - lower_min, upper)
+        else:
+            # 格納時は属性選択セクション自体だけを最小化し、スプリッタ位置は固定しない。
+            sizes = splitter.sizes()
+            upper = sizes[0] if sizes else self._get_attr_collapsed_height()
+
+        upper = max(1, upper)
+        lower = max(1, total - upper)
+        splitter.setSizes([upper, lower])
+
     def _build_left_pane_content(self, layout):
-        basic_group = QtWidgets.QGroupBox("基本設定")
-        basic_grid = QtWidgets.QGridLayout(basic_group)
+        self.basic_group = QtWidgets.QGroupBox("基本設定")
+        self.basic_group.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        basic_grid = QtWidgets.QGridLayout(self.basic_group)
 
         basic_grid.addWidget(QtWidgets.QLabel("行数:"), 0, 0)
         self.spin_row_num = QtWidgets.QSpinBox()
@@ -173,20 +261,63 @@ class PromptUIMixin:
         self.radio_mode_llm.toggled.connect(self._update_generate_mode_ui)
         self._update_generate_mode_ui()
 
-        layout.addWidget(basic_group)
+        layout.addWidget(self.basic_group)
 
-        attr_group = QtWidgets.QGroupBox("属性選択")
-        attr_layout = QtWidgets.QVBoxLayout(attr_group)
+        # 属性選択とスタイル/データ管理だけを縦方向スプリッタで分割する。
+        # 基本設定は固定高のまま上部に置き、不要な余白やつぶれを防ぐ。
+        self.left_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.left_splitter.setOpaqueResize(True)
+        # 下側のタブ群は内容が多く最小サイズヒントが大きくなりやすいため、
+        # スプリッタでは縮められるようにして上側の属性選択を圧迫しないようにする。
+        self.left_splitter.setChildrenCollapsible(True)
+        self.left_splitter.setHandleWidth(6)
+        layout.addWidget(self.left_splitter, 1)
+
+        self.attr_section_container = QtWidgets.QWidget()
+        self.attr_section_container.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        attr_container_layout = QtWidgets.QVBoxLayout(self.attr_section_container)
+        attr_container_layout.setContentsMargins(0, 0, 0, 0)
+        attr_container_layout.setSpacing(6)
+
+        # checkable QGroupBox は sizeHint が不安定になりやすいため、
+        # ヘッダボタンと本文コンテナを分離して折りたたみを管理する。
+        self.attr_toggle_button = QtWidgets.QToolButton()
+        self.attr_toggle_button.setText("属性選択")
+        self.attr_toggle_button.setCheckable(True)
+        self.attr_toggle_button.setChecked(False)
+        self.attr_toggle_button.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        self.attr_toggle_button.setArrowType(QtCore.Qt.RightArrow)
+        self.attr_toggle_button.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        self.attr_toggle_button.toggled.connect(self._on_attr_group_toggled)
+        attr_container_layout.addWidget(self.attr_toggle_button)
+
+        self.attr_body_container = QtWidgets.QGroupBox()
+        self.attr_body_container.setTitle("")
+        self.attr_body_container.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        attr_layout = QtWidgets.QVBoxLayout(self.attr_body_container)
+        attr_layout.setContentsMargins(8, 12, 8, 8)
         self.attribute_area = QtWidgets.QScrollArea()
         self.attribute_area.setWidgetResizable(True)
+        self.attribute_area.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.attribute_container = QtWidgets.QWidget()
         self.attribute_layout = QtWidgets.QFormLayout(self.attribute_container)
         self.attribute_area.setWidget(self.attribute_container)
         attr_layout.addWidget(self.attribute_area)
-        layout.addWidget(attr_group, 1)
+        attr_container_layout.addWidget(self.attr_body_container, 1)
+        self.left_splitter.addWidget(self.attr_section_container)
 
-        tabs = QtWidgets.QTabWidget()
-        layout.addWidget(tabs)
+        # 初期状態の折りたたみ反映
+        self._on_attr_group_toggled(self.attr_toggle_button.isChecked())
+
+        self.left_tabs = QtWidgets.QTabWidget()
+        self.left_tabs.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Ignored)
+        self.left_tabs.setMinimumHeight(0)
+        self.left_splitter.addWidget(self.left_tabs)
+        self.left_splitter.setCollapsible(0, True)
+        self.left_splitter.setCollapsible(1, True)
+        self.left_splitter.setStretchFactor(0, 1)
+        self.left_splitter.setStretchFactor(1, 1)
+        self._schedule_left_splitter_resize(expanded=False)
 
         style_tab = QtWidgets.QWidget()
         style_layout = QtWidgets.QVBoxLayout(style_tab)
@@ -442,7 +573,7 @@ class PromptUIMixin:
         self._sync_tail_media_type_visibility()
 
         style_layout.addStretch(1)
-        tabs.addTab(style_tab, "スタイル・オプション")
+        self.left_tabs.addTab(style_tab, "スタイル・オプション")
 
         data_tab = QtWidgets.QWidget()
         data_layout = QtWidgets.QVBoxLayout(data_tab)
@@ -476,7 +607,7 @@ class PromptUIMixin:
         data_layout.addWidget(db_group)
 
         data_layout.addStretch(1)
-        tabs.addTab(data_tab, "データ管理")
+        self.left_tabs.addTab(data_tab, "データ管理")
 
     def _add_option_cell(self, grid: QtWidgets.QGridLayout, row: int, label: str, values: Iterable[str]) -> QtWidgets.QComboBox:
         """グリッドレイアウトにオプション項目を追加するヘルパー。"""
@@ -494,10 +625,20 @@ class PromptUIMixin:
         return combo
 
     def _build_right_pane_content(self, layout):
+        # プロンプトテキストとツール群の縦幅をユーザーが調整できるように、
+        # 右ペインは縦方向の QSplitter で分割する。
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        layout.addWidget(splitter, 1)
+
+        # 上側: 出力テキスト + アクションボタン
+        upper_widget = QtWidgets.QWidget()
+        upper_layout = QtWidgets.QVBoxLayout(upper_widget)
+        upper_layout.setContentsMargins(0, 0, 0, 0)
+
         self.text_output = QtWidgets.QTextEdit()
         self.text_output.setAcceptRichText(False)
         self.text_output.setPlaceholderText("ここに生成結果が表示されます")
-        layout.addWidget(self.text_output, 1)
+        upper_layout.addWidget(self.text_output, 1)
 
         action_layout = QtWidgets.QHBoxLayout()
 
@@ -513,7 +654,7 @@ class PromptUIMixin:
         generate_copy_btn.clicked.connect(self.generate_and_copy)
         action_layout.addWidget(generate_copy_btn, 1)
 
-        layout.addLayout(action_layout)
+        upper_layout.addLayout(action_layout)
 
         sub_action_layout = QtWidgets.QHBoxLayout()
 
@@ -530,11 +671,22 @@ class PromptUIMixin:
         update_option_btn.clicked.connect(lambda _checked=False: self.update_option())
         sub_action_layout.addWidget(update_option_btn)
 
-        layout.addLayout(sub_action_layout)
+        upper_layout.addLayout(sub_action_layout)
+
+        splitter.addWidget(upper_widget)
+
+        # 下側: 各種ツールタブ
+        lower_widget = QtWidgets.QWidget()
+        lower_layout = QtWidgets.QVBoxLayout(lower_widget)
+        lower_layout.setContentsMargins(0, 0, 0, 0)
 
         tools_tabs = QtWidgets.QTabWidget()
         tools_tabs.setMinimumHeight(320)
-        layout.addWidget(tools_tabs)
+        lower_layout.addWidget(tools_tabs)
+
+        splitter.addWidget(lower_widget)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
 
         movie_tab = QtWidgets.QWidget()
         movie_layout = QtWidgets.QVBoxLayout(movie_tab)
@@ -1780,6 +1932,10 @@ class PromptUIMixin:
             }}
         """
         )
+
+        if hasattr(self, "attr_toggle_button") and self.attr_toggle_button is not None:
+            if not self.attr_toggle_button.isChecked():
+                self._refresh_attr_group_collapsed_height()
 
         self._update_font_button_label(preset["label"])
 
