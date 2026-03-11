@@ -86,6 +86,11 @@ DIRECTION_CUT_DURATION_POLICY_CHOICES = [
     ("強弱あり", "weighted"),
     ("可変", "variable"),
 ]
+DIRECTION_SUBJECT_FOCUS_CHOICES = [
+    ("未指定", ""),
+    ("人物主体", "people_primary"),
+    ("情景主体", "scene_primary"),
+]
 
 # カメラワークの選択肢
 CAMERA_WORK_CHOICES = [

@@ -172,6 +172,39 @@ def test_collapsed_attribute_section_recomputes_height_after_font_scale(prompt_g
     assert scaled_max_height >= scaled_button_height
 
 
+def test_main_splitter_starts_with_wider_left_pane(prompt_generator):
+    """初期表示時の左ペインは、最小幅ではなく操作しやすい既定幅で始まること。"""
+
+    prompt_generator.show()
+    _process_events()
+
+    splitter = prompt_generator.main_splitter
+    sizes = splitter.sizes()
+
+    assert sizes[0] >= 700
+    assert sizes[1] >= 280
+    assert sizes[0] > 220
+
+
+def test_main_splitter_default_sizes_retries_until_success(prompt_generator, monkeypatch):
+    """初回適用が未確定でも、既定サイズの再試行で最終的に適用済みになること。"""
+
+    call_count = 0
+
+    def fake_apply_default_sizes():
+        nonlocal call_count
+        call_count += 1
+        return call_count >= 2
+
+    monkeypatch.setattr(prompt_generator, "_apply_default_main_splitter_sizes", fake_apply_default_sizes)
+
+    prompt_generator.show()
+    _process_events()
+
+    assert call_count >= 2
+    assert prompt_generator._main_splitter_default_applied is True
+
+
 def test_left_splitter_can_change_sizes_when_attribute_section_expanded(prompt_generator):
     """左スプリッタは展開後も上下サイズを変更できること。"""
 
@@ -406,6 +439,25 @@ def test_compose_movie_prompt_keeps_direction_constraints():
     assert "Visually focus on these subjects: ruins, wildlife." in payload["video_prompt"]["instructions"]
 
 
+def test_prepend_attached_image_world_description_updates_video_style_description():
+    """添付画像世界トグル用の前置きが video_style.description の先頭に入ること。"""
+
+    from modules.prompt_text_utils import (
+        ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX,
+        prepend_attached_image_world_description,
+    )
+
+    result = prepend_attached_image_world_description(
+        '{"video_style":{"scope":"full_movie","description":"this is sweeping cinematic footage"}}',
+        enabled=True,
+    )
+
+    payload = qt_app.json.loads(result)
+    assert payload["video_style"]["description"] == (
+        f"{ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX} this is sweeping cinematic footage"
+    )
+
+
 def test_extract_metadata_from_prompt_strips_compiled_requirements_block():
     """旧形式の polluted prompt でも本文抽出時に要件ブロックを除去できること。"""
 
@@ -439,6 +491,7 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
     prompt_generator.combo_direction_camera_motion.setCurrentText("常時動く")
     prompt_generator.combo_direction_visual_energy.setCurrentText("生き生き")
     prompt_generator.combo_direction_cut_duration_policy.setCurrentText("可変")
+    prompt_generator.combo_direction_subject_focus.setCurrentText("情景主体")
     prompt_generator.entry_direction_freeform_constraints.setText("Avoid modern urban elements.")
     prompt_generator.check_direction_live_action_only.setChecked(True)
     prompt_generator.check_direction_ultra_high_resolution_8k.setChecked(True)
@@ -453,6 +506,7 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
             "camera_motion": "continuous",
             "visual_energy": "vivid",
             "cut_duration_policy": "variable",
+            "subject_focus": "scene_primary",
             "freeform_constraints": "Avoid modern urban elements.",
             "live_action_only": True,
             "ultra_high_resolution_8k": True,
@@ -476,6 +530,23 @@ def test_movie_direction_constraints_compile_new_quality_flags():
 
     assert "Render the entire video as fully live-action footage with no animated or illustrative look." in instructions
     assert "Render the entire video in ultra high resolution 8K quality." in instructions
+
+
+def test_movie_direction_constraints_compile_subject_focus():
+    """主体指定が instructions に自然文として反映されること。"""
+
+    from modules.prompt_text_utils import compile_movie_instructions
+
+    instructions = compile_movie_instructions(
+        {"person_present": True, "person_count": "1+"},
+        {"subject_focus": "scene_primary"},
+    )
+
+    assert "At least one person appears on screen." in instructions
+    assert (
+        "Even if people appear on screen, keep the environment, scenery, and overall scene as the primary visual focus rather than individual people."
+        in instructions
+    )
 
 
 def test_make_tail_flags_json_supports_explicit_zero_people(prompt_generator):
@@ -504,13 +575,36 @@ def test_movie_tail_media_type_hides_midjourney_options(prompt_generator):
     assert not prompt_generator.group_midjourney_options.isHidden()
 
 
-def test_movie_tail_preset_contains_attached_image_world_option(prompt_generator):
-    """movie 末尾1に、添付画像の世界を動画化する専用プリセットが存在すること。"""
+def test_movie_tail_preset_detaches_attached_image_world_option(prompt_generator):
+    """添付画像世界の指定はプリセット一覧ではなく独立トグルで扱うこと。"""
 
     prompt_generator.combo_tail_media_type.setCurrentText("movie")
     labels = [prompt_generator.combo_tail_free.itemText(i) for i in range(prompt_generator.combo_tail_free.count())]
 
-    assert "添付画像に写る世界についての動画" in labels
+    assert "添付画像に写る世界についての動画" not in labels
+    assert not prompt_generator.check_attached_image_world_prefix.isHidden()
+
+
+def test_attached_image_world_toggle_prepends_movie_description_in_output(prompt_generator):
+    """独立トグルON時は、選択中 style の description 先頭へ要件を前置きすること。"""
+
+    from modules.prompt_text_utils import ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX
+
+    prompt_generator.combo_tail_media_type.setCurrentText("movie")
+    target_index = prompt_generator.combo_tail_free.findText(
+        "70mmフィルムで撮影された、ドラマチック照明の横移動シネマティック全編"
+    )
+    assert target_index >= 0
+    prompt_generator.combo_tail_free.setCurrentIndex(target_index)
+    prompt_generator.main_prompt = "A ruined city under moonlight."
+    prompt_generator.check_attached_image_world_prefix.setChecked(True)
+
+    prompt_generator.update_option(sync_from_text=False)
+
+    payload = qt_app.json.loads(prompt_generator.text_output.toPlainText())
+    description = payload["video_prompt"]["video_style"]["description"]
+    assert description.startswith(ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX)
+    assert "this is sweeping cinematic footage" in description
 
 
 def test_update_option_does_not_restore_cleared_prompt(prompt_generator):

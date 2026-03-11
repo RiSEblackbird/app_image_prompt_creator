@@ -7,6 +7,10 @@ import re
 from typing import List, Tuple
 
 MOVIE_REQUIREMENTS_HEADER = "Video requirements:"
+ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX = (
+    "Expand the world shown in the attached image into a coherent moving scene "
+    "while preserving its atmosphere, place, and visual logic."
+)
 
 
 def sanitize_to_english(text: str) -> str:
@@ -373,6 +377,14 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
     elif cut_duration_policy == "variable":
         sentences.append("Cut durations do not need to be evenly distributed.")
 
+    subject_focus = direction_constraints.get("subject_focus")
+    if subject_focus == "people_primary":
+        sentences.append("Keep people as the primary visual focus of the composition whenever they appear on screen.")
+    elif subject_focus == "scene_primary":
+        sentences.append(
+            "Even if people appear on screen, keep the environment, scenery, and overall scene as the primary visual focus rather than individual people."
+        )
+
     freeform_constraints = direction_constraints.get("freeform_constraints")
     if isinstance(freeform_constraints, str) and freeform_constraints.strip():
         sentences.append(_ensure_sentence(freeform_constraints))
@@ -406,6 +418,42 @@ def build_movie_json_payload(summary: str, details: List[str], scope: str, key: 
     `scope`/`key` 引数は呼び出し互換のため残すが、実体は prompt に集約する。
     """
     payload = {"prompt": (summary or "").strip()}
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def prepend_attached_image_world_description(movie_tail: str, enabled: bool) -> str:
+    """添付画像世界トグルON時に、video_style.description の先頭へ前置きを加える。"""
+    normalized_tail = str(movie_tail or "").strip()
+    if not enabled:
+        return normalized_tail
+
+    if not normalized_tail:
+        return json.dumps(
+            {"video_style": {"description": ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX}},
+            ensure_ascii=False,
+        )
+
+    try:
+        payload = json.loads(normalized_tail)
+    except Exception:
+        return normalized_tail
+
+    if not isinstance(payload, dict):
+        return normalized_tail
+
+    video_style = payload.get("video_style")
+    if not isinstance(video_style, dict):
+        video_style = {}
+        payload["video_style"] = video_style
+
+    current_description = " ".join(str(video_style.get("description", "")).split()).strip()
+    if current_description.startswith(ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX):
+        return json.dumps(payload, ensure_ascii=False)
+
+    if current_description:
+        video_style["description"] = f"{ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX} {current_description}"
+    else:
+        video_style["description"] = ATTACHED_IMAGE_WORLD_DESCRIPTION_PREFIX
     return json.dumps(payload, ensure_ascii=False)
 
 

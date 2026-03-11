@@ -65,6 +65,7 @@ from modules.prompt_text_utils import (
     detach_movie_tail_for_llm,
     extract_sentence_details,
     inherit_options_if_present,
+    prepend_attached_image_world_description,
     split_prompt_and_options,
     strip_all_options,
 )
@@ -105,6 +106,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         self.font_scale_level = 0
         self._ui_font_family = self.font().family()
         self.button_font_scale: Optional[QtWidgets.QPushButton] = None
+        self._main_splitter_default_applied = False
         
         # 末尾プリセット・アレンジプリセットのロード（設定ファイル反映後のパスを使用）
         load_tail_presets_from_yaml()
@@ -135,6 +137,27 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 "db_path": config.DEFAULT_DB_PATH,
             },
         )
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        """初回表示後にレイアウトを確定させ、主スプリッタの既定位置を適用する。"""
+
+        super().showEvent(event)
+        if self._main_splitter_default_applied:
+            return
+
+        QtCore.QTimer.singleShot(0, self._try_apply_default_main_splitter_sizes)
+
+    def _try_apply_default_main_splitter_sizes(self) -> None:
+        """主スプリッタの既定幅が有効になるまで再試行し、成功時のみ適用済みとして扱う。"""
+
+        if self._main_splitter_default_applied:
+            return
+
+        if self._apply_default_main_splitter_sizes():
+            self._main_splitter_default_applied = True
+            return
+
+        QtCore.QTimer.singleShot(0, self._try_apply_default_main_splitter_sizes)
 
     def _ensure_model_choice_alignment(self) -> None:
         """設定値とコンボボックスの候補がズレた場合に警告し、UIを有効モデルへ合わせる。"""
@@ -389,6 +412,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             self.combo_direction_camera_motion,
             self.combo_direction_visual_energy,
             self.combo_direction_cut_duration_policy,
+            self.combo_direction_subject_focus,
             self.entry_direction_freeform_constraints,
             self.check_direction_live_action_only,
             self.check_direction_ultra_high_resolution_8k,
@@ -427,6 +451,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 self.combo_direction_cut_duration_policy,
                 defaults.get("cut_duration_policy", ""),
             )
+            self._set_combo_to_data(self.combo_direction_subject_focus, defaults.get("subject_focus", ""))
             self.entry_direction_freeform_constraints.setText(str(defaults.get("freeform_constraints", "")).strip())
             self.check_direction_live_action_only.setChecked(bool(defaults.get("live_action_only", False)))
             self.check_direction_ultra_high_resolution_8k.setChecked(
@@ -843,6 +868,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         if isinstance(cut_duration_policy, str) and cut_duration_policy:
             constraints["cut_duration_policy"] = cut_duration_policy
 
+        subject_focus = self.combo_direction_subject_focus.currentData()
+        if isinstance(subject_focus, str) and subject_focus:
+            constraints["subject_focus"] = subject_focus
+
         freeform_constraints = self.entry_direction_freeform_constraints.text().strip()
         if freeform_constraints:
             constraints["freeform_constraints"] = freeform_constraints
@@ -885,6 +914,15 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
 
         # 上記条件を満たさない場合は、ユーザーの自由入力をそのまま利用する。
         return text
+
+    def _resolve_movie_tail_prompt(self, base_movie_tail: Optional[str] = None) -> str:
+        """動画用の末尾1に、添付画像世界トグルの前置きを反映して返す。"""
+        raw_movie_tail = self._resolve_tail_free_prompt() if base_movie_tail is None else str(base_movie_tail or "").strip()
+        checkbox = getattr(self, "check_attached_image_world_prefix", None)
+        return prepend_attached_image_world_description(
+            raw_movie_tail,
+            bool(checkbox and checkbox.isChecked()),
+        )
 
     def _normalize_sentences(self, texts: Iterable[str]) -> List[str]:
         """文末の句読点を軽く整形し、Midjourney向けの短文として扱いやすい形に揃える。"""
@@ -1407,7 +1445,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         media_type = self.combo_tail_media_type.currentText() or config.DEFAULT_TAIL_MEDIA_TYPE
         if media_type == "movie":
             main_text = (self.main_prompt or "").strip()
-            movie_tail = self._resolve_tail_free_prompt()
+            movie_tail = self._resolve_movie_tail_prompt()
             flags_tail = self._make_tail_flags_json()
             direction_tail = self._make_direction_constraints_json()
             details = extract_sentence_details(main_text)
@@ -1697,6 +1735,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             movie_tail = ""
             if isinstance(vp.get("video_style"), dict):
                 movie_tail = json.dumps({"video_style": vp["video_style"]}, ensure_ascii=False)
+            movie_tail = self._resolve_movie_tail_prompt(movie_tail)
             flags_tail = ""
             if isinstance(vp.get("content_flags"), dict):
                 flags_tail = json.dumps({"content_flags": vp["content_flags"]}, ensure_ascii=False)
@@ -1709,6 +1748,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         core_without_direction, direction_tail = detach_direction_constraints_tail(src)
         core_without_flags, flags_tail = detach_content_flags_tail(core_without_direction)
         core_without_movie, movie_tail = detach_movie_tail_for_llm(core_without_flags)
+        movie_tail = self._resolve_movie_tail_prompt(movie_tail)
         main_text, options_tail, _ = split_prompt_and_options(core_without_movie)
         if not main_text:
             QtWidgets.QMessageBox.warning(self, "注意", "メインテキストが見つかりません。")
