@@ -566,33 +566,47 @@ class PromptUIMixin:
         direction_layout.addLayout(direction_row_3)
 
         direction_row_4 = QtWidgets.QHBoxLayout()
-        direction_row_4.addWidget(QtWidgets.QLabel("追加自由制約:"))
+        direction_row_4.addWidget(QtWidgets.QLabel("主役:"))
+        self.combo_direction_subject_focus = QtWidgets.QComboBox()
+        for label, value in config.DIRECTION_SUBJECT_FOCUS_CHOICES:
+            self.combo_direction_subject_focus.addItem(label, userData=value)
+        self.combo_direction_subject_focus.setToolTip(
+            "人物が複数いても誰を主役にするかではなく、"
+            "画面全体として人物主体か情景主体かを指定します。"
+        )
+        self.combo_direction_subject_focus.currentIndexChanged.connect(self.auto_update)
+        direction_row_4.addWidget(self.combo_direction_subject_focus)
+        direction_row_4.addStretch(1)
+        direction_layout.addLayout(direction_row_4)
+
+        direction_row_5 = QtWidgets.QHBoxLayout()
+        direction_row_5.addWidget(QtWidgets.QLabel("追加自由制約:"))
         self.entry_direction_freeform_constraints = QtWidgets.QLineEdit()
         self.entry_direction_freeform_constraints.setPlaceholderText("例: Avoid modern buildings")
         self.entry_direction_freeform_constraints.setToolTip(
             "上の専用項目にない条件だけを自然文で補足します。"
         )
         self.entry_direction_freeform_constraints.textChanged.connect(self.auto_update)
-        direction_row_4.addWidget(self.entry_direction_freeform_constraints, 1)
-        direction_layout.addLayout(direction_row_4)
+        direction_row_5.addWidget(self.entry_direction_freeform_constraints, 1)
+        direction_layout.addLayout(direction_row_5)
 
-        direction_row_5 = QtWidgets.QHBoxLayout()
+        direction_row_6 = QtWidgets.QHBoxLayout()
         # 映像の物理的な見え方に関する強い要件を、自由記述へ埋もれない専用フラグとして分離する。
         self.check_direction_live_action_only = QtWidgets.QCheckBox("完全実写映像")
         self.check_direction_live_action_only.setToolTip(
             "ON にすると、CGアニメ調ではなく実写として成立する質感・撮影感を強く要求します。"
         )
         self.check_direction_live_action_only.stateChanged.connect(self.auto_update)
-        direction_row_5.addWidget(self.check_direction_live_action_only)
+        direction_row_6.addWidget(self.check_direction_live_action_only)
 
         self.check_direction_ultra_high_resolution_8k = QtWidgets.QCheckBox("8K超高精細映像")
         self.check_direction_ultra_high_resolution_8k.setToolTip(
             "ON にすると、映像品質を 8K 相当の超高精細として強く要求します。"
         )
         self.check_direction_ultra_high_resolution_8k.stateChanged.connect(self.auto_update)
-        direction_row_5.addWidget(self.check_direction_ultra_high_resolution_8k)
-        direction_row_5.addStretch(1)
-        direction_layout.addLayout(direction_row_5)
+        direction_row_6.addWidget(self.check_direction_ultra_high_resolution_8k)
+        direction_row_6.addStretch(1)
+        direction_layout.addLayout(direction_row_6)
 
         tail_form.addRow(direction_group)
         style_layout.addLayout(tail_form)

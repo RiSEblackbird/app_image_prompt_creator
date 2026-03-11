@@ -176,16 +176,21 @@ tails:
 | カメラ運動 | `mostly_static` / `gentle` / `continuous` |
 | 映像の活力 | `calm` / `vivid` / `intense` |
 | カット尺 | `uniform` / `weighted` / `variable` |
+| 主役 | `people_primary` / `scene_primary`。人物が映る場合でも、人物主体か情景主体かを明示します |
 | 完全実写映像 | ON で `live_action_only=true` |
 | 8K超高精細映像 | ON で `ultra_high_resolution_8k=true` |
 | 追加自由制約 | 上の専用項目にない条件だけを自然文で補足 |
 
 出力例:
 ```json
-{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","live_action_only":true,"ultra_high_resolution_8k":true,"freeform_constraints":"Avoid modern urban elements."}}
+{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","subject_focus":"scene_primary","live_action_only":true,"ultra_high_resolution_8k":true,"freeform_constraints":"Avoid modern urban elements."}}
 ```
 
-`環境` はプロンプト本文の内容に依存しにくい「場所・層」の指定だけに寄せています。`頻出対象` は視覚的に主役になりやすい対象群をまとめたもので、必要に応じて複数選択できます。
+`環境` はプロンプト本文の内容に依存しにくい「場所・層」の指定だけに寄せています。`頻出対象` は視覚的に主役になりやすい対象群をまとめたもので、必要に応じて複数選択できます。`主役` は構図の中心を明示するための項目で、人物が複数いても `情景主体` を選ぶと背景・空間・風景を優先した画作りを促します。
+
+正例: 人物が2人以上登場しても風景や建築を主役にしたい場合は `主役=scene_primary` を選びます。
+
+負例: 人物が映るだけで常に人物中心の構図にしたくない場面で、`主役` を未指定のままにするとモデル判断で人物主体へ寄ることがあります。
 
 このブロックは内部的にはJSONで保持され、必要に応じて `video_prompt.instructions` に自然文の補助情報としても反映されます。
 

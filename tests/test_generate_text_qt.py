@@ -491,6 +491,7 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
     prompt_generator.combo_direction_camera_motion.setCurrentText("常時動く")
     prompt_generator.combo_direction_visual_energy.setCurrentText("生き生き")
     prompt_generator.combo_direction_cut_duration_policy.setCurrentText("可変")
+    prompt_generator.combo_direction_subject_focus.setCurrentText("情景主体")
     prompt_generator.entry_direction_freeform_constraints.setText("Avoid modern urban elements.")
     prompt_generator.check_direction_live_action_only.setChecked(True)
     prompt_generator.check_direction_ultra_high_resolution_8k.setChecked(True)
@@ -505,6 +506,7 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
             "camera_motion": "continuous",
             "visual_energy": "vivid",
             "cut_duration_policy": "variable",
+            "subject_focus": "scene_primary",
             "freeform_constraints": "Avoid modern urban elements.",
             "live_action_only": True,
             "ultra_high_resolution_8k": True,
@@ -528,6 +530,23 @@ def test_movie_direction_constraints_compile_new_quality_flags():
 
     assert "Render the entire video as fully live-action footage with no animated or illustrative look." in instructions
     assert "Render the entire video in ultra high resolution 8K quality." in instructions
+
+
+def test_movie_direction_constraints_compile_subject_focus():
+    """主体指定が instructions に自然文として反映されること。"""
+
+    from modules.prompt_text_utils import compile_movie_instructions
+
+    instructions = compile_movie_instructions(
+        {"person_present": True, "person_count": "1+"},
+        {"subject_focus": "scene_primary"},
+    )
+
+    assert "At least one person appears on screen." in instructions
+    assert (
+        "Even if people appear on screen, keep the environment, scenery, and overall scene as the primary visual focus rather than individual people."
+        in instructions
+    )
 
 
 def test_make_tail_flags_json_supports_explicit_zero_people(prompt_generator):

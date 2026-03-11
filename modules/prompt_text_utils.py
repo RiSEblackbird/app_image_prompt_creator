@@ -377,6 +377,14 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
     elif cut_duration_policy == "variable":
         sentences.append("Cut durations do not need to be evenly distributed.")
 
+    subject_focus = direction_constraints.get("subject_focus")
+    if subject_focus == "people_primary":
+        sentences.append("Keep people as the primary visual focus of the composition whenever they appear on screen.")
+    elif subject_focus == "scene_primary":
+        sentences.append(
+            "Even if people appear on screen, keep the environment, scenery, and overall scene as the primary visual focus rather than individual people."
+        )
+
     freeform_constraints = direction_constraints.get("freeform_constraints")
     if isinstance(freeform_constraints, str) and freeform_constraints.strip():
         sentences.append(_ensure_sentence(freeform_constraints))

@@ -412,6 +412,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             self.combo_direction_camera_motion,
             self.combo_direction_visual_energy,
             self.combo_direction_cut_duration_policy,
+            self.combo_direction_subject_focus,
             self.entry_direction_freeform_constraints,
             self.check_direction_live_action_only,
             self.check_direction_ultra_high_resolution_8k,
@@ -450,6 +451,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 self.combo_direction_cut_duration_policy,
                 defaults.get("cut_duration_policy", ""),
             )
+            self._set_combo_to_data(self.combo_direction_subject_focus, defaults.get("subject_focus", ""))
             self.entry_direction_freeform_constraints.setText(str(defaults.get("freeform_constraints", "")).strip())
             self.check_direction_live_action_only.setChecked(bool(defaults.get("live_action_only", False)))
             self.check_direction_ultra_high_resolution_8k.setChecked(
@@ -865,6 +867,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         cut_duration_policy = self.combo_direction_cut_duration_policy.currentData()
         if isinstance(cut_duration_policy, str) and cut_duration_policy:
             constraints["cut_duration_policy"] = cut_duration_policy
+
+        subject_focus = self.combo_direction_subject_focus.currentData()
+        if isinstance(subject_focus, str) and subject_focus:
+            constraints["subject_focus"] = subject_focus
 
         freeform_constraints = self.entry_direction_freeform_constraints.text().strip()
         if freeform_constraints:
