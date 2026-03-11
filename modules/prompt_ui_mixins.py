@@ -138,8 +138,17 @@ class PromptUIMixin:
         attr_body.setVisible(False)
         attr_container.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         attr_container.setMinimumHeight(0)
-        attr_container.setMaximumHeight(self._get_attr_collapsed_height())
+        self._refresh_attr_group_collapsed_height()
         attr_container.updateGeometry()
+
+    def _refresh_attr_group_collapsed_height(self) -> None:
+        """属性選択が格納状態のときに、ヘッダ高に合わせて最大高さを再計算する。"""
+        attr_container = getattr(self, "attr_section_container", None)
+        attr_toggle = getattr(self, "attr_toggle_button", None)
+        if attr_container is None or attr_toggle is None:
+            return
+
+        attr_container.setMaximumHeight(self._get_attr_collapsed_height())
 
     def _get_attr_collapsed_height(self) -> int:
         """属性選択セクションを格納したときの高さを返す。"""
@@ -1923,6 +1932,10 @@ class PromptUIMixin:
             }}
         """
         )
+
+        if hasattr(self, "attr_toggle_button") and self.attr_toggle_button is not None:
+            if not self.attr_toggle_button.isChecked():
+                self._refresh_attr_group_collapsed_height()
 
         self._update_font_button_label(preset["label"])
 

@@ -147,6 +147,31 @@ def test_attribute_section_toggle_changes_visible_height(prompt_generator):
     assert collapsed_again_height <= 60
 
 
+def test_collapsed_attribute_section_recomputes_height_after_font_scale(prompt_generator):
+    """格納状態でフォント変更しても、ヘッダが欠けない高さに再計算されること。"""
+
+    prompt_generator.resize(420, 900)
+    prompt_generator.show()
+    _process_events()
+
+    assert not prompt_generator.attr_toggle_button.isChecked()
+
+    initial_max_height = prompt_generator.attr_section_container.maximumHeight()
+    initial_button_height = prompt_generator.attr_toggle_button.sizeHint().height()
+    assert initial_max_height >= initial_button_height
+
+    # 複数回切り替えて確実に大きいフォントへ到達させる。
+    for _ in range(max(2, len(qt_app.config.FONT_SCALE_PRESETS))):
+        prompt_generator.cycle_font_scale()
+    _process_events()
+
+    scaled_max_height = prompt_generator.attr_section_container.maximumHeight()
+    scaled_button_height = prompt_generator.attr_toggle_button.sizeHint().height()
+
+    assert scaled_button_height >= initial_button_height
+    assert scaled_max_height >= scaled_button_height
+
+
 def test_left_splitter_can_change_sizes_when_attribute_section_expanded(prompt_generator):
     """左スプリッタは展開後も上下サイズを変更できること。"""
 
