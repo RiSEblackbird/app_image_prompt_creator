@@ -46,6 +46,10 @@ class PromptUIMixin:
         self._build_header(main_layout)
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        # 左右ペインの幅をドラッグで柔軟に調整できるようにする設定。
+        splitter.setOpaqueResize(True)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(6)
         main_layout.addWidget(splitter, 1)
 
         left_widget = QtWidgets.QWidget()
@@ -62,8 +66,11 @@ class PromptUIMixin:
         self._build_right_pane_content(right_layout)
         splitter.addWidget(right_widget)
 
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 6)
+        # 初期比率は 1:2 としつつ、どちらのペインも十分に狭くできるよう最小幅を抑えておく。
+        left_widget.setMinimumWidth(220)
+        right_widget.setMinimumWidth(280)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
 
         self.status_bar = self.statusBar()
         self.loading_progress = QtWidgets.QProgressBar()
