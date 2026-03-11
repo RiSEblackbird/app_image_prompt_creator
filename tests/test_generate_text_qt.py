@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 PySide6 = pytest.importorskip("PySide6")
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtTest, QtWidgets
 
 # repo root から pytest を実行しても import が崩れないよう、app_image_prompt_creator を明示的に sys.path へ追加する。
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -95,6 +95,15 @@ def prompt_generator(tmp_path, monkeypatch, qt_application):
     window.close()
 
 
+def _process_events() -> None:
+    """Qt の遅延レイアウト更新を反映させる。"""
+    app = QtWidgets.QApplication.instance()
+    assert app is not None
+    app.processEvents()
+    QtCore.QThread.msleep(10)
+    app.processEvents()
+
+
 def test_generate_text_uses_selected_attribute_id(prompt_generator):
     """同じ説明文の属性から、IDで指定したほうのみ抽出されることを確認する。"""
 
@@ -108,6 +117,143 @@ def test_generate_text_uses_selected_attribute_id(prompt_generator):
 
     assert "Second prompt." in prompt_generator.main_prompt
     assert "First prompt" not in prompt_generator.main_prompt
+
+
+def test_attribute_section_toggle_changes_visible_height(prompt_generator):
+    """属性選択は展開時に十分な高さを持ち、格納時に最小化されること。"""
+
+    prompt_generator.resize(420, 900)
+    prompt_generator.show()
+    _process_events()
+
+    collapsed_height = prompt_generator.attr_section_container.height()
+    assert collapsed_height <= 60
+    assert not prompt_generator.attr_body_container.isVisible()
+
+    prompt_generator.attr_toggle_button.click()
+    _process_events()
+
+    expanded_height = prompt_generator.attr_section_container.height()
+    assert prompt_generator.attr_body_container.isVisible()
+    assert expanded_height >= 140
+    assert expanded_height > collapsed_height + 60
+
+    prompt_generator.attr_toggle_button.click()
+    _process_events()
+
+    collapsed_again_height = prompt_generator.attr_section_container.height()
+    assert not prompt_generator.attr_body_container.isVisible()
+    assert collapsed_again_height < expanded_height
+    assert collapsed_again_height <= 60
+
+
+def test_left_splitter_can_change_sizes_when_attribute_section_expanded(prompt_generator):
+    """左スプリッタは展開後も上下サイズを変更できること。"""
+
+    prompt_generator.resize(420, 900)
+    prompt_generator.show()
+    _process_events()
+
+    if not prompt_generator.attr_toggle_button.isChecked():
+        prompt_generator.attr_toggle_button.click()
+        _process_events()
+
+    splitter = prompt_generator.left_splitter
+    before = splitter.sizes()
+    total = sum(before)
+    assert total > 0
+
+    target_upper = min(total - 40, before[0] + 80)
+    splitter.moveSplitter(target_upper, 1)
+    _process_events()
+
+    after = splitter.sizes()
+    assert after != before
+    assert abs(after[0] - target_upper) <= 40
+
+
+def test_left_splitter_handle_drag_moves_down_when_attribute_section_expanded(prompt_generator):
+    """左スプリッタのハンドルを実際にドラッグすると下方向へ移動できること。"""
+
+    prompt_generator.resize(420, 900)
+    prompt_generator.show()
+    _process_events()
+
+    if not prompt_generator.attr_toggle_button.isChecked():
+        prompt_generator.attr_toggle_button.click()
+        _process_events()
+
+    splitter = prompt_generator.left_splitter
+    before = splitter.sizes()
+    handle = splitter.handle(1)
+    assert handle is not None
+
+    center = handle.rect().center()
+    drag_target = center + QtCore.QPoint(0, 80)
+    QtTest.QTest.mousePress(handle, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, center)
+    QtTest.QTest.mouseMove(handle, drag_target, delay=20)
+    QtTest.QTest.mouseRelease(handle, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, drag_target, delay=20)
+    _process_events()
+
+    after = splitter.sizes()
+    assert after != before
+    assert after[0] > before[0]
+
+
+def test_collapsed_attribute_section_keeps_minimal_height_without_forcing_splitter(prompt_generator):
+    """属性選択を格納しても、最小化されるのは属性セクションだけでスプリッタ位置は固定しないこと。"""
+
+    prompt_generator.resize(420, 900)
+    prompt_generator.show()
+    _process_events()
+
+    if not prompt_generator.attr_toggle_button.isChecked():
+        prompt_generator.attr_toggle_button.click()
+        _process_events()
+
+    splitter = prompt_generator.left_splitter
+    splitter.moveSplitter(260, 1)
+    _process_events()
+    expanded_sizes = splitter.sizes()
+    expanded_height = prompt_generator.attr_section_container.height()
+
+    prompt_generator.attr_toggle_button.click()
+    _process_events()
+
+    collapsed_sizes = splitter.sizes()
+    collapsed_height = prompt_generator.attr_section_container.height()
+
+    assert not prompt_generator.attr_body_container.isVisible()
+    assert collapsed_height <= 60
+    assert collapsed_height < expanded_height
+    assert abs(collapsed_sizes[0] - expanded_sizes[0]) <= 20
+    assert abs(collapsed_sizes[1] - expanded_sizes[1]) <= 20
+
+
+def test_left_splitter_handle_drag_moves_when_attribute_section_collapsed(prompt_generator):
+    """属性選択が格納状態でも、左スプリッタのハンドルを下方向へドラッグできること。"""
+
+    prompt_generator.resize(420, 900)
+    prompt_generator.show()
+    _process_events()
+
+    assert not prompt_generator.attr_toggle_button.isChecked()
+
+    splitter = prompt_generator.left_splitter
+    before = splitter.sizes()
+    handle = splitter.handle(1)
+    assert handle is not None
+
+    center = handle.rect().center()
+    drag_target = center + QtCore.QPoint(0, 80)
+    QtTest.QTest.mousePress(handle, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, center)
+    QtTest.QTest.mouseMove(handle, drag_target, delay=20)
+    QtTest.QTest.mouseRelease(handle, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, drag_target, delay=20)
+    _process_events()
+
+    after = splitter.sizes()
+    assert after != before
+    assert after[0] > before[0]
 
 
 def test_storyboard_duration_allocation_prompt_llm_contains_duration_rules(qt_application):
