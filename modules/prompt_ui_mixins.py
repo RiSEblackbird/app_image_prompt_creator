@@ -511,10 +511,20 @@ class PromptUIMixin:
         return combo
 
     def _build_right_pane_content(self, layout):
+        # プロンプトテキストとツール群の縦幅をユーザーが調整できるように、
+        # 右ペインは縦方向の QSplitter で分割する。
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        layout.addWidget(splitter, 1)
+
+        # 上側: 出力テキスト + アクションボタン
+        upper_widget = QtWidgets.QWidget()
+        upper_layout = QtWidgets.QVBoxLayout(upper_widget)
+        upper_layout.setContentsMargins(0, 0, 0, 0)
+
         self.text_output = QtWidgets.QTextEdit()
         self.text_output.setAcceptRichText(False)
         self.text_output.setPlaceholderText("ここに生成結果が表示されます")
-        layout.addWidget(self.text_output, 1)
+        upper_layout.addWidget(self.text_output, 1)
 
         action_layout = QtWidgets.QHBoxLayout()
 
@@ -530,7 +540,7 @@ class PromptUIMixin:
         generate_copy_btn.clicked.connect(self.generate_and_copy)
         action_layout.addWidget(generate_copy_btn, 1)
 
-        layout.addLayout(action_layout)
+        upper_layout.addLayout(action_layout)
 
         sub_action_layout = QtWidgets.QHBoxLayout()
 
@@ -547,11 +557,22 @@ class PromptUIMixin:
         update_option_btn.clicked.connect(lambda _checked=False: self.update_option())
         sub_action_layout.addWidget(update_option_btn)
 
-        layout.addLayout(sub_action_layout)
+        upper_layout.addLayout(sub_action_layout)
+
+        splitter.addWidget(upper_widget)
+
+        # 下側: 各種ツールタブ
+        lower_widget = QtWidgets.QWidget()
+        lower_layout = QtWidgets.QVBoxLayout(lower_widget)
+        lower_layout.setContentsMargins(0, 0, 0, 0)
 
         tools_tabs = QtWidgets.QTabWidget()
         tools_tabs.setMinimumHeight(320)
-        layout.addWidget(tools_tabs)
+        lower_layout.addWidget(tools_tabs)
+
+        splitter.addWidget(lower_widget)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
 
         movie_tab = QtWidgets.QWidget()
         movie_layout = QtWidgets.QVBoxLayout(movie_tab)
