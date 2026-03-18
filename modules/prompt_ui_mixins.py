@@ -39,6 +39,14 @@ class PromptUIMixin:
         self.group_midjourney_options.setVisible(not is_movie)
         self.check_attached_image_world_prefix.setVisible(is_movie)
 
+    def _sync_bgm_detail_visibility(self) -> None:
+        """BGM の有無に合わせて、詳細入力を有効化/無効化する。"""
+
+        group = getattr(self, "group_bgm_options", None)
+        checkbox = getattr(self, "check_tail_flag_bgm", None)
+        if isinstance(group, QtWidgets.QGroupBox):
+            group.setEnabled(bool(checkbox and checkbox.isChecked()))
+
     def _build_ui(self):
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
@@ -411,21 +419,68 @@ class PromptUIMixin:
             flags_row.addWidget(chk)
         tail2_layout.addLayout(flags_row)
 
+        # BGM を ON にした時だけ、曲調・雰囲気・同期方法の詳細を指定できる。
+        self.group_bgm_options = QtWidgets.QGroupBox("BGM詳細")
+        bgm_form = QtWidgets.QFormLayout(self.group_bgm_options)
+        bgm_form.setLabelAlignment(QtCore.Qt.AlignLeft)
+        bgm_form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        bgm_form.setHorizontalSpacing(10)
+        bgm_form.setVerticalSpacing(8)
+
+        self.combo_tail_bgm_genre = QtWidgets.QComboBox()
+        for label, value in config.BGM_GENRE_CHOICES:
+            self.combo_tail_bgm_genre.addItem(label, userData=value)
+        self.combo_tail_bgm_genre.setToolTip("BGM の音楽ジャンルを日本語表記のプルダウンから選びます。")
+        self.combo_tail_bgm_genre.currentIndexChanged.connect(self.auto_update)
+        bgm_form.addRow("ジャンル:", self.combo_tail_bgm_genre)
+
+        self.combo_tail_bgm_mood = QtWidgets.QComboBox()
+        for label, value in config.BGM_MOOD_CHOICES:
+            self.combo_tail_bgm_mood.addItem(label, userData=value)
+        self.combo_tail_bgm_mood.setToolTip("BGM の雰囲気を日本語表記のプルダウンから選びます。")
+        self.combo_tail_bgm_mood.currentIndexChanged.connect(self.auto_update)
+        bgm_form.addRow("雰囲気:", self.combo_tail_bgm_mood)
+
+        self.combo_tail_bgm_tempo = QtWidgets.QComboBox()
+        for label, value in config.BGM_TEMPO_CHOICES:
+            self.combo_tail_bgm_tempo.addItem(label, userData=value)
+        self.combo_tail_bgm_tempo.setToolTip("BGM のテンポ感を日本語表記のプルダウンから選びます。")
+        self.combo_tail_bgm_tempo.currentIndexChanged.connect(self.auto_update)
+        bgm_form.addRow("テンポ:", self.combo_tail_bgm_tempo)
+
+        self.combo_tail_bgm_vocal = QtWidgets.QComboBox()
+        for label, value in config.BGM_VOCAL_CHOICES:
+            self.combo_tail_bgm_vocal.addItem(label, userData=value)
+        self.combo_tail_bgm_vocal.setToolTip("歌声の有無やコーラス感を日本語表記のプルダウンから選びます。")
+        self.combo_tail_bgm_vocal.currentIndexChanged.connect(self.auto_update)
+        bgm_form.addRow("ボーカル:", self.combo_tail_bgm_vocal)
+
+        self.combo_tail_bgm_sync = QtWidgets.QComboBox()
+        for label, value in config.BGM_SYNC_CHOICES:
+            self.combo_tail_bgm_sync.addItem(label, userData=value)
+        self.combo_tail_bgm_sync.setToolTip("映像編集やカットのリズムとの同期方針を日本語表記のプルダウンから選びます。")
+        self.combo_tail_bgm_sync.currentIndexChanged.connect(self.auto_update)
+        bgm_form.addRow("同期:", self.combo_tail_bgm_sync)
+
+        self.entry_tail_bgm_notes = QtWidgets.QLineEdit()
+        self.entry_tail_bgm_notes.setPlaceholderText("例: 低音を控えめに、後半だけ少し盛り上げる")
+        self.entry_tail_bgm_notes.setToolTip("プルダウンに収まらないBGM指示を自由記述で補足します。")
+        self.entry_tail_bgm_notes.textChanged.connect(self.auto_update)
+        bgm_form.addRow("追加メモ:", self.entry_tail_bgm_notes)
+        tail2_layout.addWidget(self.group_bgm_options)
+        self.check_tail_flag_bgm.stateChanged.connect(self._sync_bgm_detail_visibility)
+
         # 登場人物（動画用）
-        # person_present/person_count を末尾2(content_flags)へ反映するための入力UI。
+        # 人物数を意味の強い person_mode として末尾2(content_flags)へ反映するための入力UI。
         person_row = QtWidgets.QHBoxLayout()
         person_row.addWidget(QtWidgets.QLabel("登場人物(動画用):"))
         self.combo_tail_person_count = QtWidgets.QComboBox()
-        self.combo_tail_person_count.addItem("(なし)", userData=None)
-        self.combo_tail_person_count.addItem("0人", userData=0)
-        self.combo_tail_person_count.addItem("1人以上", userData="1+")
-        for i in range(1, 5):
-            self.combo_tail_person_count.addItem(f"{i}人", userData=i)
-        self.combo_tail_person_count.addItem("とても多い", userData="many")
+        for label, value in config.CONTENT_FLAGS_PERSON_MODE_CHOICES:
+            self.combo_tail_person_count.addItem(label, userData=value)
         self.combo_tail_person_count.setToolTip(
-            "映像内に人物が映っているかどうかと、おおよその人数を指定します。"
-            "「0人」は person_present=false, person_count=0 として明示的に人物ゼロを出力します。"
-            "「とても多い」は person_count=\"many\"（群衆・大人数）として JSON に反映されます。"
+            "映像内の人物数を、否定の真偽値ではなく意味の強いモード値として出力します。"
+            "「0人」は person_mode=\"no_people\"、"
+            "「とても多い」は person_mode=\"crowd\" として JSON に反映されます。"
         )
         self.combo_tail_person_count.currentIndexChanged.connect(self.auto_update)
         person_row.addWidget(self.combo_tail_person_count)
@@ -466,6 +521,7 @@ class PromptUIMixin:
         tail2_layout.addLayout(lang_row)
 
         tail_form.addRow(tail2_group)
+        self._sync_bgm_detail_visibility()
 
         direction_group = QtWidgets.QGroupBox("演出制約 (direction_constraints)")
         direction_layout = QtWidgets.QVBoxLayout(direction_group)
@@ -525,7 +581,7 @@ class PromptUIMixin:
         self.check_direction_allow_still_frames = QtWidgets.QCheckBox("静止画カットを許可")
         self.check_direction_allow_still_frames.setChecked(True)
         self.check_direction_allow_still_frames.setToolTip(
-            "OFF にすると allow_still_frames=false として、静止画のような停止カットを禁止します。"
+            "OFF にすると still_frame_policy=\"forbid\" として、静止画のような停止カットを禁止します。"
         )
         self.check_direction_allow_still_frames.stateChanged.connect(self.auto_update)
         direction_row_2.addWidget(self.check_direction_allow_still_frames)

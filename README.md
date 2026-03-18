@@ -33,7 +33,7 @@
 ### 動画生成向け
 - **末尾プリセット（movie）**: `{"video_style": ...}` JSON で動画スタイルを指定
 - **添付画像世界トグル**: ON にすると、添付画像に写る世界を動画として展開する要件を `video_style.description` の先頭へ付与
-- **content_flags**: ナレーション・BGM・字幕・カット数などをJSONで付与
+- **content_flags**: ナレーション・BGM詳細・字幕・カット数などをJSONで付与
 - **用途別UI切替**: 末尾プリセット用途を `movie` にすると Midjourney 用「オプション」を非表示化
 - **演出制約の品質指定**: `完全実写映像` と `8K超高精細映像` を個別にON/OFF可能
 - **JSON整形**: メインテキストを `world_description` や `storyboard` に変換
@@ -98,7 +98,7 @@ python app_image_prompt_creator/app_image_prompt_creator_qt.py
 [属性選択] → [movie プリセット] → [content_flags] → [生成] → [JSON整形] → [コピー]
 ```
 
-末尾プリセット `movie` で `{"video_style":...}` を選び、必要なら `添付画像に写る世界についての動画` を ON にして `video_style.description` の先頭へ要件を付与します。content_flags でナレーション・BGM・カット数などを設定して生成できます。生成後、「動画用に整形(JSON)」パネルで「世界観整形」や「カオスミックス」を実行できます。ストーリーボード（複数カット）は「ストーリーボード」タブで生成・編集します。
+末尾プリセット `movie` で `{"video_style":...}` を選び、必要なら `添付画像に写る世界についての動画` を ON にして `video_style.description` の先頭へ要件を付与します。content_flags でナレーション・BGM詳細・カット数などを設定して生成できます。生成後、「動画用に整形(JSON)」パネルで「世界観整形」や「カオスミックス」を実行できます。ストーリーボード（複数カット）は「ストーリーボード」タブで生成・編集します。
 
 ---
 
@@ -135,7 +135,7 @@ tails:
 
 `description_ja` はUI表示専用です。`prompt` は `video_style` の実体です。`content_flags_defaults` / `direction_constraints_defaults` は任意項目で、定義したプリセットだけが選択時に UI へ既定値を反映します。アプリ起動中にYAMLを保存すると自動でリロードされます。
 
-なお、`content_flags` や `direction_constraints` のうち動画モデルが解釈しづらい項目（`false` 系フラグ、対象タグ、自由制約など）は、最終出力時に `video_prompt.instructions` へ自然文の配列として自動展開されます。`video_prompt.prompt` 本文は汚さず、構造化JSONと自然文の補助情報を分離する設計です。
+なお、`content_flags` や `direction_constraints` は、`false` を多用したブール表現ではなく、`*_mode` や `*_policy` のような意味の強い値で保持します。送信用JSONでは `video_prompt.instructions` を持たず、重複する自然文を省いた構造化JSONをそのまま出力します。
 
 ---
 
@@ -147,18 +147,27 @@ tails:
 |------|------|
 | 末尾2を反映 | マスタースイッチ。ONにしないとJSONは付与されません |
 | ナレーション / BGM / 環境音 | 音声要素の有無 |
+| BGM詳細 | BGM を ON にした時だけ使う追加指定（ジャンル / 雰囲気 / テンポ / ボーカル / 同期 / 追加メモ） |
 | 人物 / 人物のセリフ | 映像内の人物とセリフの有無 |
 | セリフ字幕 / テロップ | 画面上のテキスト要素 |
-| 登場人物 | なし / 0人 / 1+ / 1〜4 / many（群衆） |
+| 登場人物 | `person_mode` として `no_people` / `at_least_one_person` / `one_person` / `two_people` / `three_people` / `four_people` / `crowd` を出力 |
 | 構成カット数 | Auto / 1〜15 / many（高速モンタージュ） |
 | 動画中の言語 | Auto / 日本語 / 英語 |
 
 出力例:
 ```json
-{"content_flags":{"narration":true,"bgm":true,"ambient_sound":true,"planned_cuts":3,"spoken_language":"ja"}}
+{"content_flags":{"narration_mode":"with_narration","bgm_mode":"with_bgm","bgm_genre":"cinematic","bgm_mood":"melancholic","bgm_tempo":"slow","bgm_vocal":"instrumental","bgm_sync":"beat_matched","ambient_sound_mode":"with_ambient_sound","dialogue_mode":"no_dialogue","person_mode":"two_people","planned_cuts":3,"speech_language":"ja"}}
 ```
 
-`(なし)` は人物なしを示しつつ人数は未指定のままにします。`0人` は `person_present=false` に加えて `person_count=0` を出力し、明示的に人物ゼロを指定します。
+`(なし)` は人物条件を出力しません。`0人` は `person_mode="no_people"` を出力し、明示的に人物ゼロを指定します。
+
+プルダウンの表記は日本語で、JSON には英語トークンが入ります。`bgm_mode="with_bgm"` のときだけ BGM 詳細が出力され、BGM が無効のまま詳細だけを指定しても JSON には反映されません。
+
+負例:
+```json
+{"content_flags":{"bgm_genre":"cinematic","bgm_mood":"melancholic"}}
+```
+→ `bgm_mode="with_bgm"` でないため、BGM 詳細は出力されません。
 
 ---
 
@@ -172,27 +181,27 @@ tails:
 | 環境 | `indoor_only` / `outdoor_only` / `indoor_outdoor_mixed` / `underground` / `underwater` / `water_surface` / `aerial` / `space` |
 | 頻出対象 | `選択` メニューから `建築物` / `室内空間` / `都市インフラ` / `屋外の遺跡` / `地形・岩場` / `植物` / `水辺・水域` / `野生生物` / `乗り物` / `機械` / `天体` を複数選択できます |
 | 追加対象タグ | 頻出対象にないものだけをカンマ区切りで追加します。例: `coral reef, volcanic landscape` |
-| 静止画カットを許可 | OFF で `allow_still_frames=false` |
+| 静止画カットを許可 | OFF で `still_frame_policy="forbid"` |
 | カメラ運動 | `mostly_static` / `gentle` / `continuous` |
 | 映像の活力 | `calm` / `vivid` / `intense` |
 | カット尺 | `uniform` / `weighted` / `variable` |
-| 主役 | `people_primary` / `scene_primary`。人物が映る場合でも、人物主体か情景主体かを明示します |
-| 完全実写映像 | ON で `live_action_only=true` |
-| 8K超高精細映像 | ON で `ultra_high_resolution_8k=true` |
+| 主役 | `focus_priority` として `people` / `scene` を出力。人物が映る場合でも、人物主体か情景主体かを明示します |
+| 完全実写映像 | ON で `render_style="live_action"` |
+| 8K超高精細映像 | ON で `resolution_tier="8k"` |
 | 追加自由制約 | 上の専用項目にない条件だけを自然文で補足 |
 
 出力例:
 ```json
-{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"allow_still_frames":false,"camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","subject_focus":"scene_primary","live_action_only":true,"ultra_high_resolution_8k":true,"freeform_constraints":"Avoid modern urban elements."}}
+{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"still_frame_policy":"forbid","camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","focus_priority":"scene","render_style":"live_action","resolution_tier":"8k","freeform_constraints":"Avoid modern urban elements."}}
 ```
 
 `環境` はプロンプト本文の内容に依存しにくい「場所・層」の指定だけに寄せています。`頻出対象` は視覚的に主役になりやすい対象群をまとめたもので、必要に応じて複数選択できます。`主役` は構図の中心を明示するための項目で、人物が複数いても `情景主体` を選ぶと背景・空間・風景を優先した画作りを促します。
 
-正例: 人物が2人以上登場しても風景や建築を主役にしたい場合は `主役=scene_primary` を選びます。
+正例: 人物が2人以上登場しても風景や建築を主役にしたい場合は `主役=scene` を選びます。
 
 負例: 人物が映るだけで常に人物中心の構図にしたくない場面で、`主役` を未指定のままにするとモデル判断で人物主体へ寄ることがあります。
 
-このブロックは内部的にはJSONで保持され、必要に応じて `video_prompt.instructions` に自然文の補助情報としても反映されます。
+このブロックは内部的にも送信用にもJSONで保持され、Sora送信用の最終出力では重複する自然文の `instructions` を追加しません。
 
 ---
 
@@ -221,12 +230,8 @@ tails:
   "video_prompt": {
     "prompt": "A serene zen garden at dawn with soft mist.",
     "video_style": {"scope": "full_movie", "description": "gentle cinematic look"},
-    "content_flags": {"narration": true, "bgm": true, "planned_cuts": 3},
-    "direction_constraints": {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"]},
-    "instructions": [
-      "Keep the entire video outdoors only.",
-      "Visually focus on these subjects: ruins, wildlife."
-    ]
+    "content_flags": {"narration_mode": "with_narration", "bgm_mode": "with_bgm", "planned_cuts": 3},
+    "direction_constraints": {"environment_scope": "outdoor_only", "subject_tags": ["ruins", "wildlife"], "still_frame_policy": "forbid"}
   }
 }
 ```
@@ -361,10 +366,10 @@ tails:
       "grade": "film emulation"
     },
     "content_flags": {
-      "narration": false,
-      "bgm": true,
-      "ambient_sound": true,
-      "dialogue": true
+      "narration_mode": "no_narration",
+      "bgm_mode": "with_bgm",
+      "ambient_sound_mode": "with_ambient_sound",
+      "dialogue_mode": "with_dialogue"
     },
     "direction_constraints": {
       "environment_scope": "outdoor_only",
