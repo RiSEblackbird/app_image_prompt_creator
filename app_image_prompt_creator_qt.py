@@ -354,8 +354,63 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                     push(cleaned)
         return tags
 
+    def _resolve_person_mode_from_defaults(self, defaults: dict) -> Optional[str]:
+        """旧 person_present/person_count と新 person_mode の両方から UI 用の人物モードを決める。"""
+        person_mode = defaults.get("person_mode")
+        if person_mode in {
+            "no_people",
+            "at_least_one_person",
+            "one_person",
+            "two_people",
+            "three_people",
+            "four_people",
+            "crowd",
+        }:
+            return person_mode
+
+        person_present = defaults.get("person_present")
+        person_count = defaults.get("person_count")
+        if person_count == 0:
+            return "no_people"
+        if person_count == "1+":
+            return "at_least_one_person"
+        if person_count == "many":
+            return "crowd"
+        if person_count == 1:
+            return "one_person"
+        if person_count == 2:
+            return "two_people"
+        if person_count == 3:
+            return "three_people"
+        if person_count == 4:
+            return "four_people"
+        if person_present is True:
+            return "at_least_one_person"
+        return None
+
+    def _resolve_focus_priority_from_defaults(self, defaults: dict) -> str:
+        """旧 subject_focus と新 focus_priority の両方から UI 用の主役優先度を決める。"""
+        focus_priority = str(defaults.get("focus_priority", "") or "").strip()
+        if focus_priority in ("people", "scene"):
+            return focus_priority
+        subject_focus = str(defaults.get("subject_focus", "") or "").strip()
+        if subject_focus == "people_primary":
+            return "people"
+        if subject_focus == "scene_primary":
+            return "scene"
+        return ""
+
     def _apply_content_flags_defaults(self, defaults: dict) -> None:
         """movie プリセットの content_flags 既定値を UI に反映する。"""
+        bgm_detail_keys = (
+            "bgm_genre",
+            "bgm_mood",
+            "bgm_tempo",
+            "bgm_vocal",
+            "bgm_sync",
+            "bgm_notes",
+        )
+        has_bgm_detail_defaults = any(defaults.get(key) not in (None, "") for key in bgm_detail_keys)
         widgets = [
             self.check_tail_flags_enabled,
             self.check_tail_flag_narration,
@@ -364,6 +419,13 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             self.check_tail_flag_dialogue,
             self.check_tail_flag_dialogue_subtitle,
             self.check_tail_flag_telop,
+            self.group_bgm_options,
+            self.combo_tail_bgm_genre,
+            self.combo_tail_bgm_mood,
+            self.combo_tail_bgm_tempo,
+            self.combo_tail_bgm_vocal,
+            self.combo_tail_bgm_sync,
+            self.entry_tail_bgm_notes,
             self.combo_tail_person_count,
             self.combo_tail_cut_count,
             self.combo_tail_language,
@@ -371,25 +433,33 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         blockers = [QtCore.QSignalBlocker(widget) for widget in widgets]
         try:
             self.check_tail_flags_enabled.setChecked(bool(defaults))
-            self.check_tail_flag_narration.setChecked(bool(defaults.get("narration", False)))
-            self.check_tail_flag_bgm.setChecked(bool(defaults.get("bgm", False)))
-            self.check_tail_flag_ambient.setChecked(bool(defaults.get("ambient_sound", False)))
-            self.check_tail_flag_dialogue.setChecked(bool(defaults.get("dialogue", False)))
-            self.check_tail_flag_dialogue_subtitle.setChecked(bool(defaults.get("on_screen_spoken_dialogue_subtitles")))
-            self.check_tail_flag_telop.setChecked(bool(defaults.get("on_screen_non_dialogue_text_overlays")))
-
-            person_present = defaults.get("person_present")
-            person_count = defaults.get("person_count")
-            if person_count == 0:
-                self._set_combo_to_data(self.combo_tail_person_count, 0)
-            elif person_present is False or person_count in (None, ""):
-                self._set_combo_to_data(self.combo_tail_person_count, None)
-            elif person_count in ("1+", "many", 1, 2, 3, 4):
-                self._set_combo_to_data(self.combo_tail_person_count, person_count)
-            elif person_present:
-                self._set_combo_to_data(self.combo_tail_person_count, "1+")
-            else:
-                self._set_combo_to_data(self.combo_tail_person_count, None)
+            self.check_tail_flag_narration.setChecked(
+                defaults.get("narration_mode") == "with_narration" or bool(defaults.get("narration", False))
+            )
+            self.check_tail_flag_bgm.setChecked(
+                defaults.get("bgm_mode") == "with_bgm" or bool(defaults.get("bgm", False) or has_bgm_detail_defaults)
+            )
+            self.check_tail_flag_ambient.setChecked(
+                defaults.get("ambient_sound_mode") == "with_ambient_sound" or bool(defaults.get("ambient_sound", False))
+            )
+            self.check_tail_flag_dialogue.setChecked(
+                defaults.get("dialogue_mode") == "with_dialogue" or bool(defaults.get("dialogue", False))
+            )
+            self.check_tail_flag_dialogue_subtitle.setChecked(
+                defaults.get("dialogue_subtitle_mode") == "with_dialogue_subtitles"
+                or bool(defaults.get("on_screen_spoken_dialogue_subtitles"))
+            )
+            self.check_tail_flag_telop.setChecked(
+                defaults.get("text_overlay_mode") == "with_text_overlays"
+                or bool(defaults.get("on_screen_non_dialogue_text_overlays"))
+            )
+            self._set_combo_to_data(self.combo_tail_bgm_genre, defaults.get("bgm_genre", ""))
+            self._set_combo_to_data(self.combo_tail_bgm_mood, defaults.get("bgm_mood", ""))
+            self._set_combo_to_data(self.combo_tail_bgm_tempo, defaults.get("bgm_tempo", ""))
+            self._set_combo_to_data(self.combo_tail_bgm_vocal, defaults.get("bgm_vocal", ""))
+            self._set_combo_to_data(self.combo_tail_bgm_sync, defaults.get("bgm_sync", ""))
+            self.entry_tail_bgm_notes.setText(str(defaults.get("bgm_notes", "") or ""))
+            self._set_combo_to_data(self.combo_tail_person_count, self._resolve_person_mode_from_defaults(defaults))
 
             planned_cuts = defaults.get("planned_cuts")
             if planned_cuts == "many" or isinstance(planned_cuts, int):
@@ -397,10 +467,11 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             else:
                 self._set_combo_to_data(self.combo_tail_cut_count, None)
 
-            spoken_language = defaults.get("spoken_language", "")
-            self._set_combo_to_data(self.combo_tail_language, spoken_language if spoken_language in ("ja", "en") else "")
+            speech_language = defaults.get("speech_language", defaults.get("spoken_language", ""))
+            self._set_combo_to_data(self.combo_tail_language, speech_language if speech_language in ("ja", "en") else "")
         finally:
             del blockers
+            self._sync_bgm_detail_visibility()
 
     def _apply_direction_constraints_defaults(self, defaults: dict) -> None:
         """movie プリセットの演出制約既定値を UI に反映する。"""
@@ -444,18 +515,26 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                     subject_tags_text = ""
             self.entry_direction_subject_tags.setText(subject_tags_text)
 
-            self.check_direction_allow_still_frames.setChecked(bool(defaults.get("allow_still_frames", True)))
+            still_frame_policy = str(defaults.get("still_frame_policy", "") or "").strip()
+            if still_frame_policy == "forbid":
+                self.check_direction_allow_still_frames.setChecked(False)
+            elif still_frame_policy == "allow":
+                self.check_direction_allow_still_frames.setChecked(True)
+            else:
+                self.check_direction_allow_still_frames.setChecked(bool(defaults.get("allow_still_frames", True)))
             self._set_combo_to_data(self.combo_direction_camera_motion, defaults.get("camera_motion", ""))
             self._set_combo_to_data(self.combo_direction_visual_energy, defaults.get("visual_energy", ""))
             self._set_combo_to_data(
                 self.combo_direction_cut_duration_policy,
                 defaults.get("cut_duration_policy", ""),
             )
-            self._set_combo_to_data(self.combo_direction_subject_focus, defaults.get("subject_focus", ""))
+            self._set_combo_to_data(self.combo_direction_subject_focus, self._resolve_focus_priority_from_defaults(defaults))
             self.entry_direction_freeform_constraints.setText(str(defaults.get("freeform_constraints", "")).strip())
-            self.check_direction_live_action_only.setChecked(bool(defaults.get("live_action_only", False)))
+            self.check_direction_live_action_only.setChecked(
+                defaults.get("render_style") == "live_action" or bool(defaults.get("live_action_only", False))
+            )
             self.check_direction_ultra_high_resolution_8k.setChecked(
-                bool(defaults.get("ultra_high_resolution_8k", False))
+                defaults.get("resolution_tier") == "8k" or bool(defaults.get("ultra_high_resolution_8k", False))
             )
         finally:
             del action_blockers
@@ -724,93 +803,91 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         出力例:
         {
             "content_flags": {
-                "narration": true,
-                "person_present": true,
-                "person_count": 2,
-                "bgm": true,
-                "ambient_sound": true,
-                "dialogue": false,
-                "on_screen_spoken_dialogue_subtitles": "On-screen subtitles display the spoken dialogue in this video.",
-                "on_screen_non_dialogue_text_overlays": "There are on-screen non-dialogue text overlays such as commentary captions, labels, or sound-effect text rendered as part of the image.",
+                "narration_mode": "with_narration",
+                "bgm_mode": "with_bgm",
+                "bgm_genre": "cinematic",
+                "bgm_mood": "melancholic",
+                "bgm_tempo": "slow",
+                "bgm_vocal": "instrumental",
+                "bgm_sync": "beat_matched",
+                "bgm_notes": "Let the bass stay soft.",
+                "ambient_sound_mode": "with_ambient_sound",
+                "dialogue_mode": "no_dialogue",
+                "dialogue_subtitle_mode": "with_dialogue_subtitles",
+                "text_overlay_mode": "with_text_overlays",
+                "person_mode": "two_people",
                 "planned_cuts": 3,
-                "spoken_language": "ja"
+                "speech_language": "ja"
             }
         }
-        
-        narration / bgm / ambient_sound / dialogue は音声要素。
-        person_present は「映像内に人物が映っているかどうか」を表す視覚要素フラグ（true/false）。
-        person_count は人数指定で、0 / "1+"（1人以上）/ "many"（群衆・5人以上）または具体的な人数（1〜4の整数）を取る。
-          - 「(なし)」選択時: person_present=false, person_count は省略
-          - 「0人」選択時: person_present=false, person_count=0
-          - 「1人以上」選択時: person_present=true, person_count="1+"
-          - 「1人」〜「4人」選択時: person_present=true, person_count=N
-          - 「とても多い」選択時: person_present=true, person_count="many"
-        on_screen_spoken_dialogue_subtitles は「人物が話しているセリフそのものの字幕（セリフ字幕）が画面に表示されている」ことを、英語の説明文として明示します。
-        on_screen_non_dialogue_text_overlays は「ツッコミテロップや解説テキスト、効果音文字など、セリフとは異なる編集用テキストオーバーレイが存在する」ことを、英語の説明文として明示します。
+
+        false/true の二値より意味が強い mode 値を優先し、Sora 送信用 JSON を短く明確にする。
+        BGM が有効なときだけ、bgm_genre / bgm_mood / bgm_tempo / bgm_vocal / bgm_sync / bgm_notes が追加される。
+        person_mode は no_people / at_least_one_person / one_person / two_people / three_people / four_people / crowd を取る。
+        dialogue_subtitle_mode / text_overlay_mode は、該当要素がある時だけ出力する。
         planned_cuts は「作品全体をおおよそ何カットで構成するか」の目安（1〜15 または "many"）を表します。
-        spoken_language は「動画内で想定される主な話し言葉の言語」を表し、"ja" または "en" を取ります。
-        (Auto) 選択時や未指定時は planned_cuts / spoken_language フィールド自体を省略します。
+        speech_language は「動画内で想定される主な話し言葉の言語」を表し、"ja" または "en" を取ります。
+        (Auto) 選択時や未指定時は planned_cuts / speech_language フィールド自体を省略します。
         """
 
         # マスターチェックがOFFなら、フラグの値に関わらず JSON は付与しない
         if not getattr(self, "check_tail_flags_enabled", None) or not self.check_tail_flags_enabled.isChecked():
             return ""
 
+        narration_enabled = bool(self.check_tail_flag_narration.isChecked())
+        bgm_enabled = bool(self.check_tail_flag_bgm.isChecked())
+        ambient_enabled = bool(self.check_tail_flag_ambient.isChecked())
+        dialogue_enabled = bool(self.check_tail_flag_dialogue.isChecked())
         flags = {
-            "narration": bool(self.check_tail_flag_narration.isChecked()),
-            "bgm": bool(self.check_tail_flag_bgm.isChecked()),
-            "ambient_sound": bool(self.check_tail_flag_ambient.isChecked()),
-            "dialogue": bool(self.check_tail_flag_dialogue.isChecked()),
+            "narration_mode": "with_narration" if narration_enabled else "no_narration",
+            "bgm_mode": "with_bgm" if bgm_enabled else "no_bgm",
+            "ambient_sound_mode": "with_ambient_sound" if ambient_enabled else "no_ambient_sound",
+            "dialogue_mode": "with_dialogue" if dialogue_enabled else "no_dialogue",
         }
 
-        # 登場人物の人数を person_present / person_count として設定
-        # - "(なし)" → person_present: false のみ（未指定寄り）
-        # - "0人" → person_present: false, person_count: 0
-        # - "1人以上" → person_present: true, person_count: "1+"
-        # - "1人"〜"4人" → person_present: true, person_count: N
-        # - "とても多い" → person_present: true, person_count: "many"
+        def _read_combo_data(combo_name: str) -> str:
+            combo = getattr(self, combo_name, None)
+            if isinstance(combo, QtWidgets.QComboBox):
+                data = combo.currentData()
+                if isinstance(data, str) and data:
+                    return data
+            return ""
+
+        if bgm_enabled:
+            # BGM の詳細は flat な追加キーにしておくと、既存の content_flags 抽出ロジックを壊しにくい。
+            bgm_genre = _read_combo_data("combo_tail_bgm_genre")
+            if bgm_genre:
+                flags["bgm_genre"] = bgm_genre
+            bgm_mood = _read_combo_data("combo_tail_bgm_mood")
+            if bgm_mood:
+                flags["bgm_mood"] = bgm_mood
+            bgm_tempo = _read_combo_data("combo_tail_bgm_tempo")
+            if bgm_tempo:
+                flags["bgm_tempo"] = bgm_tempo
+            bgm_vocal = _read_combo_data("combo_tail_bgm_vocal")
+            if bgm_vocal:
+                flags["bgm_vocal"] = bgm_vocal
+            bgm_sync = _read_combo_data("combo_tail_bgm_sync")
+            if bgm_sync:
+                flags["bgm_sync"] = bgm_sync
+            bgm_notes_widget = getattr(self, "entry_tail_bgm_notes", None)
+            if isinstance(bgm_notes_widget, QtWidgets.QLineEdit):
+                bgm_notes = bgm_notes_widget.text().strip()
+                if bgm_notes:
+                    flags["bgm_notes"] = bgm_notes
+
+        # 人物数は person_present / person_count の二段構えではなく、意味の強い person_mode として表す。
         person_combo = getattr(self, "combo_tail_person_count", None)
         if isinstance(person_combo, QtWidgets.QComboBox):
-            person_data = person_combo.currentData()
-            if person_data is None:
-                # (なし) の場合: 人物なしだが、人数は未指定のままにする
-                flags["person_present"] = False
-            elif person_data == 0:
-                # 0人の場合: 明示的に人物ゼロを指定する
-                flags["person_present"] = False
-                flags["person_count"] = 0
-            elif person_data == "1+":
-                # 1人以上の場合: 人数を限定しない
-                flags["person_present"] = True
-                flags["person_count"] = "1+"
-            elif person_data == "many":
-                # 群衆など大人数のカット
-                flags["person_present"] = True
-                flags["person_count"] = "many"
-            elif isinstance(person_data, int) and person_data >= 1:
-                # 具体的な人数指定
-                flags["person_present"] = True
-                flags["person_count"] = person_data
-            else:
-                flags["person_present"] = False
-        else:
-            flags["person_present"] = False
+            person_mode = person_combo.currentData()
+            if isinstance(person_mode, str) and person_mode:
+                flags["person_mode"] = person_mode
 
-        # セリフそのものに対応した字幕（セリフ字幕）が画面に出ている場合は、
-        # true/false ではなく、動画モデルに直接伝わる英文の説明文を value として埋め込む。
         if self.check_tail_flag_dialogue_subtitle.isChecked():
-            flags["on_screen_spoken_dialogue_subtitles"] = (
-                "On-screen subtitles display the spoken dialogue in this video. "
-                "Subtitles are clearly visible and synchronized with the spoken voice."
-            )
+            flags["dialogue_subtitle_mode"] = "with_dialogue_subtitles"
 
-        # セリフとは異なる編集用テロップ/テキスト（ツッコミ・解説・効果音文字など）が映っている場合も、
-        # true/false ではなく、その存在を明示する英文の説明文を value として埋め込む。
         if self.check_tail_flag_telop.isChecked():
-            flags["on_screen_non_dialogue_text_overlays"] = (
-                "There are on-screen non-dialogue text overlays such as commentary captions, "
-                "labels, or sound-effect text rendered as part of the image."
-            )
+            flags["text_overlay_mode"] = "with_text_overlays"
         # 構成カット数 (1〜15 / "many") を planned_cuts として追加 (Auto の場合は省略)
         cut_combo = getattr(self, "combo_tail_cut_count", None)
         if isinstance(cut_combo, QtWidgets.QComboBox):
@@ -824,12 +901,12 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 flags["planned_cuts"] = data
             elif data == "many":
                 flags["planned_cuts"] = "many"
-        # 動画中の主な話し言葉の言語 ("ja" / "en") を spoken_language として追加 (Auto の場合は省略)
+        # 動画中の主な話し言葉の言語 ("ja" / "en") を speech_language として追加 (Auto の場合は省略)
         lang_combo = getattr(self, "combo_tail_language", None)
         if isinstance(lang_combo, QtWidgets.QComboBox):
             lang_code = lang_combo.currentData()
             if isinstance(lang_code, str) and lang_code in ("ja", "en"):
-                flags["spoken_language"] = lang_code
+                flags["speech_language"] = lang_code
         try:
             json_text = json.dumps({"content_flags": flags}, ensure_ascii=False)
         except Exception:
@@ -845,7 +922,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             return ""
 
         constraints = {
-            "allow_still_frames": bool(self.check_direction_allow_still_frames.isChecked()),
+            "still_frame_policy": "allow" if self.check_direction_allow_still_frames.isChecked() else "forbid",
         }
 
         environment_scope = self.combo_direction_environment_scope.currentData()
@@ -868,19 +945,19 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         if isinstance(cut_duration_policy, str) and cut_duration_policy:
             constraints["cut_duration_policy"] = cut_duration_policy
 
-        subject_focus = self.combo_direction_subject_focus.currentData()
-        if isinstance(subject_focus, str) and subject_focus:
-            constraints["subject_focus"] = subject_focus
+        focus_priority = self.combo_direction_subject_focus.currentData()
+        if isinstance(focus_priority, str) and focus_priority:
+            constraints["focus_priority"] = focus_priority
 
         freeform_constraints = self.entry_direction_freeform_constraints.text().strip()
         if freeform_constraints:
             constraints["freeform_constraints"] = freeform_constraints
 
         if self.check_direction_live_action_only.isChecked():
-            constraints["live_action_only"] = True
+            constraints["render_style"] = "live_action"
 
         if self.check_direction_ultra_high_resolution_8k.isChecked():
-            constraints["ultra_high_resolution_8k"] = True
+            constraints["resolution_tier"] = "8k"
 
         try:
             json_text = json.dumps({"direction_constraints": constraints}, ensure_ascii=False)

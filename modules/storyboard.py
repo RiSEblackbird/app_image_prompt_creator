@@ -14,7 +14,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from . import config
 from .prompt_data import SoraCharacter, StoryboardCut, load_sora_characters
-from .prompt_text_utils import compile_movie_instructions, strip_compiled_movie_requirements
+from .prompt_text_utils import strip_compiled_movie_requirements
 
 
 def _adjust_last_cut_duration(cuts: List[StoryboardCut], total_duration_sec: float) -> List[StoryboardCut]:
@@ -357,9 +357,6 @@ def build_storyboard_json(
     continuity_enhanced: bool = False,
 ) -> str:
     """ストーリーボードのカットリストをSora向け `video_prompt` 形式でJSON化する。
-
-    `compose_movie_prompt()` と同じく、content_flags / direction_constraints がある場合は
-    動画モデルが解釈しやすい自然文の `instructions` も併せて出力する。
     """
     cuts_data = []
     for cut in cuts:
@@ -391,10 +388,6 @@ def build_storyboard_json(
         payload["video_prompt"]["content_flags"] = content_flags
     if direction_constraints:
         payload["video_prompt"]["direction_constraints"] = direction_constraints
-
-    compiled_instructions = compile_movie_instructions(content_flags, direction_constraints)
-    if compiled_instructions:
-        payload["video_prompt"]["instructions"] = compiled_instructions
 
     return json.dumps(payload, ensure_ascii=False, indent=2)
 

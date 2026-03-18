@@ -529,8 +529,8 @@ def test_extract_metadata_from_prompt_video_prompt_without_body_falls_back_to_fu
     assert "video_prompt" in prompt_text
 
 
-def test_build_storyboard_json_includes_compiled_instructions():
-    """ストーリーボードJSONでも content_flags / direction_constraints から instructions を組み立てること。"""
+def test_build_storyboard_json_keeps_structured_movie_metadata():
+    """ストーリーボードJSONでは instructions を持たず、構造化メタデータをそのまま保持すること。"""
 
     from modules.prompt_data import StoryboardCut
     from modules.storyboard import build_storyboard_json
@@ -542,42 +542,110 @@ def test_build_storyboard_json_includes_compiled_instructions():
         ],
         total_duration_sec=10.0,
         template_id="none",
-        content_flags={"dialogue": False, "person_present": False},
+        content_flags={"dialogue_mode": "no_dialogue", "person_mode": "no_people"},
         direction_constraints={"environment_scope": "outdoor_only", "camera_motion": "continuous"},
     )
 
     payload = qt_app.json.loads(result)
     assert payload["video_prompt"]["storyboard"]["total_duration_sec"] == 10.0
-    assert "Do not use spoken dialogue." in payload["video_prompt"]["instructions"]
-    assert "No people appear on screen." in payload["video_prompt"]["instructions"]
-    assert "Keep the entire video outdoors only." in payload["video_prompt"]["instructions"]
-    assert "Keep the camera moving continuously." in payload["video_prompt"]["instructions"]
+    assert payload["video_prompt"]["content_flags"]["dialogue_mode"] == "no_dialogue"
+    assert payload["video_prompt"]["content_flags"]["person_mode"] == "no_people"
+    assert payload["video_prompt"]["direction_constraints"]["environment_scope"] == "outdoor_only"
+    assert "instructions" not in payload["video_prompt"]
 
 
 def test_compose_movie_prompt_keeps_direction_constraints():
-    """動画JSON統合時に prompt を汚さず、自然文要件は instructions に分離すること。"""
+    """動画JSON統合時に prompt を汚さず、送信用は構造化メタデータだけを保持すること。"""
 
     from modules.prompt_text_utils import compose_movie_prompt
 
     result = compose_movie_prompt(
         core_json='{"prompt":"A vast interior atrium."}',
         movie_tail='{"video_style":{"scope":"full_movie","format":"8K"}}',
-        flags_tail='{"content_flags":{"bgm":true,"dialogue":false,"person_present":false}}',
+        flags_tail='{"content_flags":{"bgm_mode":"with_bgm","dialogue_mode":"no_dialogue","person_mode":"no_people"}}',
         direction_tail='{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["ruins","wildlife"],"camera_motion":"continuous"}}',
         options_tail="",
     )
 
     payload = qt_app.json.loads(result)
     assert payload["video_prompt"]["video_style"]["format"] == "8K"
-    assert payload["video_prompt"]["content_flags"]["bgm"] is True
+    assert payload["video_prompt"]["content_flags"]["bgm_mode"] == "with_bgm"
+    assert payload["video_prompt"]["content_flags"]["dialogue_mode"] == "no_dialogue"
+    assert payload["video_prompt"]["content_flags"]["person_mode"] == "no_people"
     assert payload["video_prompt"]["direction_constraints"]["environment_scope"] == "outdoor_only"
     assert payload["video_prompt"]["direction_constraints"]["subject_tags"] == ["ruins", "wildlife"]
     assert payload["video_prompt"]["direction_constraints"]["camera_motion"] == "continuous"
     assert payload["video_prompt"]["prompt"] == "A vast interior atrium."
-    assert "Do not use spoken dialogue." in payload["video_prompt"]["instructions"]
-    assert "No people appear on screen." in payload["video_prompt"]["instructions"]
-    assert "Keep the entire video outdoors only." in payload["video_prompt"]["instructions"]
-    assert "Visually focus on these subjects: ruins, wildlife." in payload["video_prompt"]["instructions"]
+    assert "instructions" not in payload["video_prompt"]
+
+
+def test_compile_movie_instructions_include_bgm_details():
+    """BGM 詳細が自然文の補助指示へ展開されること。"""
+
+    from modules.prompt_text_utils import compile_movie_instructions
+
+    instructions = compile_movie_instructions(
+        {
+            "bgm_mode": "with_bgm",
+            "bgm_genre": "cinematic",
+            "bgm_mood": "melancholic",
+            "bgm_tempo": "slow",
+            "bgm_vocal": "instrumental",
+            "bgm_sync": "beat_matched",
+            "bgm_notes": "Let the bass stay soft.",
+        },
+        None,
+    )
+
+    assert "Use background music." in instructions
+    assert "Use a cinematic soundtrack." in instructions
+    assert "Keep the music melancholic." in instructions
+    assert "Use a slow tempo." in instructions
+    assert "Keep the track instrumental." in instructions
+    assert "Synchronize the music with the edit rhythm." in instructions
+    assert "Let the bass stay soft." in instructions
+
+
+def test_bgm_dropdown_labels_are_japanese(prompt_generator):
+    """BGM のプルダウンは日本語ラベルで表示されること。"""
+
+    genre_combo = prompt_generator.combo_tail_bgm_genre
+    mood_combo = prompt_generator.combo_tail_bgm_mood
+
+    assert genre_combo.itemText(0) == "未指定"
+    assert genre_combo.itemText(genre_combo.findData("cinematic")) == "シネマティック"
+    assert mood_combo.itemText(mood_combo.findData("melancholic")) == "切ない"
+
+
+def test_make_tail_flags_json_includes_bgm_details(prompt_generator):
+    """BGM を有効にすると詳細設定が content_flags に含まれること。"""
+
+    prompt_generator.check_tail_flags_enabled.setChecked(True)
+    prompt_generator.check_tail_flag_bgm.setChecked(True)
+    prompt_generator.combo_tail_bgm_genre.setCurrentIndex(prompt_generator.combo_tail_bgm_genre.findData("cinematic"))
+    prompt_generator.combo_tail_bgm_mood.setCurrentIndex(prompt_generator.combo_tail_bgm_mood.findData("melancholic"))
+    prompt_generator.combo_tail_bgm_tempo.setCurrentIndex(prompt_generator.combo_tail_bgm_tempo.findData("slow"))
+    prompt_generator.combo_tail_bgm_vocal.setCurrentIndex(
+        prompt_generator.combo_tail_bgm_vocal.findData("instrumental")
+    )
+    prompt_generator.combo_tail_bgm_sync.setCurrentIndex(
+        prompt_generator.combo_tail_bgm_sync.findData("beat_matched")
+    )
+    prompt_generator.entry_tail_bgm_notes.setText("後半だけ少し盛り上げる。")
+
+    payload = qt_app.json.loads(prompt_generator._make_tail_flags_json().strip())
+    flags = payload["content_flags"]
+
+    assert flags["bgm_mode"] == "with_bgm"
+    assert flags["narration_mode"] == "no_narration"
+    assert flags["ambient_sound_mode"] == "no_ambient_sound"
+    assert flags["dialogue_mode"] == "no_dialogue"
+    assert flags["bgm_genre"] == "cinematic"
+    assert flags["bgm_mood"] == "melancholic"
+    assert flags["bgm_tempo"] == "slow"
+    assert flags["bgm_vocal"] == "instrumental"
+    assert flags["bgm_sync"] == "beat_matched"
+    assert flags["bgm_notes"] == "後半だけ少し盛り上げる。"
 
 
 def test_prepend_attached_image_world_description_updates_video_style_description():
@@ -641,16 +709,16 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
 
     assert payload == {
         "direction_constraints": {
-            "allow_still_frames": False,
+            "still_frame_policy": "forbid",
             "environment_scope": "underwater",
             "subject_tags": ["water_features", "celestial_bodies", "coral reef"],
             "camera_motion": "continuous",
             "visual_energy": "vivid",
             "cut_duration_policy": "variable",
-            "subject_focus": "scene_primary",
+            "focus_priority": "scene",
             "freeform_constraints": "Avoid modern urban elements.",
-            "live_action_only": True,
-            "ultra_high_resolution_8k": True,
+            "render_style": "live_action",
+            "resolution_tier": "8k",
         }
     }
     assert prompt_generator.label_direction_common_subjects.text() in ("水辺・水域 / 天体", "天体 / 水辺・水域")
@@ -664,8 +732,8 @@ def test_movie_direction_constraints_compile_new_quality_flags():
     instructions = compile_movie_instructions(
         None,
         {
-            "live_action_only": True,
-            "ultra_high_resolution_8k": True,
+            "render_style": "live_action",
+            "resolution_tier": "8k",
         },
     )
 
@@ -679,8 +747,8 @@ def test_movie_direction_constraints_compile_subject_focus():
     from modules.prompt_text_utils import compile_movie_instructions
 
     instructions = compile_movie_instructions(
-        {"person_present": True, "person_count": "1+"},
-        {"subject_focus": "scene_primary"},
+        {"person_mode": "at_least_one_person"},
+        {"focus_priority": "scene"},
     )
 
     assert "At least one person appears on screen." in instructions
@@ -691,15 +759,14 @@ def test_movie_direction_constraints_compile_subject_focus():
 
 
 def test_make_tail_flags_json_supports_explicit_zero_people(prompt_generator):
-    """0人選択時は未指定ではなく person_count=0 を明示出力すること。"""
+    """0人選択時は person_mode=no_people を明示出力すること。"""
 
     prompt_generator.check_tail_flags_enabled.setChecked(True)
     prompt_generator.combo_tail_person_count.setCurrentText("0人")
 
     payload = qt_app.json.loads(prompt_generator._make_tail_flags_json().strip())
 
-    assert payload["content_flags"]["person_present"] is False
-    assert payload["content_flags"]["person_count"] == 0
+    assert payload["content_flags"]["person_mode"] == "no_people"
 
 
 def test_movie_tail_media_type_hides_midjourney_options(prompt_generator):

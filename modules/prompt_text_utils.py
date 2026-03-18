@@ -248,6 +248,84 @@ def _ensure_sentence(text: str) -> str:
     return normalized + "."
 
 
+_BGM_GENRE_SENTENCES = {
+    "cinematic": "Use a cinematic soundtrack.",
+    "orchestral": "Use an orchestral soundtrack.",
+    "lofi": "Use a lo-fi soundtrack.",
+    "ambient": "Use an ambient soundtrack.",
+    "electronic": "Use an electronic soundtrack.",
+    "rock": "Use a rock soundtrack.",
+    "jazz": "Use a jazz soundtrack.",
+    "piano": "Use a piano-led soundtrack.",
+    "japanese": "Use a Japanese-style soundtrack.",
+}
+_BGM_MOOD_SENTENCES = {
+    "calm": "Keep the music calm and restrained.",
+    "melancholic": "Keep the music melancholic.",
+    "uplifting": "Keep the music uplifting.",
+    "tense": "Keep the music tense.",
+    "mysterious": "Keep the music mysterious.",
+    "epic": "Keep the music epic and expansive.",
+    "bright": "Keep the music bright and cheerful.",
+}
+_BGM_TEMPO_SENTENCES = {
+    "slow": "Use a slow tempo.",
+    "medium": "Use a medium tempo.",
+    "fast": "Use a fast tempo.",
+}
+_BGM_VOCAL_SENTENCES = {
+    "instrumental": "Keep the track instrumental.",
+    "vocal": "Include vocals.",
+    "choir": "Include choir-like vocals.",
+}
+_BGM_SYNC_SENTENCES = {
+    "none": "Do not tightly sync the music to the edit rhythm.",
+    "subtle": "Keep the music subtly aligned with the edit rhythm.",
+    "beat_matched": "Synchronize the music with the edit rhythm.",
+}
+_CONTENT_MODE_SENTENCES = {
+    "narration_mode": {
+        "with_narration": "Use narration.",
+        "no_narration": "Do not use narration.",
+    },
+    "bgm_mode": {
+        "with_bgm": "Use background music.",
+        "no_bgm": "Do not use background music.",
+    },
+    "ambient_sound_mode": {
+        "with_ambient_sound": "Include ambient environmental sound.",
+        "no_ambient_sound": "Do not use ambient environmental sound.",
+    },
+    "dialogue_mode": {
+        "with_dialogue": "Include spoken dialogue.",
+        "no_dialogue": "Do not use spoken dialogue.",
+    },
+}
+_PERSON_MODE_SENTENCES = {
+    "no_people": "No people appear on screen.",
+    "at_least_one_person": "At least one person appears on screen.",
+    "one_person": "Show exactly one person on screen.",
+    "two_people": "Show exactly two people on screen.",
+    "three_people": "Show exactly three people on screen.",
+    "four_people": "Show exactly four people on screen.",
+    "crowd": "Many people appear on screen.",
+}
+_STILL_FRAME_POLICY_SENTENCES = {
+    "forbid": "Avoid still or frozen-looking frames.",
+    "allow": "",
+}
+_FOCUS_PRIORITY_SENTENCES = {
+    "people": "Keep people as the primary visual focus of the composition whenever they appear on screen.",
+    "scene": "Even if people appear on screen, keep the environment, scenery, and overall scene as the primary visual focus rather than individual people.",
+}
+_RENDER_STYLE_SENTENCES = {
+    "live_action": "Render the entire video as fully live-action footage with no animated or illustrative look.",
+}
+_RESOLUTION_TIER_SENTENCES = {
+    "8k": "Render the entire video in ultra high resolution 8K quality.",
+}
+
+
 def strip_compiled_movie_requirements(prompt_text: str) -> str:
     """prompt 末尾に追記した Video requirements ブロックを取り除く。"""
     text = (prompt_text or "").strip()
@@ -264,41 +342,76 @@ def _compile_content_flags_to_sentences(content_flags: dict | None) -> List[str]
         return []
 
     sentences: List[str] = []
-    flag_phrases = {
+    for key, mapping in _CONTENT_MODE_SENTENCES.items():
+        value = content_flags.get(key)
+        if isinstance(value, str) and value in mapping and mapping[value]:
+            sentences.append(_ensure_sentence(mapping[value]))
+
+    # 旧 schema 互換
+    legacy_flag_phrases = {
         "narration": ("Use narration", "Do not use narration"),
         "bgm": ("Use background music", "Do not use background music"),
         "ambient_sound": ("Include ambient environmental sound", "Do not use ambient environmental sound"),
         "dialogue": ("Include spoken dialogue", "Do not use spoken dialogue"),
     }
-    for key, (positive, negative) in flag_phrases.items():
+    for key, (positive, negative) in legacy_flag_phrases.items():
+        if f"{key}_mode" in content_flags:
+            continue
         value = content_flags.get(key)
         if value is True:
             sentences.append(_ensure_sentence(positive))
         elif value is False:
             sentences.append(_ensure_sentence(negative))
 
-    person_present = content_flags.get("person_present")
-    person_count = content_flags.get("person_count")
-    if person_present is False:
-        sentences.append("No people appear on screen.")
-    elif person_present is True:
-        if person_count == "1+":
-            sentences.append("At least one person appears on screen.")
-        elif person_count == "many":
-            sentences.append("Many people appear on screen.")
-        elif isinstance(person_count, int) and person_count >= 1:
-            sentences.append(_ensure_sentence(f"Show {person_count} people on screen"))
-        else:
-            sentences.append("People appear on screen.")
+    bgm_mode = content_flags.get("bgm_mode")
+    bgm_enabled = bgm_mode == "with_bgm" or (bgm_mode is None and content_flags.get("bgm") is True)
+    if bgm_enabled:
+        # BGM の詳細は flat な追加キーで持たせ、既存の content_flags 互換性を保つ。
+        for key, mapping in (
+            ("bgm_genre", _BGM_GENRE_SENTENCES),
+            ("bgm_mood", _BGM_MOOD_SENTENCES),
+            ("bgm_tempo", _BGM_TEMPO_SENTENCES),
+            ("bgm_vocal", _BGM_VOCAL_SENTENCES),
+            ("bgm_sync", _BGM_SYNC_SENTENCES),
+        ):
+            value = content_flags.get(key)
+            if isinstance(value, str) and value in mapping:
+                sentences.append(_ensure_sentence(mapping[value]))
 
-    if content_flags.get("on_screen_spoken_dialogue_subtitles"):
+        bgm_notes = content_flags.get("bgm_notes")
+        if isinstance(bgm_notes, str) and bgm_notes.strip():
+            sentences.append(_ensure_sentence(bgm_notes))
+
+    person_mode = content_flags.get("person_mode")
+    if isinstance(person_mode, str) and person_mode in _PERSON_MODE_SENTENCES:
+        sentences.append(_PERSON_MODE_SENTENCES[person_mode])
+    else:
+        person_present = content_flags.get("person_present")
+        person_count = content_flags.get("person_count")
+        if person_present is False:
+            sentences.append("No people appear on screen.")
+        elif person_present is True:
+            if person_count == "1+":
+                sentences.append("At least one person appears on screen.")
+            elif person_count == "many":
+                sentences.append("Many people appear on screen.")
+            elif isinstance(person_count, int) and person_count >= 1:
+                sentences.append(_ensure_sentence(f"Show {person_count} people on screen"))
+            else:
+                sentences.append("People appear on screen.")
+
+    if content_flags.get("dialogue_subtitle_mode") == "with_dialogue_subtitles" or content_flags.get(
+        "on_screen_spoken_dialogue_subtitles"
+    ):
         sentences.append("Display on-screen subtitles for the spoken dialogue.")
-    if content_flags.get("on_screen_non_dialogue_text_overlays"):
+    if content_flags.get("text_overlay_mode") == "with_text_overlays" or content_flags.get(
+        "on_screen_non_dialogue_text_overlays"
+    ):
         sentences.append("Display non-dialogue text overlays on screen.")
 
-    spoken_language = content_flags.get("spoken_language")
-    if isinstance(spoken_language, str) and spoken_language in ("ja", "en"):
-        language_label = "Japanese" if spoken_language == "ja" else "English"
+    speech_language = content_flags.get("speech_language", content_flags.get("spoken_language"))
+    if isinstance(speech_language, str) and speech_language in ("ja", "en"):
+        language_label = "Japanese" if speech_language == "ja" else "English"
         sentences.append(_ensure_sentence(f"If speech is present, use {language_label}"))
 
     return sentences
@@ -349,9 +462,15 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
             readable_tags = [readable_map.get(tag, tag) for tag in tags]
             sentences.append(_ensure_sentence(f"Visually focus on these subjects: {', '.join(readable_tags)}"))
 
-    allow_still_frames = direction_constraints.get("allow_still_frames")
-    if allow_still_frames is False:
-        sentences.append("Avoid still or frozen-looking frames.")
+    still_frame_policy = direction_constraints.get("still_frame_policy")
+    if isinstance(still_frame_policy, str) and still_frame_policy in _STILL_FRAME_POLICY_SENTENCES:
+        sentence = _STILL_FRAME_POLICY_SENTENCES[still_frame_policy]
+        if sentence:
+            sentences.append(sentence)
+    else:
+        allow_still_frames = direction_constraints.get("allow_still_frames")
+        if allow_still_frames is False:
+            sentences.append("Avoid still or frozen-looking frames.")
 
     camera_motion = direction_constraints.get("camera_motion")
     if camera_motion == "mostly_static":
@@ -377,22 +496,32 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
     elif cut_duration_policy == "variable":
         sentences.append("Cut durations do not need to be evenly distributed.")
 
-    subject_focus = direction_constraints.get("subject_focus")
-    if subject_focus == "people_primary":
-        sentences.append("Keep people as the primary visual focus of the composition whenever they appear on screen.")
-    elif subject_focus == "scene_primary":
-        sentences.append(
-            "Even if people appear on screen, keep the environment, scenery, and overall scene as the primary visual focus rather than individual people."
-        )
+    focus_priority = direction_constraints.get("focus_priority")
+    if isinstance(focus_priority, str) and focus_priority in _FOCUS_PRIORITY_SENTENCES:
+        sentences.append(_FOCUS_PRIORITY_SENTENCES[focus_priority])
+    else:
+        subject_focus = direction_constraints.get("subject_focus")
+        if subject_focus == "people_primary":
+            sentences.append("Keep people as the primary visual focus of the composition whenever they appear on screen.")
+        elif subject_focus == "scene_primary":
+            sentences.append(
+                "Even if people appear on screen, keep the environment, scenery, and overall scene as the primary visual focus rather than individual people."
+            )
 
     freeform_constraints = direction_constraints.get("freeform_constraints")
     if isinstance(freeform_constraints, str) and freeform_constraints.strip():
         sentences.append(_ensure_sentence(freeform_constraints))
 
-    if direction_constraints.get("live_action_only") is True:
+    render_style = direction_constraints.get("render_style")
+    if isinstance(render_style, str) and render_style in _RENDER_STYLE_SENTENCES:
+        sentences.append(_RENDER_STYLE_SENTENCES[render_style])
+    elif direction_constraints.get("live_action_only") is True:
         sentences.append("Render the entire video as fully live-action footage with no animated or illustrative look.")
 
-    if direction_constraints.get("ultra_high_resolution_8k") is True:
+    resolution_tier = direction_constraints.get("resolution_tier")
+    if isinstance(resolution_tier, str) and resolution_tier in _RESOLUTION_TIER_SENTENCES:
+        sentences.append(_RESOLUTION_TIER_SENTENCES[resolution_tier])
+    elif direction_constraints.get("ultra_high_resolution_8k") is True:
         sentences.append("Render the entire video in ultra high resolution 8K quality.")
 
     return sentences
@@ -528,12 +657,7 @@ def compose_movie_prompt(
     if prompt_text or "prompt" in base_payload["video_prompt"]:
         base_payload["video_prompt"]["prompt"] = prompt_text
 
-    compiled_instructions = compile_movie_instructions(
-        base_payload["video_prompt"].get("content_flags"),
-        base_payload["video_prompt"].get("direction_constraints"),
-    )
-    if compiled_instructions:
-        base_payload["video_prompt"]["instructions"] = compiled_instructions
+    # Sora 送信用の最終JSONでは、構造化メタデータと自然文 instructions の二重保持を避ける。
 
     # Sora Web/iOS では --ar などのMJオプションは不要なので options_tail は無視する
 

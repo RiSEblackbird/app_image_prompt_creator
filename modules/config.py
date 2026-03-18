@@ -48,6 +48,59 @@ STORYBOARD_AUTO_DEFAULT_DURATION = 12.0
 # content_flags.planned_cuts の手動候補レンジ
 CONTENT_FLAGS_PLANNED_CUTS_MIN = 1
 CONTENT_FLAGS_PLANNED_CUTS_MAX = 15
+CONTENT_FLAGS_PERSON_MODE_CHOICES = [
+    ("(なし)", None),
+    ("0人", "no_people"),
+    ("1人以上", "at_least_one_person"),
+    ("1人", "one_person"),
+    ("2人", "two_people"),
+    ("3人", "three_people"),
+    ("4人", "four_people"),
+    ("とても多い", "crowd"),
+]
+
+# content_flags.bgm の詳細オプション
+# UI 表示は日本語、内部値は軽量な英語トークンに揃える。
+BGM_GENRE_CHOICES = [
+    ("未指定", ""),
+    ("シネマティック", "cinematic"),
+    ("オーケストラ", "orchestral"),
+    ("ローファイ", "lofi"),
+    ("アンビエント", "ambient"),
+    ("エレクトロニック", "electronic"),
+    ("ロック", "rock"),
+    ("ジャズ", "jazz"),
+    ("ピアノ主体", "piano"),
+    ("和風", "japanese"),
+]
+BGM_MOOD_CHOICES = [
+    ("未指定", ""),
+    ("静か", "calm"),
+    ("切ない", "melancholic"),
+    ("高揚感", "uplifting"),
+    ("緊張感", "tense"),
+    ("神秘的", "mysterious"),
+    ("壮大", "epic"),
+    ("明るい", "bright"),
+]
+BGM_TEMPO_CHOICES = [
+    ("未指定", ""),
+    ("ゆっくり", "slow"),
+    ("ふつう", "medium"),
+    ("速い", "fast"),
+]
+BGM_VOCAL_CHOICES = [
+    ("未指定", ""),
+    ("インストゥルメンタル", "instrumental"),
+    ("ボーカルあり", "vocal"),
+    ("コーラス", "choir"),
+]
+BGM_SYNC_CHOICES = [
+    ("未指定", ""),
+    ("同期なし", "none"),
+    ("控えめに同期", "subtle"),
+    ("ビートに同期", "beat_matched"),
+]
 
 # direction_constraints の選択肢
 DIRECTION_ENVIRONMENT_SCOPE_CHOICES = [
@@ -94,8 +147,8 @@ DIRECTION_CUT_DURATION_POLICY_CHOICES = [
 ]
 DIRECTION_SUBJECT_FOCUS_CHOICES = [
     ("未指定", ""),
-    ("人物主体", "people_primary"),
-    ("情景主体", "scene_primary"),
+    ("人物主体", "people"),
+    ("情景主体", "scene"),
 ]
 
 # カメラワークの選択肢
