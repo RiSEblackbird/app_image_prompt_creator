@@ -372,6 +372,122 @@ def test_storyboard_auto_structure_prompt_keeps_total_duration_fixed(qt_applicat
     assert '"total_duration_sec": 12.0' in user_prompt
 
 
+def test_storyboard_duration_allocation_prompt_llm_total_allows_model_total_duration(qt_application):
+    """総尺もモデル提案にする場合は、総尺レンジと total_duration_sec の返却を要求すること。"""
+
+    from modules.llm import StoryboardLLMWorker
+
+    worker = StoryboardLLMWorker(
+        text="A moonlit shrine path with drifting fog.",
+        model="gpt-4o-mini",
+        cut_count=4,
+        total_duration_sec=15.0,
+        duration_allocation="llm_total",
+        auto_structure=False,
+    )
+    _, user_prompt = worker._build_prompts()
+    assert "Decide total_duration_sec between 8.0 and 24.0 seconds." in user_prompt
+    assert "Treat 12.0 seconds as a soft preference" in user_prompt
+    assert '"total_duration_sec": <number>' in user_prompt
+    assert "exactly 4 cinematic cuts" in user_prompt
+
+
+def test_storyboard_llm_total_success_updates_total_duration_override(prompt_generator, monkeypatch):
+    """総尺をモデル提案にするモードでは、返却された total_duration_sec をUIの総尺として採用すること。"""
+
+    class DummyThread:
+        def quit(self):
+            return None
+
+        def wait(self):
+            return None
+
+    class DummyWorker:
+        def deleteLater(self):
+            return None
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, "information", lambda *args, **kwargs: None)
+    prompt_generator._sb_llm_context = {
+        "cut_count": 2,
+        "total_duration": 10.0,
+        "original_total_duration": 10.0,
+        "auto_structure": False,
+        "duration_allocation": "llm_total",
+        "total_duration_mode": "llm",
+        "min_duration_sec": 8.0,
+        "max_duration_sec": 24.0,
+        "fixed_preset_defs": [],
+        "fixed_duration_sum": 0.0,
+    }
+
+    prompt_generator._handle_sb_llm_success(
+        DummyThread(),
+        DummyWorker(),
+        qt_app.json.dumps(
+            {
+                "total_duration_sec": 14.5,
+                "cuts": [
+                    {"cut": 1, "duration_sec": 5.0, "description": "霧の参道。", "camera": "pan"},
+                    {"cut": 2, "duration_sec": 9.5, "description": "鳥居の奥へ進む。", "camera": "tracking"},
+                ],
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    assert prompt_generator._get_sb_total_duration() == 14.5
+    assert [cut.duration_sec for cut in prompt_generator._sb_cuts] == [5.0, 9.5]
+    assert [cut.start_sec for cut in prompt_generator._sb_cuts] == [0.0, 5.0]
+
+
+def test_storyboard_llm_total_missing_total_duration_is_rejected(prompt_generator, monkeypatch):
+    """総尺モデル提案モードで total_duration_sec が欠けた応答は、均等割当へ黙ってフォールバックしないこと。"""
+
+    class DummyThread:
+        def quit(self):
+            return None
+
+        def wait(self):
+            return None
+
+    class DummyWorker:
+        def deleteLater(self):
+            return None
+
+    warnings = []
+    monkeypatch.setattr(QtWidgets.QMessageBox, "warning", lambda *args, **kwargs: warnings.append(args))
+    prompt_generator._sb_llm_context = {
+        "cut_count": 2,
+        "total_duration": 10.0,
+        "original_total_duration": 10.0,
+        "auto_structure": False,
+        "duration_allocation": "llm_total",
+        "total_duration_mode": "llm",
+        "min_duration_sec": 8.0,
+        "max_duration_sec": 24.0,
+        "fixed_preset_defs": [],
+        "fixed_duration_sum": 0.0,
+    }
+
+    prompt_generator._handle_sb_llm_success(
+        DummyThread(),
+        DummyWorker(),
+        qt_app.json.dumps(
+            {
+                "cuts": [
+                    {"cut": 1, "duration_sec": 5.0, "description": "霧の参道。", "camera": "pan"},
+                    {"cut": 2, "duration_sec": 5.0, "description": "鳥居の奥へ進む。", "camera": "tracking"},
+                ]
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    assert warnings
+    assert "total_duration_sec" in warnings[0][2]
+    assert prompt_generator._sb_cuts == []
+
+
 def test_extract_metadata_from_prompt_fallbacks_to_storyboard_cut_descriptions():
     """video_prompt.prompt が無いストーリーボードJSONでも、メタ情報と本文を復元できること。"""
 
@@ -411,6 +527,31 @@ def test_extract_metadata_from_prompt_video_prompt_without_body_falls_back_to_fu
     _, _, _, prompt_text = extract_metadata_from_prompt(raw)
     assert prompt_text  # empty にはならない
     assert "video_prompt" in prompt_text
+
+
+def test_build_storyboard_json_includes_compiled_instructions():
+    """ストーリーボードJSONでも content_flags / direction_constraints から instructions を組み立てること。"""
+
+    from modules.prompt_data import StoryboardCut
+    from modules.storyboard import build_storyboard_json
+
+    result = build_storyboard_json(
+        cuts=[
+            StoryboardCut(index=0, start_sec=0.0, duration_sec=5.0, description="夜の路地。"),
+            StoryboardCut(index=1, start_sec=5.0, duration_sec=5.0, description="濡れた道路を進む。"),
+        ],
+        total_duration_sec=10.0,
+        template_id="none",
+        content_flags={"dialogue": False, "person_present": False},
+        direction_constraints={"environment_scope": "outdoor_only", "camera_motion": "continuous"},
+    )
+
+    payload = qt_app.json.loads(result)
+    assert payload["video_prompt"]["storyboard"]["total_duration_sec"] == 10.0
+    assert "Do not use spoken dialogue." in payload["video_prompt"]["instructions"]
+    assert "No people appear on screen." in payload["video_prompt"]["instructions"]
+    assert "Keep the entire video outdoors only." in payload["video_prompt"]["instructions"]
+    assert "Keep the camera moving continuously." in payload["video_prompt"]["instructions"]
 
 
 def test_compose_movie_prompt_keeps_direction_constraints():
