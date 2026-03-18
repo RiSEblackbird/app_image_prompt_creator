@@ -1303,42 +1303,113 @@ class StoryboardLLMWorker(QtCore.QObject):
         if self.auto_structure:
             min_cuts = max(2, int(self.cut_count_min))
             max_cuts = max(min_cuts, int(self.cut_count_max))
-            user_prompt = (
-                "Analyze the following image prompt and DESIGN the storyboard cut structure automatically.\n"
-                f"- Decide the number of cuts between {min_cuts} and {max_cuts} based on complexity and pacing.\n"
-                f"Total video duration: {self.total_duration_sec} seconds (fixed by settings).\n"
-                "- DO NOT change total_duration_sec. It is fixed.\n"
-                "- Allocate duration unevenly if needed (openings/endings can be longer, transitions shorter).\n"
-                "- ZERO TOLERANCE / 絶対厳守: If the total duration is not matched EXACTLY, downstream video generation will FAIL. There is no tolerance.\n"
-                "- HARD CONSTRAINT: After rounding each duration_sec to 2 decimals, the SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY (no over/under).\n"
-                "- FINAL CHECK: Compute sum_rounded = round(sum(duration_sec), 2). If sum_rounded != total_duration_sec, set delta = round(total_duration_sec - sum_rounded, 2) and adjust ONLY the LAST cut by delta.\n"
-                "- You MUST perform the final check and correction BEFORE outputting JSON.\n"
-                "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n\n"
-                + style_context
-                + character_context
-                + additional_request_context
-                + "Rules:\n"
-                "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
-                "- DEPICTABILITY FIRST: For each cut, ensure the described visuals/actions are realistically depictable within its duration_sec.\n"
-                "- If any cut feels too dense for its duration, simplify by deleting secondary beats and script-like details.\n"
-                "- Each cut should be a complete, vivid visual description.\n"
-                f"{continuity_rule}"
-                "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
-                "- The first cut should establish the scene.\n"
-                "- The final cut should provide a sense of conclusion or climax.\n"
-                f"{length_rule}\n"
-                "Output format (JSON object):\n"
-                "{\n"
-                f'  "total_duration_sec": {self.total_duration_sec},\n'
-                '  "cuts": [\n'
-                '    {"cut": 1, "duration_sec": <number>, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
-                '    {"cut": 2, "duration_sec": <number>, "description": "...", "camera": "..."}\n'
-                "  ]\n"
-                "}\n\n"
-                f"Source prompt:\n{self.text}"
-            )
+            if self.duration_allocation == "llm_total":
+                user_prompt = (
+                    "Analyze the following image prompt and DESIGN the storyboard cut structure automatically.\n"
+                    f"- Decide the number of cuts between {min_cuts} and {max_cuts} based on complexity and pacing.\n"
+                    f"- Also decide total_duration_sec between {self.min_duration_sec:.1f} and {self.max_duration_sec:.1f} seconds.\n"
+                    f"- Treat {self.default_duration_sec:.1f} seconds as a soft preference, not a fixed requirement.\n"
+                    "- Allocate duration unevenly if needed (openings/endings can be longer, transitions shorter).\n"
+                    "- ZERO TOLERANCE / 絶対厳守: If the total duration is not matched EXACTLY, downstream video generation will FAIL. There is no tolerance.\n"
+                    "- HARD CONSTRAINT: After rounding each duration_sec to 2 decimals, the SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY (no over/under).\n"
+                    "- FINAL CHECK: Compute sum_rounded = round(sum(duration_sec), 2). If sum_rounded != total_duration_sec, set delta = round(total_duration_sec - sum_rounded, 2) and adjust ONLY the LAST cut by delta.\n"
+                    "- You MUST perform the final check and correction BEFORE outputting JSON.\n"
+                    "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n\n"
+                    + style_context
+                    + character_context
+                    + additional_request_context
+                    + "Rules:\n"
+                    "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                    "- DEPICTABILITY FIRST: Decide total_duration_sec and each cut's duration_sec together so the visual density stays realistic.\n"
+                    "- If any cut feels too dense for its duration, simplify by deleting secondary beats and script-like details.\n"
+                    "- Each cut should be a complete, vivid visual description.\n"
+                    f"{continuity_rule}"
+                    "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
+                    "- The first cut should establish the scene.\n"
+                    "- The final cut should provide a sense of conclusion or climax.\n"
+                    f"{length_rule}\n"
+                    "Output format (JSON object):\n"
+                    "{\n"
+                    '  "total_duration_sec": <number>,\n'
+                    '  "cuts": [\n'
+                    '    {"cut": 1, "duration_sec": <number>, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
+                    '    {"cut": 2, "duration_sec": <number>, "description": "...", "camera": "..."}\n'
+                    "  ]\n"
+                    "}\n\n"
+                    f"Source prompt:\n{self.text}"
+                )
+            else:
+                user_prompt = (
+                    "Analyze the following image prompt and DESIGN the storyboard cut structure automatically.\n"
+                    f"- Decide the number of cuts between {min_cuts} and {max_cuts} based on complexity and pacing.\n"
+                    f"Total video duration: {self.total_duration_sec} seconds (fixed by settings).\n"
+                    "- DO NOT change total_duration_sec. It is fixed.\n"
+                    "- Allocate duration unevenly if needed (openings/endings can be longer, transitions shorter).\n"
+                    "- ZERO TOLERANCE / 絶対厳守: If the total duration is not matched EXACTLY, downstream video generation will FAIL. There is no tolerance.\n"
+                    "- HARD CONSTRAINT: After rounding each duration_sec to 2 decimals, the SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY (no over/under).\n"
+                    "- FINAL CHECK: Compute sum_rounded = round(sum(duration_sec), 2). If sum_rounded != total_duration_sec, set delta = round(total_duration_sec - sum_rounded, 2) and adjust ONLY the LAST cut by delta.\n"
+                    "- You MUST perform the final check and correction BEFORE outputting JSON.\n"
+                    "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n\n"
+                    + style_context
+                    + character_context
+                    + additional_request_context
+                    + "Rules:\n"
+                    "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                    "- DEPICTABILITY FIRST: For each cut, ensure the described visuals/actions are realistically depictable within its duration_sec.\n"
+                    "- If any cut feels too dense for its duration, simplify by deleting secondary beats and script-like details.\n"
+                    "- Each cut should be a complete, vivid visual description.\n"
+                    f"{continuity_rule}"
+                    "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
+                    "- The first cut should establish the scene.\n"
+                    "- The final cut should provide a sense of conclusion or climax.\n"
+                    f"{length_rule}\n"
+                    "Output format (JSON object):\n"
+                    "{\n"
+                    f'  "total_duration_sec": {self.total_duration_sec},\n'
+                    '  "cuts": [\n'
+                    '    {"cut": 1, "duration_sec": <number>, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
+                    '    {"cut": 2, "duration_sec": <number>, "description": "...", "camera": "..."}\n'
+                    "  ]\n"
+                    "}\n\n"
+                    f"Source prompt:\n{self.text}"
+                )
         else:
-            if self.duration_allocation == "llm":
+            if self.duration_allocation == "llm_total":
+                user_prompt = (
+                    f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
+                    f"- Decide total_duration_sec between {self.min_duration_sec:.1f} and {self.max_duration_sec:.1f} seconds.\n"
+                    f"- Treat {self.default_duration_sec:.1f} seconds as a soft preference, not a fixed requirement.\n"
+                    "- Allocate duration unevenly if it improves pacing (openings/endings can be longer, transitions shorter).\n"
+                    "- ZERO TOLERANCE / 絶対厳守: If the total duration is not matched EXACTLY, downstream video generation will FAIL. There is no tolerance.\n"
+                    "- HARD CONSTRAINT: After rounding each duration_sec to 2 decimals, the SUM of all duration_sec MUST EQUAL total_duration_sec EXACTLY (no over/under).\n"
+                    "- FINAL CHECK: Compute sum_rounded = round(sum(duration_sec), 2). If sum_rounded != total_duration_sec, set delta = round(total_duration_sec - sum_rounded, 2) and adjust ONLY the LAST cut by delta.\n"
+                    "- You MUST perform the final check and correction BEFORE outputting JSON.\n"
+                    "- Avoid ultra-short cuts (<0.5s) unless necessary for montage feel.\n"
+                    "HARD CONSTRAINT: Keep the action density per cut realistic for its duration so the whole storyboard fits the chosen total duration.\n\n"
+                    + style_context
+                    + character_context
+                    + additional_request_context
+                    + "Rules:\n"
+                    "- IMPORTANT: Preserve the original language of the source prompt. Do NOT translate.\n"
+                    "- DEPICTABILITY FIRST: Choose total_duration_sec, durations, and descriptions together. If a cut is short, keep it extremely simple.\n"
+                    "- If a cut needs more content, allocate more seconds; do NOT cram multiple beats into a short cut.\n"
+                    "- Each cut should be a complete, vivid visual description.\n"
+                    f"{continuity_rule}"
+                    "- Include camera movement suggestions where appropriate (zoom, pan, tracking, etc.).\n"
+                    "- The first cut should establish the scene.\n"
+                    "- The final cut should provide a sense of conclusion or climax.\n"
+                    f"{length_rule}\n"
+                    "Output format (JSON object):\n"
+                    "{\n"
+                    '  "total_duration_sec": <number>,\n'
+                    '  "cuts": [\n'
+                    '    {"cut": 1, "duration_sec": <number>, "description": "...", "camera": "static|pan|zoom_in|zoom_out|tracking|dolly|handheld|drone"},\n'
+                    '    {"cut": 2, "duration_sec": <number>, "description": "...", "camera": "..."}\n'
+                    "  ]\n"
+                    "}\n\n"
+                    f"Source prompt:\n{self.text}"
+                )
+            elif self.duration_allocation == "llm":
                 user_prompt = (
                     f"Split the following image prompt into exactly {self.cut_count} cinematic cuts.\n"
                     f"Total video duration: {self.total_duration_sec} seconds (fixed).\n"

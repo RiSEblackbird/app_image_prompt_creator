@@ -863,9 +863,24 @@ class PromptUIMixin:
             self.combo_sb_duration.addItem(f"{sec}秒", userData=sec)
         self.combo_sb_duration.setCurrentIndex(0)
         self._sb_duration_tooltip_base = "動画の総尺を選択します（10〜30秒）"
+        self._sb_duration_tooltip_llm = (
+            f"総尺はLLMが {config.STORYBOARD_AUTO_MIN_DURATION:.1f}〜{config.STORYBOARD_AUTO_MAX_DURATION:.1f} 秒の範囲で提案します。"
+        )
         self.combo_sb_duration.setToolTip(self._sb_duration_tooltip_base)
         self.combo_sb_duration.currentIndexChanged.connect(self._on_sb_duration_change)
         settings_row.addWidget(self.combo_sb_duration)
+
+        settings_row.addWidget(QtWidgets.QLabel("総尺決定:"))
+        self.combo_sb_total_duration_mode = QtWidgets.QComboBox()
+        for label, value in config.STORYBOARD_TOTAL_DURATION_MODE_CHOICES:
+            self.combo_sb_total_duration_mode.addItem(label, userData=value)
+        self.combo_sb_total_duration_mode.setToolTip(
+            "総尺の決め方を選択します。\n"
+            "- 固定（指定した総尺）: UIで選んだ総尺をそのまま使います\n"
+            f"- モデル提案: LLMが {config.STORYBOARD_AUTO_MIN_DURATION:.1f}〜{config.STORYBOARD_AUTO_MAX_DURATION:.1f} 秒の範囲で総尺と各カット尺を提案します"
+        )
+        self.combo_sb_total_duration_mode.currentIndexChanged.connect(self._on_sb_total_duration_mode_change)
+        settings_row.addWidget(self.combo_sb_total_duration_mode)
 
         settings_row.addWidget(QtWidgets.QLabel("カット数:"))
         self.spin_sb_cut_count = QtWidgets.QSpinBox()
@@ -904,12 +919,12 @@ class PromptUIMixin:
         )
         settings_row.addWidget(self.check_sb_style_reflection)
 
-        # カット数の自動決定（総尺は固定）
-        self.check_sb_auto_structure = QtWidgets.QCheckBox("カット数をLLM自動決定（総尺は固定）")
+        # カット数の自動決定
+        self.check_sb_auto_structure = QtWidgets.QCheckBox("カット数をLLM自動決定")
         self.check_sb_auto_structure.setToolTip(
             "ONにすると、カット数をLLMがプロンプト内容から自動判断します。\n"
-            "※ 総尺（秒）はUIの選択値を厳守し、LLMに変更させません。\n"
-            f"目安レンジ（カット数）: {config.STORYBOARD_AUTO_MIN_CUTS}-{config.STORYBOARD_AUTO_MAX_CUTS}"
+            f"目安レンジ（カット数）: {config.STORYBOARD_AUTO_MIN_CUTS}-{config.STORYBOARD_AUTO_MAX_CUTS}\n"
+            "総尺決定が固定ならUIの総尺を厳守し、総尺決定がモデル提案なら総尺もLLMが提案します。"
         )
         self.check_sb_auto_structure.toggled.connect(self._on_sb_auto_structure_toggled)
         settings_row.addWidget(self.check_sb_auto_structure)
@@ -1072,6 +1087,7 @@ class PromptUIMixin:
         # ストーリーボードの開始秒/尺は常に連動して編集される（非連動状態はあり得ない）。
         # QDoubleSpinBox の valueChanged → 内部状態更新 → UI再描画 の際に再入しないようガードを置く。
         self._sb_time_edit_guard: bool = False
+        self._update_sb_generation_mode_ui()
 
     # =============================
     # ストーリーボードタブのイベントハンドラ
@@ -1185,24 +1201,43 @@ class PromptUIMixin:
 
     def _update_sb_duration_tooltip(self):
         """総尺コンボのツールチップを最新状態に揃える。"""
+        base_tooltip = (
+            self._sb_duration_tooltip_llm
+            if self._is_sb_total_duration_llm_mode()
+            else self._sb_duration_tooltip_base
+        )
         if self._sb_total_duration_override is None:
-            self.combo_sb_duration.setToolTip(self._sb_duration_tooltip_base)
+            self.combo_sb_duration.setToolTip(base_tooltip)
         else:
             self.combo_sb_duration.setToolTip(
-                f"{self._sb_duration_tooltip_base}\nLLM自動推定: {self._sb_total_duration_override:.1f} 秒"
+                f"{base_tooltip}\nLLM提案: {self._sb_total_duration_override:.1f} 秒"
             )
+
+    def _is_sb_total_duration_llm_mode(self) -> bool:
+        """ストーリーボード総尺をLLM提案に委ねるモードかどうかを返す。"""
+        combo = getattr(self, "combo_sb_total_duration_mode", None)
+        return bool(combo is not None and combo.currentData() == "llm")
+
+    def _update_sb_generation_mode_ui(self):
+        """総尺決定方式と自動構成の組み合わせに応じて関連UIの有効状態を揃える。"""
+        auto_structure = bool(getattr(self, "check_sb_auto_structure", None) and self.check_sb_auto_structure.isChecked())
+        total_duration_llm = self._is_sb_total_duration_llm_mode()
+        self.combo_sb_duration.setEnabled(not total_duration_llm)
+        self.spin_sb_cut_count.setEnabled(not auto_structure)
+        combo = getattr(self, "combo_sb_time_allocation", None)
+        if combo is not None:
+            combo.setEnabled(not auto_structure and not total_duration_llm)
+        self._update_sb_duration_tooltip()
 
     def _on_sb_auto_structure_toggled(self, checked: bool):
         """自動構成トグル切替時の処理。"""
-        # 総尺は常にUI選択値を厳守するため、自動構成ONでも無効化しない
-        self.combo_sb_duration.setEnabled(True)
-        self.spin_sb_cut_count.setEnabled(not checked)
-        combo = getattr(self, "combo_sb_time_allocation", None)
-        if combo is not None:
-            combo.setEnabled(not checked)
-        if checked:
-            # 自動構成ONでも総尺は固定のため、LLM決定値は保持しない
-            self._clear_sb_duration_override()
+        self._clear_sb_duration_override()
+        self._update_sb_generation_mode_ui()
+
+    def _on_sb_total_duration_mode_change(self, *_):
+        """総尺決定方式の変更時に既存のLLM提案総尺を解除し、関連UIを更新する。"""
+        self._clear_sb_duration_override()
+        self._update_sb_generation_mode_ui()
 
     def _on_sb_duration_change(self, *_):
         """総尺選択変更時にLLM自動値を解除する。"""
@@ -1563,9 +1598,11 @@ class PromptUIMixin:
             return
 
         # 総尺とカット数を取得
+        selected_total_duration = self.combo_sb_duration.currentData() or config.DEFAULT_STORYBOARD_DURATION
         total_duration = self._get_sb_total_duration()
         cut_count = self.spin_sb_cut_count.value()
         auto_structure = self.check_sb_auto_structure.isChecked()
+        total_duration_mode = "llm" if self._is_sb_total_duration_llm_mode() else "fixed"
 
         # テンプレートに定義されたプリセット固定カット（duration_sec が明示定義）を取得する。
         # LLMには「固定カット分を除いた残り尺・残りカット数」を渡し、
@@ -1575,14 +1612,23 @@ class PromptUIMixin:
         _preset_cuts_def = _template_def.get("preset_cuts") or []
         fixed_preset_defs = [p for p in _preset_cuts_def if p.get("duration_sec") is not None]
         fixed_duration_sum = round(sum(float(p["duration_sec"]) for p in fixed_preset_defs), 2)
+        if total_duration_mode == "llm" and fixed_preset_defs:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "注意",
+                "固定尺のテンプレートが選択されているため、総尺をモデル提案にするモードは使えません。"
+                "\nテンプレートを「（テンプレートなし）」にするか、総尺決定を固定へ戻してください。",
+            )
+            return
         # 固定カット分を差し引いた、LLM に渡す尺とカット数
         llm_total_duration = max(0.1, round(total_duration - fixed_duration_sum, 2))
         llm_cut_count = max(1, cut_count - len(fixed_preset_defs))
 
-        # カット数指定時の尺配分ポリシーを取得（自動構成の場合は常にLLM配分）
-        allocation = "llm" if auto_structure else "uniform"
+        # 総尺をLLM提案にする場合は、各カット尺も必ずLLMへ委譲する。
+        # そうでない場合のみ、既存の「均等 / LLM配分」を選べる。
+        allocation = "llm_total" if total_duration_mode == "llm" else ("llm" if auto_structure else "uniform")
         alloc_combo = getattr(self, "combo_sb_time_allocation", None)
-        if not auto_structure and alloc_combo is not None:
+        if total_duration_mode != "llm" and not auto_structure and alloc_combo is not None:
             data = alloc_combo.currentData()
             if data in ("uniform", "llm"):
                 allocation = data
@@ -1635,7 +1681,7 @@ class PromptUIMixin:
             text=prompt_text,
             model=self.combo_llm_model.currentText(),
             cut_count=llm_cut_count,
-            total_duration_sec=llm_total_duration,
+            total_duration_sec=selected_total_duration if total_duration_mode == "llm" else llm_total_duration,
             duration_allocation=allocation,
             output_language=output_language,
             continuity_enhanced=continuity,
@@ -1649,7 +1695,7 @@ class PromptUIMixin:
             cut_count_max=config.STORYBOARD_AUTO_MAX_CUTS,
             min_duration_sec=config.STORYBOARD_AUTO_MIN_DURATION,
             max_duration_sec=config.STORYBOARD_AUTO_MAX_DURATION,
-            default_duration_sec=llm_total_duration or config.STORYBOARD_AUTO_DEFAULT_DURATION,
+            default_duration_sec=selected_total_duration if total_duration_mode == "llm" else (llm_total_duration or config.STORYBOARD_AUTO_DEFAULT_DURATION),
             detected_characters=character_info,
         )
 
@@ -1660,6 +1706,10 @@ class PromptUIMixin:
             "original_total_duration": total_duration,
             "auto_structure": auto_structure,
             "duration_allocation": allocation,
+            "total_duration_mode": total_duration_mode,
+            "selected_total_duration": selected_total_duration,
+            "min_duration_sec": config.STORYBOARD_AUTO_MIN_DURATION,
+            "max_duration_sec": config.STORYBOARD_AUTO_MAX_DURATION,
             "fixed_preset_defs": fixed_preset_defs,
             "fixed_duration_sum": fixed_duration_sum,
         }
@@ -1688,17 +1738,18 @@ class PromptUIMixin:
 
         auto_structure = context.get("auto_structure", False)
         duration_allocation = context.get("duration_allocation", "uniform")
+        total_duration_mode = context.get("total_duration_mode", "fixed")
         allocation_fallback_to_uniform = False
 
         # JSONレスポンスをパース（オブジェクト形式/配列形式どちらも許容）
         cuts_data = None
         total_duration = context.get("total_duration") or config.DEFAULT_STORYBOARD_DURATION
+        payload_total_duration = None
         try:
             parsed = json.loads(result)
             if isinstance(parsed, dict) and isinstance(parsed.get("cuts"), list):
                 cuts_data = parsed.get("cuts")
-                # 総尺はUI設定を厳守する（LLMがtotal_duration_secを返しても採用しない）
-                total_duration = total_duration
+                payload_total_duration = parsed.get("total_duration_sec")
             elif isinstance(parsed, list):
                 cuts_data = parsed
         except Exception:
@@ -1710,8 +1761,7 @@ class PromptUIMixin:
                 if json_match:
                     parsed = json.loads(json_match.group())
                     cuts_data = parsed.get("cuts")
-                    # 総尺はUI設定を厳守する（LLMがtotal_duration_secを返しても採用しない）
-                    total_duration = total_duration
+                    payload_total_duration = parsed.get("total_duration_sec")
             except Exception:
                 cuts_data = None
 
@@ -1726,6 +1776,26 @@ class PromptUIMixin:
         if not isinstance(cuts_data, list) or not cuts_data:
             QtWidgets.QMessageBox.warning(self, "注意", "有効なカットデータが見つかりません。")
             return
+
+        if total_duration_mode == "llm":
+            min_duration_sec = round(float(context.get("min_duration_sec") or config.STORYBOARD_AUTO_MIN_DURATION), 2)
+            max_duration_sec = round(float(context.get("max_duration_sec") or config.STORYBOARD_AUTO_MAX_DURATION), 2)
+            if not isinstance(payload_total_duration, (int, float)):
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "注意",
+                    "総尺をモデル提案にするモードでは、LLM応答に数値の total_duration_sec が必要です。",
+                )
+                return
+            total_duration = round(float(payload_total_duration), 2)
+            if total_duration < min_duration_sec or total_duration > max_duration_sec:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "注意",
+                    f"LLMが返した total_duration_sec={total_duration:.2f} は許容範囲外です。"
+                    f"\n許容範囲: {min_duration_sec:.1f}〜{max_duration_sec:.1f} 秒",
+                )
+                return
 
         # カットを生成
         actual_cut_count = len(cuts_data)
@@ -1750,6 +1820,14 @@ class PromptUIMixin:
 
         if has_duration_field and durations:
             total_from_payload = round(sum(durations), 2)
+            if total_duration_mode == "llm" and total_from_payload != round(float(total_duration), 2):
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "注意",
+                    f"LLM応答の duration_sec 合計 {total_from_payload:.2f} 秒と "
+                    f"total_duration_sec {float(total_duration):.2f} 秒が一致しません。",
+                )
+                return
             try:
                 total_duration_value = float(total_duration) if total_duration is not None else None
             except (TypeError, ValueError):
@@ -1767,6 +1845,13 @@ class PromptUIMixin:
             duration_per_cut = None
             total_duration = total_duration_value
         else:
+            if total_duration_mode == "llm":
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "注意",
+                    "総尺をモデル提案にするモードでは、すべてのカットに duration_sec が必要です。",
+                )
+                return
             total_duration = float(total_duration or config.DEFAULT_STORYBOARD_DURATION)
             duration_per_cut = total_duration / actual_cut_count
             durations = [duration_per_cut for _ in range(actual_cut_count)]
@@ -1846,8 +1931,10 @@ class PromptUIMixin:
 
         # 自動構成の結果を保存
         if auto_structure:
-            # 総尺はUI設定を厳守するため、LLM由来の総尺は保持しない
-            self._clear_sb_duration_override()
+            if total_duration_mode == "llm":
+                self._set_sb_total_duration_override(total_duration)
+            else:
+                self._clear_sb_duration_override()
             # UIのカット数表示をプリセット固定カット含む合計に合わせる
             try:
                 self.spin_sb_cut_count.blockSignals(True)
@@ -1855,13 +1942,23 @@ class PromptUIMixin:
             finally:
                 self.spin_sb_cut_count.blockSignals(False)
         else:
-            self._clear_sb_duration_override()
+            if total_duration_mode == "llm":
+                self._set_sb_total_duration_override(total_duration)
+            else:
+                self._clear_sb_duration_override()
 
         self._sb_refresh_cut_list()
         if self._sb_cuts:
             self.list_sb_cuts.setCurrentRow(0)
 
-        allocation_label = "カット数自動(LLM)" if auto_structure else ("均等（固定）" if duration_allocation == "uniform" else "内容に応じて（LLM配分）")
+        if auto_structure and total_duration_mode == "llm":
+            allocation_label = "総尺/カット数ともLLM提案"
+        elif auto_structure:
+            allocation_label = "カット数自動(LLM)"
+        elif total_duration_mode == "llm":
+            allocation_label = "総尺もモデル提案"
+        else:
+            allocation_label = "均等（固定）" if duration_allocation == "uniform" else "内容に応じて（LLM配分）"
         extra = ""
         if allocation_fallback_to_uniform:
             extra = "\n※ LLM配分を要求しましたが duration_sec が返らなかったため、均等割当で生成しました。"

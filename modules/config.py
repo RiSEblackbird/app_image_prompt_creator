@@ -14,7 +14,9 @@ WINDOW_TITLE = "画像プロンプトランダム生成ツール (PySide6)"
 DEFAULT_ROW_NUM = 10
 DEFAULT_TAIL_MEDIA_TYPE = "image"
 AVAILABLE_LLM_MODELS = [
+    "gpt-5.4-mini",
     "gpt-5.4",
+    "gpt-5.4-nano",
     "gpt-4o-mini",
     "gpt-4o",
 ]
@@ -30,6 +32,10 @@ LANGUAGE_COMBO_CHOICES = [
 # 総尺の選択肢（秒）
 STORYBOARD_DURATION_CHOICES = [10, 15, 20, 25, 30]
 DEFAULT_STORYBOARD_DURATION = 10
+STORYBOARD_TOTAL_DURATION_MODE_CHOICES = [
+    ("固定（指定した総尺）", "fixed"),
+    ("モデル提案", "llm"),
+]
 # Sora への入力制限に合わせた安全マージン付き文字数上限
 SORA_PROMPT_MAX_CHARS = 2000
 SORA_PROMPT_SAFE_CHARS = 1900
