@@ -1492,6 +1492,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         worker.deleteLater()
         self._thread = None
         self._llm_generate_context = None
+        self._pending_generate_and_copy = False
         QtWidgets.QMessageBox.critical(self, "エラー", f"LLM生成処理でエラーが発生しました:\n{error}")
 
     def _show_no_result_warning(

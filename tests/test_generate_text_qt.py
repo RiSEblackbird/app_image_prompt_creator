@@ -181,6 +181,36 @@ def test_llm_success_copies_pending_result_after_output_is_updated(prompt_genera
     assert prompt_generator._pending_generate_and_copy is False
 
 
+def test_llm_failure_clears_pending_generate_and_copy_state(prompt_generator, monkeypatch):
+    """LLM生成失敗時は、次回生成へコピー予約状態を持ち越さないこと。"""
+
+    class DummyThread:
+        def quit(self):
+            return None
+
+        def wait(self):
+            return None
+
+    class DummyWorker:
+        def deleteLater(self):
+            return None
+
+    captured = []
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox,
+        "critical",
+        lambda *args: captured.append(args[2]),
+    )
+    prompt_generator._llm_generate_context = {"total_lines": 1}
+    prompt_generator._pending_generate_and_copy = True
+
+    prompt_generator._handle_generate_llm_failure(DummyThread(), DummyWorker(), "network error")
+
+    assert prompt_generator._pending_generate_and_copy is False
+    assert prompt_generator._llm_generate_context is None
+    assert captured == ["LLM生成処理でエラーが発生しました:\nnetwork error"]
+
+
 def test_attribute_section_toggle_changes_visible_height(prompt_generator):
     """属性選択は展開時に十分な高さを持ち、格納時に最小化されること。"""
 
