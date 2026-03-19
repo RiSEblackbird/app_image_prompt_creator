@@ -101,6 +101,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         self._movie_llm_context: Optional[dict] = None
         self._chaos_mix_context: Optional[dict] = None
         self._llm_generate_context: Optional[dict] = None
+        self._pending_generate_and_copy: bool = False
         self._tail_presets_watcher: Optional[QtCore.QFileSystemWatcher] = None
         self._arrange_presets_watcher: Optional[QtCore.QFileSystemWatcher] = None
         self.font_scale_level = 0
@@ -1042,17 +1043,16 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         radio = getattr(self, "radio_mode_llm", None)
         return bool(radio and radio.isChecked())
 
-    def generate_text(self):
+    def generate_text(self) -> bool:
         """通常生成ボタンのエントリポイント。DB生成/LLM生成をモードに応じて切り替える。"""
         if self._is_llm_generation_mode():
-            self._generate_text_via_llm()
-        else:
-            self._generate_text_via_db()
+            return self._generate_text_via_llm()
+        return self._generate_text_via_db()
 
-    def _generate_text_via_db(self):
+    def _generate_text_via_db(self) -> bool:
         db_path = self._get_db_path_or_warn()
         if not db_path:
-            return
+            return False
 
         try:
             with closing(self._connect_with_foreign_keys(db_path)) as conn:
@@ -1172,7 +1172,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                     )
                     # 結果なしの場合も、内部状態を空にしたうえで末尾構成だけ再描画する
                     self.update_option(sync_from_text=False)
-                    return
+                    return False
 
                 random.shuffle(selected_lines)
                 processed_lines = self._normalize_sentences((line[1] for line in selected_lines))
@@ -1193,6 +1193,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 self.main_prompt = " ".join(processed_lines)
                 # DB生成で確定した main_prompt をそのまま採用し、末尾を再構成する
                 self.update_option(sync_from_text=False)
+                return True
         except sqlite3.Error as exc:
             log_structured(
                 logging.ERROR,
@@ -1202,8 +1203,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             QtWidgets.QMessageBox.critical(self, "DB接続エラー", f"データベースに接続できませんでした。\n{exc}")
         except Exception:
             QtWidgets.QMessageBox.critical(self, "エラー", f"エラーが発生しました: {get_exception_trace()}")
+        return False
 
-    def _generate_text_via_llm(self):
+    def _generate_text_via_llm(self) -> bool:
         """属性条件と行数に応じて、通常生成をLLMでまとめて実行する。
 
         - ユーザーが明示的に選んだ属性: そのまま attribute_conditions に反映
@@ -1216,7 +1218,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 "注意",
                 "LLMが無効化されています。YAMLで LLM_ENABLED を true にしてください。",
             )
-            return
+            return False
 
         total_lines = int(self.spin_row_num.value())
         exclusion_words = [w.strip() for w in self.combo_exclusion.currentText().split(",") if w.strip()]
@@ -1339,6 +1341,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         }
         if self._start_background_worker(worker, self._handle_generate_llm_success, self._handle_generate_llm_failure):
             self._llm_generate_context = context
+            return True
+        return False
 
     def _handle_generate_llm_success(self, thread: QtCore.QThread, worker: GeneratePromptLLMWorker, result: str):
         self._set_loading_state(False)
@@ -1348,6 +1352,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         self._thread = None
         context = self._llm_generate_context or {}
         self._llm_generate_context = None
+        copy_requested = self._pending_generate_and_copy
+        self._pending_generate_and_copy = False
 
         raw_output = (result or "").strip()
         if not raw_output:
@@ -1418,6 +1424,9 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             },
         )
 
+        if copy_requested:
+            self._copy_output_to_clipboard(show_message=False)
+
         # 生成完了ダイアログに、LLMに渡した準備データセットをJSON形式で表示する
         # 生成完了ダイアログに、LLMに渡した準備データセットをJSON形式で常時表示する
         try:
@@ -1435,6 +1444,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 if summary_lines
                 else "（属性条件なし: LLMには自由生成として依頼しました）"
             )
+            copy_notice = "\n\n生成と同時に全文をクリップボードへコピーしました。" if copy_requested else ""
 
             dialog = QtWidgets.QDialog(self)
             dialog.setWindowTitle("LLM生成 完了")
@@ -1450,7 +1460,8 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
                 f"行数指定: {target_total}\n"
                 f"実際のフラグメント数: {len(processed_lines)}\n"
                 f"カオス度(LLM): {chaos_level}\n"
-                f"除外語句: {', '.join(exclusion_words) if exclusion_words else 'なし'}\n\n"
+                f"除外語句: {', '.join(exclusion_words) if exclusion_words else 'なし'}"
+                f"{copy_notice}\n\n"
                 "下部にLLMへの準備データセット（属性条件）をJSON形式で表示します。"
             )
             info_label.setWordWrap(True)
@@ -1578,16 +1589,28 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
         self.text_output.setPlainText(result)
 
     def generate_and_copy(self):
-        self.generate_text()
-        self.copy_all_to_clipboard()
+        self._pending_generate_and_copy = True
+        started = self.generate_text()
+        if not started:
+            self._pending_generate_and_copy = False
+            return
+        if not self._is_llm_generation_mode():
+            self.copy_all_to_clipboard()
+            self._pending_generate_and_copy = False
 
-    def copy_all_to_clipboard(self):
+    def _copy_output_to_clipboard(self, show_message: bool = True) -> bool:
         text = self.text_output.toPlainText().strip()
         if not text:
-            QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
-            return
+            if show_message:
+                QtWidgets.QMessageBox.warning(self, "注意", "まずプロンプトを生成してください。")
+            return False
         QtGui.QGuiApplication.clipboard().setText(text)
-        QtWidgets.QMessageBox.information(self, "コピー完了", "クリップボードにコピーしました。")
+        if show_message:
+            QtWidgets.QMessageBox.information(self, "コピー完了", "クリップボードにコピーしました。")
+        return True
+
+    def copy_all_to_clipboard(self):
+        self._copy_output_to_clipboard(show_message=True)
 
     def handle_format_for_movie_json(self):
         try:
