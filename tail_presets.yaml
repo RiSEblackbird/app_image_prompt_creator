@@ -73,6 +73,36 @@ tails:
     - id: movie_underexposed_shadow
       description_ja: "暗めの露出で影を強調した、ローキーな映像"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is underexposed low-key footage where shadows dominate and details emerge from darkness, delivering intensely polished visual storytelling\",\"exposure\":\"underexposed\",\"look\":\"shadow emphasis\"}}"
+    - id: movie_hdr_documentary_finish
+      description_ja: "HDRドキュメンタリー調の自然なハイライト保持と実在感を持つ映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is HDR-finished footage that preserves natural highlight roll-off and documentary-grade realism throughout, delivering intensely polished visual storytelling\",\"format\":\"HDR\",\"look\":\"natural highlight retention\"}}"
+    - id: movie_bleach_bypass
+      description_ja: "銀残し風の硬いコントラストと抑えた色で仕上げた映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is footage graded with a bleach-bypass-inspired look, combining hard contrast with restrained color for severe visual texture, delivering intensely polished visual storytelling\",\"grade\":\"bleach bypass\",\"look\":\"hard contrast\"}}"
+    - id: movie_silver_blue_night
+      description_ja: "銀色がかった青夜景トーンで静かな冷気を帯びた映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is silver-blue night footage with cool metallic tonality and restrained nocturnal atmosphere, delivering intensely polished visual storytelling\",\"grade\":\"silver blue night\",\"look\":\"cool nocturne\"}}"
+    - id: movie_vintage_telecine
+      description_ja: "テレシネ転送後のような退色と微細な色ズレを持つ映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is vintage telecine-style footage with soft fading, minor color drift, and archival transfer character, delivering intensely polished visual storytelling\",\"grade\":\"telecine emulation\",\"look\":\"archival softness\"}}"
+    - id: movie_day_for_night
+      description_ja: "昼景を夜景に見立てるデイ・フォー・ナイト処理の映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is day-for-night processed footage that transforms daylight scenes into stylized nocturnal imagery, delivering intensely polished visual storytelling\",\"grade\":\"day for night\",\"look\":\"stylized moonlit illusion\"}}"
+    - id: movie_candlelit_warmth
+      description_ja: "ろうそく光のような暖色の揺らぎで包む親密な映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is candlelit footage wrapped in warm flickering illumination and intimate shadow falloff, delivering intensely polished visual storytelling\",\"lighting\":\"candlelit warmth\",\"look\":\"flickering amber glow\"}}"
+    - id: movie_rain_slick_gloss
+      description_ja: "濡れた面の反射と艶感を強調したレインスリックな映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is rain-slick footage emphasizing glossy wet surfaces, reflected highlights, and saturated atmosphere, delivering intensely polished visual storytelling\",\"look\":\"wet gloss reflections\",\"weather\":\"rain-soaked\"}}"
+    - id: movie_backlit_haze
+      description_ja: "逆光の霞と浮遊粒子で奥行きを感じさせる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is backlit hazy footage where atmospheric particles catch light and create layered depth, delivering intensely polished visual storytelling\",\"lighting\":\"strong backlight\",\"look\":\"volumetric haze\"}}"
+    - id: movie_clean_digital_precision
+      description_ja: "ノイズを抑えたクリーンなデジタル精細感を前面に出した映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is clean digital footage with restrained noise, crisp edges, and precision-rendered detail throughout, delivering intensely polished visual storytelling\",\"format\":\"clean digital\",\"look\":\"precision clarity\"}}"
+    - id: movie_muted_earth_palette
+      description_ja: "土や石を思わせる低彩度アースカラーで統一した映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is footage unified by muted earth tones, subdued saturation, and grounded natural material color, delivering intensely polished visual storytelling\",\"grade\":\"muted earth palette\",\"look\":\"natural subdued color\"}}"
 
     # カメラワーク／ショット運動プリセット
     - id: section_sub_movie_camera
@@ -120,6 +150,36 @@ tails:
     - id: movie_low_angle_power
       description_ja: "ローアングルから見上げて存在感を強調する映像"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is low-angle footage looking up at subjects to convey power, scale, or imposing presence, delivering intensely polished visual storytelling\",\"camera\":\"low angle\",\"perspective\":\"looking up\"}}"
+    - id: movie_top_down_descent
+      description_ja: "真上からゆっくり降下して構造を明らかにするトップダウン移動"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is top-down descending footage that slowly drops from overhead to reveal structure and spatial order, delivering intensely polished visual storytelling\",\"camera\":\"top-down descent\",\"movement\":\"vertical reveal\"}}"
+    - id: movie_lateral_tracking_run
+      description_ja: "横方向へ等速で追い続けるサイドトラッキング映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is lateral tracking footage that maintains side-on alignment while moving at matched speed with the subject, delivering intensely polished visual storytelling\",\"camera\":\"side tracking\",\"movement\":\"lateral pursuit\"}}"
+    - id: movie_over_shoulder_drift
+      description_ja: "肩越しの距離感を保ちながら漂うように追う映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is over-the-shoulder drift footage that stays close behind the subject with gentle floating motion, delivering intensely polished visual storytelling\",\"camera\":\"over shoulder\",\"movement\":\"soft trailing drift\"}}"
+    - id: movie_snap_zoom
+      description_ja: "瞬間的なズームで注意を一点に集中させる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is footage using snap zooms that rapidly tighten framing to punctuate sudden emphasis and urgency, delivering intensely polished visual storytelling\",\"camera\":\"snap zoom\",\"movement\":\"instant focal punch\"}}"
+    - id: movie_reverse_tracking_lead
+      description_ja: "被写体の前を後退しながら導くように進むリバーストラック映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is reverse tracking footage that retreats in front of the subject while guiding forward momentum, delivering intensely polished visual storytelling\",\"camera\":\"reverse track\",\"movement\":\"leading retreat\"}}"
+    - id: movie_macro_slider
+      description_ja: "微細な対象を横切るスライダー移動で情報を拾う映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is macro slider footage that glides across fine details with controlled linear motion, delivering intensely polished visual storytelling\",\"camera\":\"macro slider\",\"movement\":\"detail sweep\"}}"
+    - id: movie_pendulum_swing
+      description_ja: "振り子のような往復弧を描いて揺らぐ視点の映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is pendulum swing footage that arcs back and forth in repeated suspended motion, delivering intensely polished visual storytelling\",\"camera\":\"pendulum arc\",\"movement\":\"oscillating swing\"}}"
+    - id: movie_fpv_dive
+      description_ja: "高度差を一気に切り裂くFPV的な急降下ショット"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is FPV-style dive footage that plunges rapidly through vertical space with aggressive speed and precision, delivering intensely polished visual storytelling\",\"camera\":\"fpv dive\",\"movement\":\"rapid descent\"}}"
+    - id: movie_locked_horizon_glide
+      description_ja: "水平線を安定して保ちながら滑走するグライド映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is locked-horizon glide footage that preserves a steady horizon while moving smoothly across space, delivering intensely polished visual storytelling\",\"camera\":\"stabilized glide\",\"movement\":\"level horizon travel\"}}"
+    - id: movie_crowd_weave
+      description_ja: "人混みの隙間を縫って前進する密着型のカメラワーク"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is crowd-weaving footage that threads through dense movement with close reactive camera navigation, delivering intensely polished visual storytelling\",\"camera\":\"crowd weave\",\"movement\":\"close-quarter navigation\"}}"
 
     # 編集リズム／シーケンス構成プリセット
     - id: section_sub_movie_edit
@@ -170,6 +230,36 @@ tails:
     - id: movie_breathing_pace
       description_ja: "呼吸するように緩急をつけた有機的なペースの編集"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is footage with breathing pace that alternates between tension and release, fast and slow, creating organic rhythm, delivering intensely polished visual storytelling\",\"editing\":\"dynamic pacing\",\"rhythm\":\"inhale-exhale structure\"}}"
+    - id: movie_chaptered_progression
+      description_ja: "章立てのように明確な区切りで進行する編集構成"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is chaptered footage structured in clearly separated movement blocks that feel like distinct narrative phases, delivering intensely polished visual storytelling\",\"editing\":\"chapter progression\",\"structure\":\"segmented acts\"}}"
+    - id: movie_elliptical_timeskip
+      description_ja: "重要な瞬間だけを抜き出して時間を飛ばす楕円的編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is elliptically edited footage that skips across time to preserve only decisive moments and emotional peaks, delivering intensely polished visual storytelling\",\"editing\":\"elliptical time skips\",\"structure\":\"selective temporal leaps\"}}"
+    - id: movie_reverse_reveal
+      description_ja: "結果から原因へさかのぼるように情報を開示する編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is reverse reveal footage that starts with consequences and unfolds backward toward their causes, delivering intensely polished visual storytelling\",\"editing\":\"reverse reveal\",\"structure\":\"backward disclosure\"}}"
+    - id: movie_crescendo_montage
+      description_ja: "後半に向けて視覚密度を積み増すクレッシェンド型モンタージュ"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is crescendo montage footage that steadily increases visual density and cut intensity toward the climax, delivering intensely polished visual storytelling\",\"editing\":\"crescendo montage\",\"rhythm\":\"rising density\"}}"
+    - id: movie_stillness_burst
+      description_ja: "静止に近い長めの間と急激な断片挿入を対比させる編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is footage that contrasts extended near-still passages with sudden bursts of fragmented cutting, delivering intensely polished visual storytelling\",\"editing\":\"stillness versus burst\",\"rhythm\":\"contrastive pulse\"}}"
+    - id: movie_looping_callback
+      description_ja: "同一のショットや動きを反復させて意味を変化させる編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is looping callback footage where recurring shots return with altered meaning as context shifts, delivering intensely polished visual storytelling\",\"editing\":\"visual callbacks\",\"structure\":\"reframed repetition\"}}"
+    - id: movie_parallel_climax_braid
+      description_ja: "複数ラインを終盤で編み込むように束ねる並列クライマックス編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is parallel climax footage that braids multiple action lines together into one converging final sequence, delivering intensely polished visual storytelling\",\"editing\":\"braided climax\",\"structure\":\"multi-line convergence\"}}"
+    - id: movie_observation_to_impact
+      description_ja: "静かな観察から衝撃的転換へ滑らかに切り替わる編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is footage that begins in observational calm and pivots smoothly into high-impact escalation, delivering intensely polished visual storytelling\",\"editing\":\"observation pivot\",\"rhythm\":\"calm to impact\"}}"
+    - id: movie_lingering_epilogue
+      description_ja: "本編の勢いを受けて余韻を長く残す終幕重視の編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is footage that resolves into a lingering epilogue, allowing images to settle and resonate after the main action, delivering intensely polished visual storytelling\",\"editing\":\"lingering epilogue\",\"structure\":\"extended aftermath\"}}"
+    - id: movie_nested_flashback_weave
+      description_ja: "現在進行の流れに短い回想を織り込む多層的編集"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is footage that weaves compact flashbacks into ongoing action, layering present momentum with remembered fragments, delivering intensely polished visual storytelling\",\"editing\":\"nested flashbacks\",\"structure\":\"layered memory weave\"}}"
 
     # トーン／ジャンル指向シネマティックプリセット
     - id: section_sub_movie_tone
@@ -223,6 +313,36 @@ tails:
     - id: movie_epic_grandeur
       description_ja: "壮大なスケールと荘厳さで圧倒するグランドシネマ調"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is grand epic footage with majestic scale, sweeping vistas, and a sense of overwhelming awe, delivering intensely polished visual storytelling\",\"style\":\"grand cinema\",\"scope\":\"epic scale\"}}"
+    - id: movie_tragic_epic
+      description_ja: "崇高さの中に喪失感を滲ませる悲劇的大作トーン"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is tragic epic footage where grandeur is shadowed by loss, sacrifice, and irreversible consequence, delivering intensely polished visual storytelling\",\"tone\":\"tragic grandeur\",\"genre\":\"epic drama\"}}"
+    - id: movie_coming_of_age_glow
+      description_ja: "成長のきらめきと移ろいを柔らかな光で包む青春映画調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is coming-of-age footage wrapped in soft light, emotional immediacy, and formative transitional energy, delivering intensely polished visual storytelling\",\"genre\":\"coming of age\",\"look\":\"youthful glow\"}}"
+    - id: movie_paranoid_thriller
+      description_ja: "視線の不安定さと監視感を強めたパラノイドスリラー調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is paranoid thriller footage charged with surveillance anxiety, unstable certainty, and creeping distrust, delivering intensely polished visual storytelling\",\"genre\":\"paranoid thriller\",\"tone\":\"watched unease\"}}"
+    - id: movie_mythic_reverence
+      description_ja: "神話的な敬虔さと儀礼性を帯びた荘重な映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is mythically reverent footage shaped by ceremonial stillness, sacred scale, and solemn atmosphere, delivering intensely polished visual storytelling\",\"tone\":\"mythic reverence\",\"look\":\"ceremonial gravity\"}}"
+    - id: movie_satirical_bite
+      description_ja: "華やかさの裏に皮肉と批評性を忍ばせた風刺調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is satirical footage whose polished surfaces conceal irony, critique, and socially pointed exaggeration, delivering intensely polished visual storytelling\",\"genre\":\"satirical drama\",\"tone\":\"biting irony\"}}"
+    - id: movie_cozy_pastoral
+      description_ja: "穏やかな日常と自然のやさしさを味わう牧歌的トーン"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is cozy pastoral footage centered on gentle routines, natural softness, and restorative quiet, delivering intensely polished visual storytelling\",\"tone\":\"pastoral comfort\",\"look\":\"gentle natural warmth\"}}"
+    - id: movie_techno_mystic
+      description_ja: "未来的質感と神秘性を融合したテクノミスティック調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is techno-mystic footage that merges futuristic surfaces with occult atmosphere and intangible wonder, delivering intensely polished visual storytelling\",\"genre\":\"techno mysticism\",\"look\":\"luminous enigma\"}}"
+    - id: movie_procedural_realism
+      description_ja: "手順や判断の積み重ねを緻密に追うプロシージャルリアリズム調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is procedural realist footage focused on methodical actions, layered decisions, and grounded operational detail, delivering intensely polished visual storytelling\",\"genre\":\"procedural realism\",\"tone\":\"methodical tension\"}}"
+    - id: movie_elegiac_aftermath
+      description_ja: "出来事の後に残る静けさと痛みを見つめるエレジー調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is elegiac aftermath footage that lingers on silence, residue, and emotional aftermath after major events, delivering intensely polished visual storytelling\",\"tone\":\"elegiac quiet\",\"pacing\":\"reflective aftermath\"}}"
+    - id: movie_fever_dream_mania
+      description_ja: "熱に浮かされたような過剰さと錯綜を帯びたフィーバードリーム調"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is fever-dream footage driven by manic escalation, unstable perception, and hallucinatory excess, delivering intensely polished visual storytelling\",\"tone\":\"feverish mania\",\"look\":\"unstable sensory intensity\"}}"
 
     # ---- TV番組系プリセット（番組: 10パターン）----
     - id: section_tv_programs
@@ -429,97 +549,67 @@ tails:
     - id: movie_fantasy_ritual_climax
       description_ja: "儀式と戦闘が同時進行するクライマックス演出スタイル"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a ritual climax fantasy epic that intercuts ceremonial sequences with simultaneous combat, building toward a singular convergence, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\",\"editing\":\"cross-cut crescendo between rite and battle\",\"lighting\":\"dramatic chiaroscuro shifting with ritual phases\"}}"
+    - id: movie_epic_pilgrimage_quest
+      description_ja: "長大な巡礼路を越えて運命の地へ向かうクエスト叙事詩"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a pilgrimage quest epic that follows a long journey across sacred landscapes toward a decisive destination, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\",\"structure\":\"quest progression across monumental regions\"}}"
+    - id: movie_desert_kingdom_campaign
+      description_ja: "砂漠王国の覇権争いを陽炎と軍勢で描く遠征大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a desert kingdom campaign epic staging dynastic conflict, shimmering heat, and marching forces across arid empires, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"look\":\"sun-scorched grandeur\"}}"
+    - id: movie_frozen_frontier_survival
+      description_ja: "極寒の辺境で生存と進軍がせめぎ合う氷雪大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a frozen frontier epic where survival, endurance, and advancing conflict unfold across hostile winter vastness, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"look\":\"icebound severity\"}}"
+    - id: movie_disaster_evacuation_convoy
+      description_ja: "崩壊地域を縫って避難車列が進むエヴァキュエーション大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an evacuation convoy disaster film that follows long lines of escape through collapsing terrain and narrowing safe corridors, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\",\"structure\":\"mobile survival convoy\"}}"
+    - id: movie_fantasy_underworld_descent
+      description_ja: "地下深奥へ降りながら異界の層を踏破する冥府降下叙事"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an underworld descent fantasy epic that moves downward through successive mythic strata toward a buried confrontation, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\",\"camera\":\"descending passage through layered realms\"}}"
+    - id: movie_royal_succession_war
+      description_ja: "王位継承を巡る同盟と裏切りが連鎖する継承戦争大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a royal succession war epic built on alliances, betrayals, and escalating claims to power across rival houses, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"structure\":\"dynastic conflict web\"}}"
+    - id: movie_frontier_last_stand
+      description_ja: "辺境拠点での籠城戦を執拗に描くラストスタンド大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a frontier last-stand epic centered on a remote stronghold resisting overwhelming pressure through attrition and resolve, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"structure\":\"fortress defense attrition\"}}"
+    - id: movie_sky_kingdom_collapse
+      description_ja: "天空都市や浮遊王国の崩落を描く空中崩壊ファンタジー大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a sky-kingdom collapse fantasy epic where aerial citadels fracture and fall through layers of cloud and panic, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\",\"camera\":\"vertical collapse vistas\"}}"
+    - id: movie_plague_era_exodus
+      description_ja: "疫禍に揺れる時代を脱出行で描く歴史ディザスター叙事"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a plague-era exodus epic that follows migration, quarantine fear, and social fracture across a stricken historical world, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"tone\":\"civilizational strain\"}}"
+    - id: movie_cataclysm_faultline
+      description_ja: "大地の断層崩壊が都市と荒野を同時に裂く破局大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a faultline cataclysm disaster film where vast ground ruptures split cities and open wilderness in parallel devastation, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\",\"structure\":\"multi-region rupture escalation\"}}"
+    - id: movie_empire_border_rebellion
+      description_ja: "帝国辺境で反乱と鎮圧戦が拡大していく国境叛乱大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an empire border rebellion epic where frontier uprisings, punitive campaigns, and wavering loyalties expand into full-scale war, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"structure\":\"frontier rebellion escalation\"}}"
+    - id: movie_fantasy_beast_stampede
+      description_ja: "巨大生物群の暴走が戦場と都市をのみ込むスタンピード大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a fantasy beast stampede epic where overwhelming creature herds surge across fortifications and settlements in catastrophic waves, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\",\"structure\":\"creature-driven catastrophe\"}}"
+    - id: movie_disaster_volcano_exodus
+      description_ja: "火山噴火の連鎖から大規模避難へ雪崩れ込むエクソダス大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a volcanic exodus disaster film that follows mass escape through ashfall, lava fronts, and collapsing evacuation corridors, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\",\"structure\":\"eruption to mass escape progression\"}}"
+    - id: movie_holy_city_defense
+      description_ja: "聖都を巡る攻防と信仰の結束を描く宗都防衛大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a holy city defense epic where sacred architecture, desperate defenders, and ideological conviction collide under prolonged siege, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"structure\":\"sacred stronghold defense\"}}"
+    - id: movie_fantasy_relic_hunt_war
+      description_ja: "古代遺物の争奪が全面戦争へ発展するレリック戦争大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a relic hunt fantasy epic where competing factions race for an ancient artifact and trigger widening conflict across multiple realms, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\",\"structure\":\"artifact pursuit to realm war\"}}"
+    - id: movie_disaster_megatsunami_flight
+      description_ja: "巨大津波の到達前後を多地点で追うメガツナミ避難大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a mega-tsunami disaster film that intercuts coastal panic, inland refuge attempts, and towering water-wall impact across many locations, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\",\"structure\":\"multi-location wave approach and impact\"}}"
+    - id: movie_steppe_horde_invasion
+      description_ja: "騎馬軍勢の侵攻が平原全域を揺るがす草原侵略大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a steppe horde invasion epic where mounted armies sweep across open plains, overwhelming defenses through speed, scale, and relentless mobility, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"structure\":\"fast-moving open-field conquest\"}}"
+    - id: movie_fantasy_tower_ascent
+      description_ja: "天空塔を層ごとに突破していく上昇型ファンタジー大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a tower ascent fantasy epic that climbs through successive chambers, trials, and vertical battle tiers toward a final summit confrontation, delivering intensely polished visual storytelling\",\"genre\":\"fantasy_epic\",\"structure\":\"vertical quest escalation\"}}"
+    - id: movie_disaster_blackout_metropolis
+      description_ja: "大停電で機能停止した巨大都市を描くブラックアウト災害大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a blackout metropolis disaster film where infrastructure failure cascades through a major city, turning darkness, panic, and isolation into urban catastrophe, delivering intensely polished visual storytelling\",\"genre\":\"disaster_blockbuster\",\"structure\":\"grid collapse urban breakdown\"}}"
+    - id: movie_dynasty_fall_campaign
+      description_ja: "王朝崩壊までの遠征と内紛を重層的に描く滅亡戦記大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a dynasty fall campaign epic that layers internal betrayal, exhausted campaigns, and final regime collapse into one sweeping downfall chronicle, delivering intensely polished visual storytelling\",\"genre\":\"historical_epic\",\"structure\":\"campaign attrition to dynastic collapse\"}}"
 
-    # 現代ドラマ／青春・家族映画系
-    - id: section_sub_movie_features_drama
-      description_ja: "==【サブ】現代ドラマ／青春・家族映画系"
-      prompt: ""
-    - id: movie_urban_romance
-      description_ja: "親密なフレーミングと視線の交錯で、恋に落ちる当事者の心情を捉えるロマンティック映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a romantic drama film capturing the lived-in perspective of falling in love through intimate framing, lingering gazes, and emotional proximity, delivering intensely polished visual storytelling\",\"genre\":\"romantic_drama\",\"camera\":\"close-ups on subtle expressions\",\"perspective\":\"firsthand emotional experience\"}}"
-    - id: movie_coming_of_age
-      description_ja: "成長の節目を自らの目線で経験する、迷いと決断の青春映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a coming-of-age feature film experienced from the protagonist's firsthand perspective as they navigate uncertainty and self-discovery, delivering intensely polished visual storytelling\",\"genre\":\"coming_of_age\",\"perspective\":\"lived-in subjective moments\",\"camera\":\"following the protagonist's eyeline\"}}"
-    - id: movie_road_journey
-      description_ja: "移動する車内から世界を眺め、沈黙と対話を共有する当事者視点のロードムービー"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a road movie experienced from inside the vehicle as a participant, sharing silences and conversations while watching the world pass by, delivering intensely polished visual storytelling\",\"genre\":\"road_movie\",\"perspective\":\"passenger's lived-in viewpoint\",\"camera\":\"interior shots and windshield framing\"}}"
-    - id: movie_family_animation
-      description_ja: "家族の一員として日常の温かみと葛藤を生きる、表情豊かなアニメ映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a feature-length family animation film where the viewer lives as a member of the family, experiencing warmth and conflict through expressive characters, delivering intensely polished visual storytelling\",\"genre\":\"family_animation\",\"perspective\":\"participant in family dynamics\"}}"
-    - id: movie_intimate_confession
-      description_ja: "秘密の告白と心の開示の瞬間を、当事者として息を詰めて見守る親密ドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an intimate drama capturing the breathless moment of confession and emotional disclosure from a firsthand perspective, delivering intensely polished visual storytelling\",\"genre\":\"intimate_drama\",\"camera\":\"tight two-shots and reaction close-ups\",\"perspective\":\"present at the vulnerable moment\"}}"
-    - id: movie_second_chance
-      description_ja: "過去を背負いながら再出発を決意する人物の内面を生きる再生ドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a redemption drama lived from within as a character carrying their past decides to start over, delivering intensely polished visual storytelling\",\"genre\":\"redemption_drama\",\"perspective\":\"internal struggle made visible\",\"camera\":\"contemplative pacing with personal space\"}}"
-    - id: movie_silent_bond
-      description_ja: "言葉少なに寄り添う二人の関係を、その場に居合わせる者として感じる寡黙ドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a quiet relationship drama where the viewer is present alongside two people who communicate through silence and gesture, delivering intensely polished visual storytelling\",\"genre\":\"quiet_drama\",\"perspective\":\"witness to unspoken understanding\",\"camera\":\"observational long takes\"}}"
-    - id: movie_everyday_miracle
-      description_ja: "日常の中に訪れる小さな奇跡を、それを受け取る当事者として体験するドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a drama about small everyday miracles experienced firsthand by those receiving them, capturing wonder within the ordinary, delivering intensely polished visual storytelling\",\"genre\":\"slice_of_life\",\"perspective\":\"recipient of grace\",\"camera\":\"attentive to mundane details\"}}"
-    - id: movie_farewell_ritual
-      description_ja: "別れの儀式と見送りの時間を、去る者・残る者として共に生きるドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a farewell drama experienced as both the one leaving and the one staying behind, living through rituals of goodbye, delivering intensely polished visual storytelling\",\"genre\":\"farewell_drama\",\"perspective\":\"dual lived experience\",\"camera\":\"lingering on departure moments\"}}"
-    - id: movie_waiting_room
-      description_ja: "結果を待つ不確実な時間を、その場で耐える当事者として過ごすドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a drama of waiting and uncertainty experienced firsthand, enduring the passage of time before an unknown outcome, delivering intensely polished visual storytelling\",\"genre\":\"waiting_drama\",\"perspective\":\"lived anxiety of the uncertain\",\"camera\":\"static frames emphasizing duration\"}}"
-    - id: movie_reunion_moment
-      description_ja: "長い別離の後の再会とその後の感情を、当事者として追体験するドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a reunion drama where the viewer relives the emotional surge of meeting again after long separation, delivering intensely polished visual storytelling\",\"genre\":\"reunion_drama\",\"perspective\":\"participant in recognition\",\"camera\":\"slow approach and embrace framing\"}}"
-    - id: movie_generational_clash
-      description_ja: "世代間の価値観の衝突を、両者の立場から当事者として生きるドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a generational drama experienced from both sides of the divide, living the clash and gradual understanding between ages, delivering intensely polished visual storytelling\",\"genre\":\"generational_drama\",\"perspective\":\"alternating lived viewpoints\",\"camera\":\"contrasting character blocking\"}}"
-    - id: movie_small_victory
-      description_ja: "小さな達成と勝利の瞬間を、それを勝ち取った者として感じるドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a drama of small victories experienced as the one who earned them, feeling the weight of modest triumph, delivering intensely polished visual storytelling\",\"genre\":\"triumph_drama\",\"perspective\":\"achiever's firsthand pride\",\"camera\":\"building to release moments\"}}"
-    - id: movie_unspoken_grief
-      description_ja: "言葉にできない喪失を抱えながら日常を生きる当事者の静かな悲嘆ドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a grief drama lived from within as someone carries wordless loss through daily life, delivering intensely polished visual storytelling\",\"genre\":\"grief_drama\",\"perspective\":\"internal weight of absence\",\"camera\":\"empty spaces and solitary framing\"}}"
-
-    # 犯罪／法廷／ドキュメンタリー映画系
-    - id: section_sub_movie_features_crime_doc
-      description_ja: "==【サブ】犯罪／法廷／ドキュメンタリー映画系"
-      prompt: ""
-    - id: movie_noir_crime
-      description_ja: "疑念と裏切りの渦中で生き延びる当事者の緊張を、硬質な影で描くノワール犯罪映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a noir crime film experienced from within the web of suspicion and betrayal, living the protagonist's tension through hard shadows and tense close-ups, delivering intensely polished visual storytelling\",\"genre\":\"noir_crime\",\"perspective\":\"trapped participant\",\"camera\":\"claustrophobic framing\"}}"
-    - id: movie_courtroom_drama
-      description_ja: "法廷に立つ者として証言と対峙の重圧を生きる、緊張の法廷ドラマ映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a courtroom drama lived from the perspective of those who must testify and confront, feeling the weight of justice, delivering intensely polished visual storytelling\",\"genre\":\"courtroom_drama\",\"perspective\":\"participant under judgment\",\"camera\":\"controlled movement emphasizing stakes\"}}"
-    - id: movie_nature_documentary
-      description_ja: "自然環境の中に身を置き、生態系の一部として呼吸するネイチャードキュメンタリー映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a cinematic nature documentary experienced as if present within the ecosystem, breathing alongside wild life over extended observation, delivering intensely polished visual storytelling\",\"genre\":\"nature_documentary\",\"perspective\":\"immersed observer\",\"camera\":\"patient naturalistic presence\"}}"
-    - id: movie_undercover_descent
-      description_ja: "潜入捜査の中で自己を失いかける当事者の心理的下降を生きる犯罪ドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an undercover crime drama lived from within as the operative loses grip on identity, descending into the role, delivering intensely polished visual storytelling\",\"genre\":\"undercover_crime\",\"perspective\":\"dissolving self\",\"camera\":\"increasingly unstable framing\"}}"
-    - id: movie_witness_protection
-      description_ja: "証人保護下の孤立と恐怖を、隠れて生きる当事者として体験するサスペンス"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a witness protection thriller experienced as someone living in hiding, feeling isolation and constant threat, delivering intensely polished visual storytelling\",\"genre\":\"witness_thriller\",\"perspective\":\"hunted existence\",\"camera\":\"paranoid surveillance aesthetics\"}}"
-    - id: movie_interrogation_room
-      description_ja: "取調室で問い詰められる側として心理戦を生き抜く密室サスペンス"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an interrogation thriller lived from the seat of the questioned, enduring psychological warfare in a confined space, delivering intensely polished visual storytelling\",\"genre\":\"interrogation_drama\",\"perspective\":\"subject under pressure\",\"camera\":\"oppressive close-ups and locked framing\"}}"
-    - id: movie_heist_aftermath
-      description_ja: "強盗後の逃走と追跡を、追われる側として息を潜めて生きるクライムサスペンス"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a heist aftermath thriller lived as the pursued, holding breath while evading capture, delivering intensely polished visual storytelling\",\"genre\":\"heist_thriller\",\"perspective\":\"fugitive experience\",\"camera\":\"hunted movement and hiding shots\"}}"
-    - id: movie_cold_case_obsession
-      description_ja: "未解決事件に取り憑かれた捜査官として、執念を生きる捜査ドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a cold case drama lived as the investigator consumed by obsession, unable to let go of unsolved truth, delivering intensely polished visual storytelling\",\"genre\":\"investigation_drama\",\"perspective\":\"obsessive pursuer\",\"camera\":\"detail-fixated close work\"}}"
-    - id: movie_jury_deliberation
-      description_ja: "陪審員として他者の運命を決める重責を生きる、密室の判決ドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a jury deliberation drama lived as one of the twelve deciding another's fate, carrying the burden of judgment, delivering intensely polished visual storytelling\",\"genre\":\"jury_drama\",\"perspective\":\"bearer of verdict\",\"camera\":\"round-table intimacy\"}}"
-    - id: movie_prison_survival
-      description_ja: "収監された者として刑務所内の生存と人間関係を生きるプリズンドラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a prison drama lived from within as an inmate navigating survival, hierarchy, and unexpected bonds, delivering intensely polished visual storytelling\",\"genre\":\"prison_drama\",\"perspective\":\"incarcerated existence\",\"camera\":\"confined institutional framing\"}}"
-    - id: movie_investigative_truth
-      description_ja: "真実を追う調査報道の葛藤と危険を、記者として生きるドキュメンタリードラマ"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an investigative documentary drama lived as the journalist pursuing truth through obstacles and threats, delivering intensely polished visual storytelling\",\"genre\":\"investigative_doc\",\"perspective\":\"truth-seeker at risk\",\"camera\":\"handheld urgency\"}}"
-    - id: movie_crisis_frontline
-      description_ja: "危機の最前線で活動する人々と共に、その場に居る者として体験するドキュメンタリー"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a frontline crisis documentary experienced alongside those working in the heart of emergency, present as events unfold, delivering intensely polished visual storytelling\",\"genre\":\"crisis_documentary\",\"perspective\":\"embedded presence\",\"camera\":\"reactive immediate coverage\"}}"
-    - id: movie_cultural_immersion
-      description_ja: "異文化の中に身を置き、学び手として没入するドキュメンタリー映画"
-      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a cultural immersion documentary lived as a learner entering an unfamiliar world, gradually understanding from within, delivering intensely polished visual storytelling\",\"genre\":\"cultural_documentary\",\"perspective\":\"apprentice to culture\",\"camera\":\"respectful participant observation\"}}"
     # 映像・音響・激しい展開特化プリセット
     - id: section_sub_movie_features_impact
       description_ja: "==【サブ】爆発的な映像・音響・ハイテンポ展開特化プリセット"
@@ -569,6 +659,36 @@ tails:
     - id: movie_siren_apocalypse
       description_ja: "終末サイレンと爆音ドローンが鳴り響くサイレン・アポカリプス叙事"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a siren apocalypse chronicle soaked in emergency broadcasts, drone strikes, and ash-choked lighting, delivering intensely polished visual storytelling\",\"sound_design\":\"descending siren stacks\",\"look\":\"ashen orange atmosphere\"}}"
+    - id: movie_avalanche_rupture
+      description_ja: "雪崩の圧力音と視界喪失で押し込むアヴァランチ破断劇"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an avalanche rupture thriller driven by crushing snow pressure, whiteout chaos, and escalating impact bursts, delivering intensely polished visual storytelling\",\"sound_design\":\"compressed snow thunder\",\"look\":\"whiteout collapse\"}}"
+    - id: movie_reactor_meltdown_blitz
+      description_ja: "警報音と熱暴走演出が連打するリアクターメルトダウン危機劇"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a reactor meltdown blitz film packed with alarm cascades, heat shimmer, and escalating containment failures, delivering intensely polished visual storytelling\",\"sound_design\":\"alarm cascade and turbine roar\",\"lighting\":\"emergency red overload\"}}"
+    - id: movie_sandstorm_raid
+      description_ja: "砂嵐と金属振動の中を突き進むサンドストーム襲撃劇"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a sandstorm raid film where abrasive wind, vanishing visibility, and vibrating metal impacts drive relentless momentum, delivering intensely polished visual storytelling\",\"sound_design\":\"sandblast roar\",\"camera\":\"visibility-cut pursuit\"}}"
+    - id: movie_monsoon_flood_pursuit
+      description_ja: "豪雨と濁流の轟音で押し切るモンスーン洪水追走劇"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a monsoon flood pursuit film propelled by torrential rain, surging water, and drowned-out shouted commands, delivering intensely polished visual storytelling\",\"sound_design\":\"sheet rain and flood surge\",\"look\":\"waterlogged urgency\"}}"
+    - id: movie_orbital_drop_assault
+      description_ja: "落下加速と衝突音の連鎖で見せるオービタル降下強襲"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an orbital drop assault film that converts descent velocity, atmospheric burn, and terminal impact into relentless spectacle, delivering intensely polished visual storytelling\",\"sound_design\":\"reentry roar to impact slam\",\"camera\":\"descent shock perspective\"}}"
+    - id: movie_stadium_collapse_panic
+      description_ja: "観衆のどよめきと構造崩壊音が重なるスタジアム崩落パニック"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a stadium collapse panic film combining crowd roar, structural failure, and cascading shock through high-density action beats, delivering intensely polished visual storytelling\",\"sound_design\":\"crowd panic with structural fracture\",\"structure\":\"cascade collapse set pieces\"}}"
+    - id: movie_thunder_ritual_chase
+      description_ja: "雷鳴と儀式打楽器が交錯するサンダー・リチュアル追撃劇"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a thunder ritual chase film where storm strikes and ritual percussion lock action beats into a pounding pursuit, delivering intensely polished visual storytelling\",\"sound_design\":\"thunder synced percussion\",\"lighting\":\"storm-flash silhouettes\"}}"
+    - id: movie_lava_tunnel_breakout
+      description_ja: "溶岩洞の反響と熱圧で畳みかけるラバトンネル脱出劇"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a lava tunnel breakout film driven by cavern echo, heat pressure, and molten near-miss escalation, delivering intensely polished visual storytelling\",\"sound_design\":\"cavern blast resonance\",\"look\":\"molten claustrophobia\"}}"
+    - id: movie_glacier_fracture_run
+      description_ja: "氷床の亀裂音と滑走感で緊張を維持するグレイシャー破断劇"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a glacier fracture run film built on cracking ice plates, slipping momentum, and abyss-edge traversal, delivering intensely polished visual storytelling\",\"sound_design\":\"ice shear cracks\",\"camera\":\"sliding instability\"}}"
+    - id: movie_shockwave_convoy_ambush
+      description_ja: "衝撃波が車列をのみ込むショックウェーブ待ち伏せ大作"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a shockwave convoy ambush film where expanding blast fronts hammer moving vehicles in chained destructive beats, delivering intensely polished visual storytelling\",\"sound_design\":\"rolling pressure waves\",\"structure\":\"convoy impact escalation\"}}"
 
     # ---- 静止画入力（Sora2 など）からの映像展開向けプリセット ----
     - id: section_movie_from_still
@@ -617,6 +737,36 @@ tails:
     - id: movie_from_still_fantasy_metamorphosis
       description_ja: "風景が現実と幻想の境界を越えて変容し、夢のような要素が現れ出没する魔法的展開映像"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a fantasy metamorphosis video where the landscape transcends reality-fantasy boundaries with dreamlike elements appearing and disappearing, delivering intensely polished visual storytelling\",\"genre\":\"fantastical_transformation\"}}"
+    - id: movie_from_still_coastal_cliff_sweep
+      description_ja: "海食崖に沿ってうねるように進み、海面と断崖を同時に広げる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a coastal cliff sweep film that glides along rugged edges while expanding both sea surface and towering rock formations, delivering intensely polished visual storytelling\",\"genre\":\"coastal_landscape\"}}"
+    - id: movie_from_still_desert_dune_traverse
+      description_ja: "砂丘の起伏をなぞりながら風紋と地平線を広げる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a desert dune traverse film that follows ridgelines and wind-carved textures toward wide open horizons, delivering intensely polished visual storytelling\",\"genre\":\"desert_landscape\"}}"
+    - id: movie_from_still_harbor_dawn
+      description_ja: "港の朝靄から水面反射と岸壁の広がりへ移る映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a harbor dawn film that begins in misty stillness and expands into reflective water, piers, and waking shoreline activity, delivering intensely polished visual storytelling\",\"genre\":\"harbor_landscape\"}}"
+    - id: movie_from_still_canyon_thermals
+      description_ja: "峡谷の上昇気流に乗るように谷壁と空間の深さを見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a canyon thermals film that rises and drifts with uplift through deep rock corridors and open sky, delivering intensely polished visual storytelling\",\"genre\":\"canyon_landscape\"}}"
+    - id: movie_from_still_terrace_layers
+      description_ja: "段々地形の反復をたどりながら奥行き方向へ展開する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a terrace layers film that traces repeated stepped topography into receding depth, delivering intensely polished visual storytelling\",\"genre\":\"layered_landscape\"}}"
+    - id: movie_from_still_stormfront_skyline
+      description_ja: "街並みに迫る嵐雲の前線を広域で捉えるスカイライン映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a stormfront skyline film that expands urban silhouettes beneath advancing cloud walls and charged atmosphere, delivering intensely polished visual storytelling\",\"genre\":\"urban_weather_landscape\"}}"
+    - id: movie_from_still_industrial_port_panorama
+      description_ja: "港湾設備の反復と水辺の広がりを一体で見せる産業パノラマ"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an industrial port panorama film that links cranes, docks, and reflective waterways into one broad environmental reveal, delivering intensely polished visual storytelling\",\"genre\":\"industrial_landscape\"}}"
+    - id: movie_from_still_wetland_migration
+      description_ja: "湿地の水路と生態の流れをたどって移動感を生む映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a wetland migration film that follows channels, reeds, and subtle ecological movement through low expansive terrain, delivering intensely polished visual storytelling\",\"genre\":\"wetland_landscape\"}}"
+    - id: movie_from_still_volcanic_ridge_spiral
+      description_ja: "火山稜線をらせん状に巡りながら地形の荒々しさを見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a volcanic ridge spiral film that circles harsh elevated formations while revealing ash-toned terrain and open drop-offs, delivering intensely polished visual storytelling\",\"genre\":\"volcanic_landscape\"}}"
+    - id: movie_from_still_floating_isle_reveal
+      description_ja: "浮遊感のある地形や高所構造を雲間から現す幻想的環境映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a floating-isle reveal film that parts cloud layers to unveil elevated fantastical landforms suspended in open space, delivering intensely polished visual storytelling\",\"genre\":\"fantastical_landscape\"}}"
 
     # 室内・展示空間ウォークスルー展開
     - id: section_sub_movie_from_still_interior
@@ -664,6 +814,36 @@ tails:
     - id: movie_from_still_ambient_drift
       description_ja: "空間の雰囲気に身を任せて漂うように進む映像"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an ambient drift film that floats through the space without hurry, absorbing atmosphere and mood rather than specific destinations, delivering intensely polished visual storytelling\",\"camera\":\"slow_drifting_movement\"}}"
+    - id: movie_from_still_theater_aisle
+      description_ja: "座席列の間を静かに進み、舞台や奥行きを見せるシアター通路映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a theater aisle walkthrough that glides between rows while gradually revealing stage depth and audience-space scale, delivering intensely polished visual storytelling\",\"genre\":\"theater_interior\"}}"
+    - id: movie_from_still_library_stack_weave
+      description_ja: "書架の隙間を縫って知的な密度を見せるライブラリ探索映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a library stack weave film that threads through shelves and narrow passages to reveal layered order and quiet depth, delivering intensely polished visual storytelling\",\"genre\":\"library_interior\"}}"
+    - id: movie_from_still_greenhouse_humidity
+      description_ja: "温室内の湿度感と光のにじみを追うグリーンハウス映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a greenhouse humidity walkthrough that follows moist air, filtered light, and dense interior growth, delivering intensely polished visual storytelling\",\"genre\":\"greenhouse_interior\"}}"
+    - id: movie_from_still_hotel_lobby_reveal
+      description_ja: "入口付近からロビー中央へ抜け、動線と開放感を見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a hotel lobby reveal film that transitions from threshold intimacy into broad central openness and circulation flow, delivering intensely polished visual storytelling\",\"genre\":\"hospitality_interior\"}}"
+    - id: movie_from_still_archive_drawer_trail
+      description_ja: "保管棚や引き出しの反復をたどるアーカイブ空間映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an archive drawer trail film that moves through repeated storage geometry, drawers, and cataloged depth, delivering intensely polished visual storytelling\",\"genre\":\"archive_interior\"}}"
+    - id: movie_from_still_subway_concourse
+      description_ja: "地下通路の流れと導線を追うコンコース移動映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a subway concourse walkthrough that follows circulation lines, overhead signage rhythm, and expanding underground space, delivering intensely polished visual storytelling\",\"genre\":\"transit_interior\"}}"
+    - id: movie_from_still_cathedral_nave_drift
+      description_ja: "身廊をゆっくり進み、垂直性と光の落ち方を味わう映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a cathedral nave drift film that advances slowly through monumental interior height and filtered sacred light, delivering intensely polished visual storytelling\",\"genre\":\"sacred_interior\"}}"
+    - id: movie_from_still_atelier_workbench
+      description_ja: "制作机の周囲から室内全体へ広がるアトリエ観察映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an atelier workbench film that begins around a creative surface and widens into the broader making environment, delivering intensely polished visual storytelling\",\"genre\":\"studio_interior\"}}"
+    - id: movie_from_still_aquarium_tunnel
+      description_ja: "水槽トンネルを進みながら上方と周囲の揺らぎを見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an aquarium tunnel walkthrough that moves through curved glass while water-filtered motion surrounds the viewer, delivering intensely polished visual storytelling\",\"genre\":\"aquarium_interior\"}}"
+    - id: movie_from_still_server_room_inspection
+      description_ja: "整然と並ぶ機器列の冷たい規則性を辿るサーバールーム映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a server room inspection film that traces ordered equipment aisles, indicator rhythms, and chilled controlled space, delivering intensely polished visual storytelling\",\"genre\":\"technical_interior\"}}"
 
     # マクロ被写体／小物ディテール展開
     - id: section_sub_movie_from_still_macro
@@ -717,6 +897,36 @@ tails:
     - id: movie_from_still_pullback_context
       description_ja: "対象から引いて周囲の環境や文脈を見せる映像"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a pullback context film that begins on the subject and slowly retreats to reveal the surrounding environment and situational context, delivering intensely polished visual storytelling\",\"camera\":\"reveal_pullback\"}}"
+    - id: movie_from_still_dew_refraction
+      description_ja: "露の粒に映る屈折像を追いながら微細な世界を広げる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a dew refraction film that studies tiny droplets as they bend light and miniaturize the surrounding world, delivering intensely polished visual storytelling\",\"genre\":\"macro_refraction\"}}"
+    - id: movie_from_still_gear_crawl
+      description_ja: "歯車や機械継ぎ目を這うように移動して構造を見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a gear crawl film that creeps along teeth, joints, and mechanical seams to reveal engineered form in detail, delivering intensely polished visual storytelling\",\"genre\":\"macro_mechanical\"}}"
+    - id: movie_from_still_ceramic_glaze_shimmer
+      description_ja: "釉薬の揺らぎと光沢変化を丁寧に追う陶器質感映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a ceramic glaze shimmer film that follows subtle sheen variation and fired surface depth across crafted material, delivering intensely polished visual storytelling\",\"genre\":\"macro_ceramic\"}}"
+    - id: movie_from_still_fabric_fiber_ridge
+      description_ja: "布地の繊維や織り目の起伏を地形のように見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a fabric fiber ridge film that turns woven texture into a tactile terrain of threads and raised structure, delivering intensely polished visual storytelling\",\"genre\":\"macro_textile\"}}"
+    - id: movie_from_still_embossed_paper
+      description_ja: "紙の凹凸や印圧を斜光で浮かび上がらせる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an embossed paper film that uses grazing light to reveal pressure marks, fibers, and subtle surface relief, delivering intensely polished visual storytelling\",\"genre\":\"macro_paper\"}}"
+    - id: movie_from_still_gem_inclusion_orbit
+      description_ja: "宝石内部のインクルージョンを周回しながら覗き込む映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a gem inclusion orbit film that circles reflective facets while studying internal fractures and suspended detail, delivering intensely polished visual storytelling\",\"genre\":\"macro_gemstone\"}}"
+    - id: movie_from_still_steam_surface
+      description_ja: "温かな液面から立つ湯気と表面張力を観察する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a steam surface film that observes rising vapor, surface tension, and subtle liquid vibration at close range, delivering intensely polished visual storytelling\",\"genre\":\"macro_thermal_surface\"}}"
+    - id: movie_from_still_wing_transparency
+      description_ja: "薄い膜や羽の透過光を追って微細構造を見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a wing transparency film that follows transmitted light through delicate translucent structures and vein-like patterns, delivering intensely polished visual storytelling\",\"genre\":\"macro_translucent_detail\"}}"
+    - id: movie_from_still_watch_dial_luminance
+      description_ja: "文字盤の目盛りや発光差を精密に拾うタイムピース映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a watch dial luminance film that tracks engraved indices, luminous accents, and precision surface finishing, delivering intensely polished visual storytelling\",\"genre\":\"macro_precision_object\"}}"
+    - id: movie_from_still_oxidation_patina
+      description_ja: "酸化皮膜や経年変化の色層を辿るパティナ観察映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an oxidation patina film that studies layered color change, corrosion texture, and the material history written on surfaces, delivering intensely polished visual storytelling\",\"genre\":\"macro_patina\"}}"
 
     # ---- 象徴的なポイントから世界全体へ広がるシーン集（汎用）----
     - id: section_movie_entrance
@@ -775,6 +985,36 @@ tails:
     - id: movie_entrance_rhythmic_sound_walk
       description_ja: "環境音や想像上の音楽に合わせてリズミカルに歩を進め、周囲の要素が音に同期して反応する没入型移動"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a rhythmic sound walk that advances steps in sync with environmental sounds or imagined music, with surrounding elements reacting to the rhythm, delivering intensely polished visual storytelling\",\"structure\":\"sound_synchronized_movement\"}}"
+    - id: movie_entrance_riverside_promenade
+      description_ja: "川沿いの遊歩道を進み、水面と街並みを交互に見せる旅路映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a riverside promenade walkthrough that alternates between waterside flow and adjacent urban or natural scenery, delivering intensely polished visual storytelling\",\"structure\":\"waterside travel path\"}}"
+    - id: movie_entrance_market_lane_meander
+      description_ja: "市場の細道を蛇行しながら左右の密度を味わう探索映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a market lane meander film that threads through narrow commercial paths while surveying layered activity on both sides, delivering intensely polished visual storytelling\",\"structure\":\"dense lane exploration\"}}"
+    - id: movie_entrance_cliffside_pilgrimage
+      description_ja: "崖沿いの参道や道筋を慎重に進む巡礼路構成の映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a cliffside pilgrimage journey that advances along exposed paths with alternating peril and revelation, delivering intensely polished visual storytelling\",\"structure\":\"elevated route progression\"}}"
+    - id: movie_entrance_rooftop_link_traversal
+      description_ja: "高所の連結通路や屋上を渡り歩いて空間を繋ぐ映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a rooftop link traversal film that crosses elevated connectors and open rooflines to map the upper world of a location, delivering intensely polished visual storytelling\",\"structure\":\"elevated walkway chain\"}}"
+    - id: movie_entrance_underground_passage
+      description_ja: "地下通路を進みながら分岐や広場へ抜ける発見型の移動映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an underground passage film that follows enclosed routes into branching halls and hidden wider chambers, delivering intensely polished visual storytelling\",\"structure\":\"subterranean discovery path\"}}"
+    - id: movie_entrance_desert_caravan_route
+      description_ja: "砂原の道筋をたどりながら点在する目印へ進む隊列旅路映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a desert caravan route film that advances between sparse landmarks across open arid distance, delivering intensely polished visual storytelling\",\"structure\":\"landmark-linked desert passage\"}}"
+    - id: movie_entrance_shrine_approach
+      description_ja: "参道を進むにつれて象徴空間へ収束していくアプローチ映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a shrine approach walkthrough that moves through layered thresholds toward a symbolic destination, delivering intensely polished visual storytelling\",\"structure\":\"threshold-to-sanctum progression\"}}"
+    - id: movie_entrance_harbor_boardwalk
+      description_ja: "桟橋や岸壁沿いを歩き、海風と構造物の反復を見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a harbor boardwalk film that follows piers, railings, and open water edges in a measured travel sequence, delivering intensely polished visual storytelling\",\"structure\":\"pier-side traversal\"}}"
+    - id: movie_entrance_snow_trail_crossing
+      description_ja: "雪道を踏みしめながら視界の抜けと足跡の連続を見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a snow trail crossing film that advances through compressed footsteps, cold openness, and intermittent reveal across winter terrain, delivering intensely polished visual storytelling\",\"structure\":\"winter path progression\"}}"
+    - id: movie_entrance_festival_lantern_route
+      description_ja: "灯りの連なりを追って祭りの動線を体験するナイトウォーク映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a festival lantern route film that travels by chains of light through celebratory nighttime space, delivering intensely polished visual storytelling\",\"structure\":\"lantern-guided journey\"}}"
 
     # 時間変化／モチーフ反復プリセット
     - id: section_sub_movie_entrance_time_motif
@@ -819,6 +1059,36 @@ tails:
     - id: movie_entrance_shape_rhyme
       description_ja: "円や三角など同じ形が異なる文脈で何度も登場する映像"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a shape rhyme film where a recurring geometric form appears in varied contexts, creating visual poetry through repetition, delivering intensely polished visual storytelling\",\"structure\":\"geometric echo\"}}"
+    - id: movie_entrance_bloom_cycle
+      description_ja: "開花から散り際までを同じ場所で反復的に見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a bloom cycle film that revisits the same living motif from bud through full opening to decline, delivering intensely polished visual storytelling\",\"edit\":\"growth-and-fade repetition\"}}"
+    - id: movie_entrance_tide_return
+      description_ja: "満ち引きの反復で同じ地形の表情が変わる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a tide return film that observes one shoreline transform repeatedly as water advances and recedes, delivering intensely polished visual storytelling\",\"edit\":\"tidal repetition\"}}"
+    - id: movie_entrance_maintenance_cycle
+      description_ja: "整備や清掃などの定期作業が繰り返される様子を追う映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a maintenance cycle film that follows repeated care, reset, and preparation actions in the same space, delivering intensely polished visual storytelling\",\"structure\":\"routine upkeep loop\"}}"
+    - id: movie_entrance_construction_growth
+      description_ja: "建設や組み上がりの進行で空間が段階的に増殖する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a construction growth film that marks a location's staged expansion as structures rise and connect over time, delivering intensely polished visual storytelling\",\"edit\":\"incremental build progression\"}}"
+    - id: movie_entrance_migration_return
+      description_ja: "同じ経路を季節ごとに往来する回帰の動きを見せる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a migration return film that shows cyclical passage along the same route at recurring intervals, delivering intensely polished visual storytelling\",\"structure\":\"returning route motif\"}}"
+    - id: movie_entrance_festival_annual_return
+      description_ja: "年ごとに繰り返される催しが同じ場所を更新する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an annual festival return film that revisits one place as recurring celebrations transform its mood and density, delivering intensely polished visual storytelling\",\"edit\":\"annual recurrence\"}}"
+    - id: movie_entrance_shadow_length_drift
+      description_ja: "影の長さだけを手がかりに時刻推移を示す観察映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a shadow length drift film that charts time through the quiet extension and contraction of cast forms, delivering intensely polished visual storytelling\",\"camera\":\"static shadow study\"}}"
+    - id: movie_entrance_window_illumination_pulse
+      description_ja: "窓ごとの灯りの点灯と消灯が脈動のように連なる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a window illumination pulse film where lights switch on and off in patterned waves across repeated facades, delivering intensely polished visual storytelling\",\"structure\":\"light pulse repetition\"}}"
+    - id: movie_entrance_market_open_close
+      description_ja: "開店から撤収まで同じ場所の密度変化を追う映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a market open-close film that tracks one site from setup through peak activity to empty closure, delivering intensely polished visual storytelling\",\"edit\":\"daily density cycle\"}}"
+    - id: movie_entrance_repair_wear_echo
+      description_ja: "修復と摩耗が交互に現れ、時間の痕跡を反復する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a repair-and-wear echo film that alternates between renewal and deterioration on the same surfaces over time, delivering intensely polished visual storytelling\",\"structure\":\"restore-versus-decay loop\"}}"
 
     # 観察視点／モンタージュ／反射プリセット
     - id: section_sub_movie_entrance_observe
@@ -863,5 +1133,35 @@ tails:
     - id: movie_entrance_mirror_maze
       description_ja: "鏡の反射が連鎖して無限に広がるような映像"
       prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a mirror maze film where reflections multiply and chain endlessly, creating disorienting infinite spaces, delivering intensely polished visual storytelling\",\"look\":\"infinite mirror recursion\"}}"
+    - id: movie_entrance_escalator_watcher
+      description_ja: "エスカレーター付近に留まり上下する流れを観察する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an escalator watcher film that holds near vertical transit flow and studies repeated ascent and descent patterns, delivering intensely polished visual storytelling\",\"camera\":\"anchored transit observation\"}}"
+    - id: movie_entrance_windshield_reflection
+      description_ja: "車窓やフロントガラスの映り込み越しに外界を重ねる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a windshield reflection film that layers travel views with glass reflections and passing light streaks, delivering intensely polished visual storytelling\",\"look\":\"mobile reflective overlay\"}}"
+    - id: movie_entrance_surveillance_grid
+      description_ja: "複数の監視視点を切り替えて同時観察するグリッド型映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a surveillance grid film that alternates among multiple fixed viewpoints to compare synchronized activity, delivering intensely polished visual storytelling\",\"edit\":\"multi-view observation grid\"}}"
+    - id: movie_entrance_storefront_superimpose
+      description_ja: "ショーウィンドウ越しの内外重なりを利用する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a storefront superimpose film that merges interior display layers with exterior street movement in one reflective frame, delivering intensely polished visual storytelling\",\"look\":\"display-glass overlap\"}}"
+    - id: movie_entrance_balcony_observer
+      description_ja: "高所バルコニーから下方の流れを俯瞰する観察映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a balcony observer film that watches movement below from an elevated still vantage, delivering intensely polished visual storytelling\",\"camera\":\"high static overlook\"}}"
+    - id: movie_entrance_transit_seat_montage
+      description_ja: "移動中の座席視点から断片的に景色を積むモンタージュ映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a transit seat montage that assembles passing fragments from a seated travel perspective into a continuous mood sequence, delivering intensely polished visual storytelling\",\"edit\":\"seated travel fragments\"}}"
+    - id: movie_entrance_metallic_reflection_scan
+      description_ja: "金属面の映り込みをなぞって空間を再構成する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a metallic reflection scan film that reconstructs surroundings through warped highlights and mirrored industrial surfaces, delivering intensely polished visual storytelling\",\"look\":\"metallic reflective distortion\"}}"
+    - id: movie_entrance_rain_streak_window
+      description_ja: "雨筋のついた窓越しに外の動きをにじませる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a rain-streak window film that views exterior movement through dripping glass and softened detail, delivering intensely polished visual storytelling\",\"look\":\"rain-softened observation\"}}"
+    - id: movie_entrance_elevator_mirror_hold
+      description_ja: "エレベーター内の鏡面と狭い反射空間を見つめる映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is an elevator mirror hold film that studies compressed reflective space and subtle positional shifts inside a vertical transit chamber, delivering intensely polished visual storytelling\",\"camera\":\"enclosed reflective hold\"}}"
+    - id: movie_entrance_doorway_cross_section
+      description_ja: "出入り口を境に内外の流れを断面観察する映像"
+      prompt: "{\"video_style\":{\"scope\":\"full_movie\",\"description\":\"this is a doorway cross-section film that uses a threshold to compare inbound and outbound movement across two adjoining zones, delivering intensely polished visual storytelling\",\"camera\":\"threshold observation\"}}"
 
 
