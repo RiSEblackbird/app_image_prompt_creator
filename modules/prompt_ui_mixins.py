@@ -664,6 +664,26 @@ class PromptUIMixin:
         direction_row_6.addStretch(1)
         direction_layout.addLayout(direction_row_6)
 
+        direction_row_7 = QtWidgets.QHBoxLayout()
+        direction_row_7.addWidget(QtWidgets.QLabel("画風:"))
+        # 画風系は自由記述だと表記ゆれしやすいため、代表的な見た目だけを専用トグルで固定する。
+        style_tooltips = {
+            "anime": "ON にすると、セルアニメ調の輪郭・色面・演出的な誇張を強く要求します。",
+            "ukiyo-e": "ON にすると、浮世絵のような輪郭線、平面的な色面、版画的な構成を強く要求します。",
+            "watercolor": "ON にすると、水彩画のようなにじみ、淡い色の重なり、絵筆感を強く要求します。",
+            "manga": "ON にすると、漫画的な線の強さ、コマ感覚、視覚的な強弱表現を強く要求します。",
+            "noir": "ON にすると、ノワール調の強い明暗差、陰影、退廃的な空気感を強く要求します。",
+        }
+        self.direction_style_tag_checkboxes = {}
+        for label, token in config.DIRECTION_STYLE_TAG_CHOICES:
+            checkbox = QtWidgets.QCheckBox(label)
+            checkbox.setToolTip(style_tooltips.get(token, ""))
+            checkbox.stateChanged.connect(self.auto_update)
+            self.direction_style_tag_checkboxes[token] = checkbox
+            direction_row_7.addWidget(checkbox)
+        direction_row_7.addStretch(1)
+        direction_layout.addLayout(direction_row_7)
+
         tail_form.addRow(direction_group)
         style_layout.addLayout(tail_form)
 

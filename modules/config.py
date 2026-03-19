@@ -300,6 +300,13 @@ DIRECTION_SUBJECT_FOCUS_CHOICES = [
     ("質感主体", "texture"),
     ("奥行き主体", "depth"),
 ]
+DIRECTION_STYLE_TAG_CHOICES = [
+    ("アニメ", "anime"),
+    ("浮世絵", "ukiyo-e"),
+    ("水彩画", "watercolor"),
+    ("漫画", "manga"),
+    ("ノワール", "noir"),
+]
 
 # カメラワークの選択肢
 CAMERA_WORK_CHOICES = [

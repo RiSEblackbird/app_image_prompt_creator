@@ -188,18 +188,19 @@ tails:
 | 主役 | `focus_priority` として `people` / `scene` / `architecture` / `objects` / `motion` / `atmosphere` / `scale` に加え、`color` / `lighting` / `silhouette` / `texture` / `depth` を出力できます。人物が映る場合でも、何を構図上の主役に寄せるかを明示します（計 `13件`、`未指定` を含む） |
 | 完全実写映像 | ON で `render_style="live_action"` |
 | 8K超高精細映像 | ON で `resolution_tier="8k"` |
+| 画風 | `style_tags` として `anime` / `ukiyo-e` / `watercolor` / `manga` / `noir` を複数出力できます |
 | 追加自由制約 | 上の専用項目にない条件だけを自然文で補足 |
 
 出力例:
 ```json
-{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"still_frame_policy":"forbid","camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","focus_priority":"scene","render_style":"live_action","resolution_tier":"8k","freeform_constraints":"Avoid modern urban elements."}}
+{"direction_constraints":{"environment_scope":"outdoor_only","subject_tags":["outdoor_ruins","wildlife","coral reef"],"still_frame_policy":"forbid","camera_motion":"continuous","visual_energy":"vivid","cut_duration_policy":"variable","focus_priority":"scene","render_style":"live_action","resolution_tier":"8k","style_tags":["anime","ukiyo-e"],"freeform_constraints":"Avoid modern urban elements."}}
 ```
 
 `環境` はプロンプト本文の内容に依存しにくい「場所・層」の指定だけに寄せています。`頻出対象` は視覚的に主役になりやすい対象群をまとめたもので、必要に応じて複数選択できます。`主役` は構図の中心を明示するための項目で、人物が複数いても `情景主体` を選ぶと背景・空間・風景を優先した画作りを促します。
 
-正例: 人物が2人以上登場しても風景や建築を主役にしたい場合は `主役=scene` を選びます。
+正例: 人物が2人以上登場しても風景や建築を主役にしたい場合は `主役=scene` を選びます。画風を固定したい場合は `画風` で `anime` や `ukiyo-e` を追加します。
 
-負例: 人物が映るだけで常に人物中心の構図にしたくない場面で、`主役` を未指定のままにするとモデル判断で人物主体へ寄ることがあります。
+負例: 人物が映るだけで常に人物中心の構図にしたくない場面で、`主役` を未指定のままにするとモデル判断で人物主体へ寄ることがあります。実写感を重視したいのに `完全実写映像` を使わず `画風` だけ自由記述に書くと、表記ゆれで意図が弱まることがあります。
 
 このブロックは内部的にも送信用にもJSONで保持され、Sora送信用の最終出力では重複する自然文の `instructions` を追加しません。
 

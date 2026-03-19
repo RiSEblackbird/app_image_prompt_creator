@@ -424,6 +424,13 @@ _RENDER_STYLE_SENTENCES = {
 _RESOLUTION_TIER_SENTENCES = {
     "8k": "Render the entire video in ultra high resolution 8K quality.",
 }
+_STYLE_TAG_SENTENCES = {
+    "anime": "Use an anime-inspired visual style with cel-like clarity, stylized motion, and expressive composition.",
+    "ukiyo-e": "Use a ukiyo-e-inspired visual style with woodblock-like contours, flat layered color, and graphic patterning.",
+    "watercolor": "Use a watercolor-inspired visual style with soft pigment bleeding, translucent layering, and gentle edges.",
+    "manga": "Use a manga-inspired visual style with strong line work, graphic contrast, and panel-like visual emphasis.",
+    "noir": "Use a noir-inspired visual style with stark light-shadow contrast and a tense, shadow-heavy atmosphere.",
+}
 
 
 def strip_compiled_movie_requirements(prompt_text: str) -> str:
@@ -713,6 +720,12 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
         sentences.append(_RESOLUTION_TIER_SENTENCES[resolution_tier])
     elif direction_constraints.get("ultra_high_resolution_8k") is True:
         sentences.append("Render the entire video in ultra high resolution 8K quality.")
+
+    style_tags = direction_constraints.get("style_tags")
+    if isinstance(style_tags, list):
+        for style_tag in style_tags:
+            if isinstance(style_tag, str) and style_tag in _STYLE_TAG_SENTENCES:
+                sentences.append(_STYLE_TAG_SENTENCES[style_tag])
 
     return sentences
 

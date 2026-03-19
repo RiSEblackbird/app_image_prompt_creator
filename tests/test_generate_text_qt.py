@@ -743,6 +743,8 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
     prompt_generator.entry_direction_freeform_constraints.setText("Avoid modern urban elements.")
     prompt_generator.check_direction_live_action_only.setChecked(True)
     prompt_generator.check_direction_ultra_high_resolution_8k.setChecked(True)
+    prompt_generator.direction_style_tag_checkboxes["anime"].setChecked(True)
+    prompt_generator.direction_style_tag_checkboxes["ukiyo-e"].setChecked(True)
 
     payload = qt_app.json.loads(prompt_generator._make_direction_constraints_json().strip())
 
@@ -758,6 +760,7 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
             "freeform_constraints": "Avoid modern urban elements.",
             "render_style": "live_action",
             "resolution_tier": "8k",
+            "style_tags": ["anime", "ukiyo-e"],
         }
     }
     assert prompt_generator.label_direction_common_subjects.text() in ("水辺・水域 / 天体", "天体 / 水辺・水域")
@@ -786,6 +789,10 @@ def test_all_direction_choice_tokens_compile_to_sentences():
     for _, token in prompt_config.DIRECTION_COMMON_SUBJECT_TAGS:
         instructions = compile_movie_instructions(None, {"subject_tags": [token]})
         assert instructions, f"subject_tags={token} did not compile into any instruction"
+
+    for _, token in prompt_config.DIRECTION_STYLE_TAG_CHOICES:
+        instructions = compile_movie_instructions(None, {"style_tags": [token]})
+        assert instructions, f"style_tags={token} did not compile into any instruction"
 
 
 def test_direction_dropdown_and_menu_counts(prompt_generator):
@@ -828,6 +835,22 @@ def test_movie_direction_constraints_compile_new_quality_flags():
 
     assert "Render the entire video as fully live-action footage with no animated or illustrative look." in instructions
     assert "Render the entire video in ultra high resolution 8K quality." in instructions
+
+
+def test_movie_direction_constraints_compile_style_tags():
+    """画風タグが instructions に自然文として反映されること。"""
+
+    from modules.prompt_text_utils import compile_movie_instructions
+
+    instructions = compile_movie_instructions(
+        None,
+        {
+            "style_tags": ["anime", "ukiyo-e"],
+        },
+    )
+
+    assert "Use an anime-inspired visual style with cel-like clarity, stylized motion, and expressive composition." in instructions
+    assert "Use a ukiyo-e-inspired visual style with woodblock-like contours, flat layered color, and graphic patterning." in instructions
 
 
 def test_movie_direction_constraints_compile_subject_focus():

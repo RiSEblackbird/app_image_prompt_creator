@@ -478,6 +478,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
 
     def _apply_direction_constraints_defaults(self, defaults: dict) -> None:
         """movie プリセットの演出制約既定値を UI に反映する。"""
+        style_tag_widgets = list(getattr(self, "direction_style_tag_checkboxes", {}).values())
         widgets = [
             self.check_direction_constraints_enabled,
             self.combo_direction_environment_scope,
@@ -490,7 +491,7 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             self.entry_direction_freeform_constraints,
             self.check_direction_live_action_only,
             self.check_direction_ultra_high_resolution_8k,
-        ]
+        ] + style_tag_widgets
         blockers = [QtCore.QSignalBlocker(widget) for widget in widgets]
         action_blockers = [
             QtCore.QSignalBlocker(action)
@@ -539,6 +540,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
             self.check_direction_ultra_high_resolution_8k.setChecked(
                 defaults.get("resolution_tier") == "8k" or bool(defaults.get("ultra_high_resolution_8k", False))
             )
+            style_tags = defaults.get("style_tags")
+            selected_style_tags = {
+                str(tag).strip()
+                for tag in style_tags
+                if isinstance(tag, str) and str(tag).strip()
+            } if isinstance(style_tags, list) else set()
+            for token, checkbox in getattr(self, "direction_style_tag_checkboxes", {}).items():
+                checkbox.setChecked(token in selected_style_tags)
         finally:
             del action_blockers
             del blockers
@@ -961,6 +970,14 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
 
         if self.check_direction_ultra_high_resolution_8k.isChecked():
             constraints["resolution_tier"] = "8k"
+
+        style_tags = [
+            token
+            for token, checkbox in getattr(self, "direction_style_tag_checkboxes", {}).items()
+            if checkbox.isChecked()
+        ]
+        if style_tags:
+            constraints["style_tags"] = style_tags
 
         try:
             json_text = json.dumps({"direction_constraints": constraints}, ensure_ascii=False)
