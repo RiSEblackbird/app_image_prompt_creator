@@ -391,7 +391,10 @@ class PromptGeneratorWindow(QtWidgets.QMainWindow, PromptUIMixin, PromptDataMixi
     def _resolve_focus_priority_from_defaults(self, defaults: dict) -> str:
         """旧 subject_focus と新 focus_priority の両方から UI 用の主役優先度を決める。"""
         focus_priority = str(defaults.get("focus_priority", "") or "").strip()
-        if focus_priority in ("people", "scene"):
+        available_focus_priority_values = {
+            value for _, value in config.DIRECTION_SUBJECT_FOCUS_CHOICES if isinstance(value, str) and value
+        }
+        if focus_priority in available_focus_priority_values:
             return focus_priority
         subject_focus = str(defaults.get("subject_focus", "") or "").strip()
         if subject_focus == "people_primary":

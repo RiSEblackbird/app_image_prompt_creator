@@ -147,7 +147,7 @@ tails:
 |------|------|
 | 末尾2を反映 | マスタースイッチ。ONにしないとJSONは付与されません |
 | ナレーション / BGM / 環境音 | 音声要素の有無 |
-| BGM詳細 | BGM を ON にした時だけ使う追加指定（ジャンル / 雰囲気 / テンポ / ボーカル / 同期 / 追加メモ） |
+| BGM詳細 | BGM を ON にした時だけ使う追加指定（ジャンル / 雰囲気 / テンポ / ボーカル / 同期 / 追加メモ）。各プルダウンの総項目数は `ジャンル36件` / `雰囲気30件` / `テンポ18件` / `ボーカル18件` / `同期18件`（いずれも `未指定` を含む）。標準的な選択肢に加え、超極端・奇抜な指定も選べます |
 | 人物 / 人物のセリフ | 映像内の人物とセリフの有無 |
 | セリフ字幕 / テロップ | 画面上のテキスト要素 |
 | 登場人物 | `person_mode` として `no_people` / `at_least_one_person` / `one_person` / `two_people` / `three_people` / `four_people` / `crowd` を出力 |
@@ -178,14 +178,14 @@ tails:
 | 項目 | 説明 |
 |------|------|
 | 演出制約を反映 | マスタースイッチ。ONにしないとJSONは付与されません |
-| 環境 | `indoor_only` / `outdoor_only` / `indoor_outdoor_mixed` / `underground` / `underwater` / `water_surface` / `aerial` / `space` |
-| 頻出対象 | `選択` メニューから `建築物` / `室内空間` / `都市インフラ` / `屋外の遺跡` / `地形・岩場` / `植物` / `水辺・水域` / `野生生物` / `乗り物` / `機械` / `天体` を複数選択できます |
+| 環境 | `indoor_only` / `outdoor_only` / `indoor_outdoor_mixed` / `underground` / `underwater` / `water_surface` / `aerial` / `space` に加え、`desert` / `forest` / `arctic` / `volcanic` / `coastal` / `wetlands` / `cave` / `ruin_interior` / `mountain` / `island` を選べます（計 `19件`、`未指定` を含む） |
+| 頻出対象 | `選択` メニューから `建築物` / `室内空間` / `都市インフラ` / `屋外の遺跡` / `地形・岩場` / `植物` / `水辺・水域` / `野生生物` / `乗り物` / `機械` / `天体` / `橋梁・高架` / `群衆` / `炎・火花` / `霧・煙` / `工業設備` に加え、`旗・布` / `ガラス面` / `雪・氷` / `瓦礫` / `広告・看板` を複数選択できます（計 `21件`） |
 | 追加対象タグ | 頻出対象にないものだけをカンマ区切りで追加します。例: `coral reef, volcanic landscape` |
 | 静止画カットを許可 | OFF で `still_frame_policy="forbid"` |
-| カメラ運動 | `mostly_static` / `gentle` / `continuous` |
-| 映像の活力 | `calm` / `vivid` / `intense` |
-| カット尺 | `uniform` / `weighted` / `variable` |
-| 主役 | `focus_priority` として `people` / `scene` を出力。人物が映る場合でも、人物主体か情景主体かを明示します |
+| カメラ運動 | `mostly_static` / `gentle` / `continuous` / `handheld` / `tracking` / `orbit` / `push_in` / `sweeping_lateral` に加え、`pull_back` / `crane_up` / `crane_down` / `tilt_reveal` / `glide_low` を選べます（計 `14件`、`未指定` を含む） |
+| 映像の活力 | `calm` / `vivid` / `intense` / `tranquil` / `dense` / `chaotic` / `majestic` / `urgent` に加え、`light` / `heavy` / `seductive` / `sharp` / `festive` を選べます（計 `14件`、`未指定` を含む） |
+| カット尺 | `uniform` / `weighted` / `variable` / `long_take` / `rapid_fire` / `front_loaded` / `back_loaded` / `rhythmic` に加え、`mid_emphasis` / `delayed_expansion` / `pre_climax_accel` / `lingering_ending` / `contrastive` を選べます（計 `14件`、`未指定` を含む） |
+| 主役 | `focus_priority` として `people` / `scene` / `architecture` / `objects` / `motion` / `atmosphere` / `scale` に加え、`color` / `lighting` / `silhouette` / `texture` / `depth` を出力できます。人物が映る場合でも、何を構図上の主役に寄せるかを明示します（計 `13件`、`未指定` を含む） |
 | 完全実写映像 | ON で `render_style="live_action"` |
 | 8K超高精細映像 | ON で `resolution_tier="8k"` |
 | 追加自由制約 | 上の専用項目にない条件だけを自然文で補足 |

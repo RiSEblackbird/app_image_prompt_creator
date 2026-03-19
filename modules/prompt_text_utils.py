@@ -258,6 +258,32 @@ _BGM_GENRE_SENTENCES = {
     "jazz": "Use a jazz soundtrack.",
     "piano": "Use a piano-led soundtrack.",
     "japanese": "Use a Japanese-style soundtrack.",
+    "acoustic": "Use an acoustic soundtrack.",
+    "synthwave": "Use a synthwave soundtrack.",
+    "hip_hop": "Use a hip-hop soundtrack.",
+    "folk": "Use a folk soundtrack.",
+    "soul": "Use a soul soundtrack.",
+    "funk": "Use a funk soundtrack.",
+    "techno": "Use a techno soundtrack.",
+    "house": "Use a house soundtrack.",
+    "trap": "Use a trap soundtrack.",
+    "dubstep": "Use a dubstep soundtrack.",
+    "world": "Use a world music soundtrack.",
+    "celtic": "Use a Celtic-inspired soundtrack.",
+    "latin": "Use a Latin soundtrack.",
+    "reggae": "Use a reggae soundtrack.",
+    "blues": "Use a blues soundtrack.",
+    "classical": "Use a classical soundtrack.",
+    "chiptune": "Use a chiptune soundtrack.",
+    "metal": "Use a metal soundtrack.",
+    "disco": "Use a disco soundtrack.",
+    "punk": "Use a punk soundtrack.",
+    "noise_core": "Use an abrasive noise-core soundtrack.",
+    "glitch": "Use a heavily glitched electronic soundtrack.",
+    "circus": "Use a surreal circus-like soundtrack.",
+    "marching_band": "Use an aggressive marching-band soundtrack.",
+    "harsh_industrial": "Use a harsh industrial soundtrack.",
+    "alien_ritual": "Use an otherworldly ritualistic soundtrack.",
 }
 _BGM_MOOD_SENTENCES = {
     "calm": "Keep the music calm and restrained.",
@@ -267,21 +293,85 @@ _BGM_MOOD_SENTENCES = {
     "mysterious": "Keep the music mysterious.",
     "epic": "Keep the music epic and expansive.",
     "bright": "Keep the music bright and cheerful.",
+    "serene": "Keep the music serene and gentle.",
+    "nostalgic": "Keep the music nostalgic.",
+    "romantic": "Keep the music romantic.",
+    "hopeful": "Keep the music hopeful.",
+    "dark": "Keep the music dark and shadowy.",
+    "eerie": "Keep the music eerie and unsettling.",
+    "dreamy": "Keep the music dreamy and floating.",
+    "playful": "Keep the music playful.",
+    "aggressive": "Keep the music aggressive and forceful.",
+    "bittersweet": "Keep the music bittersweet.",
+    "ominous": "Keep the music ominous.",
+    "energetic": "Keep the music energetic.",
+    "warm": "Keep the music warm and comforting.",
+    "heroic": "Keep the music heroic.",
+    "somber": "Keep the music somber and weighty.",
+    "whimsical": "Keep the music whimsical.",
+    "manic": "Keep the music manic and unstable.",
+    "ecstatic": "Keep the music ecstatic and overwhelming.",
+    "catastrophic": "Keep the music catastrophic and apocalyptic.",
+    "frenzied": "Keep the music frenzied and out of control.",
+    "hallucinatory": "Keep the music hallucinatory and unreal.",
+    "nightmarish": "Keep the music nightmarish and deeply unsettling.",
 }
 _BGM_TEMPO_SENTENCES = {
     "slow": "Use a slow tempo.",
     "medium": "Use a medium tempo.",
     "fast": "Use a fast tempo.",
+    "very_slow": "Use a very slow tempo.",
+    "relaxed": "Use a relaxed tempo.",
+    "mid_slow": "Use a moderately slow tempo.",
+    "steady": "Keep the tempo steady and even.",
+    "mid_fast": "Use a moderately fast tempo.",
+    "very_fast": "Use a very fast tempo.",
+    "fluctuating": "Let the tempo breathe with noticeable fluctuations.",
+    "accelerando": "Let the tempo gradually accelerate.",
+    "ultra_slow": "Use an ultra-slow tempo.",
+    "near_frozen": "Keep the tempo almost frozen, with barely any forward motion.",
+    "hyper_fast": "Use a hyper-fast tempo.",
+    "erratic_meter": "Use an erratic tempo with unstable meter changes.",
+    "stutter_stop": "Use repeated abrupt stops in the tempo.",
+    "pulsing": "Use a strongly pulsing tempo.",
 }
 _BGM_VOCAL_SENTENCES = {
     "instrumental": "Keep the track instrumental.",
     "vocal": "Include vocals.",
     "choir": "Include choir-like vocals.",
+    "female_vocal": "Feature a female vocal.",
+    "male_vocal": "Feature a male vocal.",
+    "duet": "Feature a duet vocal.",
+    "whisper": "Include a whisper-like vocal texture.",
+    "processed_vocal": "Include processed or effected vocals.",
+    "chant": "Include chant-like vocals.",
+    "humming": "Include humming vocals.",
+    "spoken_word": "Include a spoken-word vocal texture.",
+    "screamed": "Include screamed vocals.",
+    "synthetic_voice": "Include a synthetic or machine-like voice.",
+    "children_choir": "Include a children's choir texture.",
+    "robotic_chant": "Include a robotic chant-like vocal texture.",
+    "laughter": "Include unsettling laughter as a vocal element.",
+    "growl": "Include low growling vocals.",
 }
 _BGM_SYNC_SENTENCES = {
     "none": "Do not tightly sync the music to the edit rhythm.",
     "subtle": "Keep the music subtly aligned with the edit rhythm.",
     "beat_matched": "Synchronize the music with the edit rhythm.",
+    "ambient_flow": "Let the music flow independently and support the atmosphere over the cut rhythm.",
+    "transition_focus": "Synchronize the music mainly around scene transitions.",
+    "motion_follow": "Synchronize the music with visible motion in the scene.",
+    "crescendo_focus": "Reserve strong synchronization for the main crescendos and highlights.",
+    "bar_matched": "Align the music with the edit rhythm at bar-level timing.",
+    "phrase_matched": "Align the music with the edit rhythm at phrase-level timing.",
+    "punch_hit": "Use musical hits to emphasize key visual accents.",
+    "frame_precise": "Synchronize the music with frame-precise timing.",
+    "overlocked": "Synchronize the music aggressively to nearly every cut.",
+    "deliberate_desync": "Let the music intentionally ignore the cut rhythm and run against it.",
+    "counter_sync": "Synchronize the music in deliberate counterpoint to the visible rhythm.",
+    "gaze_synced": "Synchronize the music even to small shifts in gaze and attention.",
+    "break_hit": "Use repeated abrupt musical breaks to punctuate visual changes.",
+    "pulse_locked": "Lock the music to a strong pulse on a per-second basis.",
 }
 _CONTENT_MODE_SENTENCES = {
     "narration_mode": {
@@ -317,6 +407,16 @@ _STILL_FRAME_POLICY_SENTENCES = {
 _FOCUS_PRIORITY_SENTENCES = {
     "people": "Keep people as the primary visual focus of the composition whenever they appear on screen.",
     "scene": "Even if people appear on screen, keep the environment, scenery, and overall scene as the primary visual focus rather than individual people.",
+    "architecture": "Make architecture and built structures the primary visual focus of the composition.",
+    "objects": "Make objects, props, and small physical details the primary visual focus of the composition.",
+    "motion": "Make motion and movement patterns the primary visual focus of the composition.",
+    "atmosphere": "Make atmosphere, mood, and environmental texture the primary visual focus of the composition.",
+    "scale": "Make scale, distance, and spatial vastness the primary visual focus of the composition.",
+    "color": "Make color relationships and palette the primary visual focus of the composition.",
+    "lighting": "Make lighting and light direction the primary visual focus of the composition.",
+    "silhouette": "Make silhouettes and overall shape readability the primary visual focus of the composition.",
+    "texture": "Make surface texture and material detail the primary visual focus of the composition.",
+    "depth": "Make depth and spatial layering the primary visual focus of the composition.",
 }
 _RENDER_STYLE_SENTENCES = {
     "live_action": "Render the entire video as fully live-action footage with no animated or illustrative look.",
@@ -441,6 +541,26 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
         sentences.append("Keep the viewpoint in the air or high above the ground.")
     elif environment_scope == "space":
         sentences.append("Keep the setting in outer space.")
+    elif environment_scope == "desert":
+        sentences.append("Keep the setting in a desert environment.")
+    elif environment_scope == "forest":
+        sentences.append("Keep the setting in a forest environment.")
+    elif environment_scope == "arctic":
+        sentences.append("Keep the setting in an arctic or snowy polar environment.")
+    elif environment_scope == "volcanic":
+        sentences.append("Keep the setting in a volcanic environment.")
+    elif environment_scope == "coastal":
+        sentences.append("Keep the setting along a coastline or seashore.")
+    elif environment_scope == "wetlands":
+        sentences.append("Keep the setting in wetlands or marshland.")
+    elif environment_scope == "cave":
+        sentences.append("Keep the setting inside a cave.")
+    elif environment_scope == "ruin_interior":
+        sentences.append("Keep the setting inside ancient ruins or a ruined interior.")
+    elif environment_scope == "mountain":
+        sentences.append("Keep the setting in a mountainous highland environment.")
+    elif environment_scope == "island":
+        sentences.append("Keep the setting on an island or among small islands.")
 
     subject_tags = direction_constraints.get("subject_tags")
     if isinstance(subject_tags, list):
@@ -458,6 +578,16 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
                 "vehicles": "vehicles",
                 "machinery": "machinery",
                 "celestial_bodies": "celestial bodies",
+                "bridges": "bridges and elevated structures",
+                "crowds": "crowds",
+                "fire_effects": "fire and sparks",
+                "mist_smoke": "mist and smoke",
+                "industrial_facilities": "industrial facilities",
+                "flags_fabric": "flags and fabric",
+                "glass_surfaces": "glass surfaces",
+                "snow_ice": "snow and ice",
+                "debris": "debris",
+                "signage": "signage and billboards",
             }
             readable_tags = [readable_map.get(tag, tag) for tag in tags]
             sentences.append(_ensure_sentence(f"Visually focus on these subjects: {', '.join(readable_tags)}"))
@@ -479,6 +609,26 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
         sentences.append("Use gentle, continuous camera movement.")
     elif camera_motion == "continuous":
         sentences.append("Keep the camera moving continuously.")
+    elif camera_motion == "handheld":
+        sentences.append("Use handheld camera movement.")
+    elif camera_motion == "tracking":
+        sentences.append("Use tracking movement that follows the subject.")
+    elif camera_motion == "orbit":
+        sentences.append("Use orbiting camera movement around the subject or scene.")
+    elif camera_motion == "push_in":
+        sentences.append("Use a slow forward push-in camera movement.")
+    elif camera_motion == "sweeping_lateral":
+        sentences.append("Use broad lateral camera movement across the scene.")
+    elif camera_motion == "pull_back":
+        sentences.append("Use a slow pull-back camera movement.")
+    elif camera_motion == "crane_up":
+        sentences.append("Use an upward crane movement.")
+    elif camera_motion == "crane_down":
+        sentences.append("Use a downward crane movement.")
+    elif camera_motion == "tilt_reveal":
+        sentences.append("Use a tilt or reveal movement that opens the view into a broader overhead perspective.")
+    elif camera_motion == "glide_low":
+        sentences.append("Use a low gliding camera movement close to the ground or surface.")
 
     visual_energy = direction_constraints.get("visual_energy")
     if visual_energy == "calm":
@@ -487,6 +637,26 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
         sentences.append("Keep the visuals vivid and full of life.")
     elif visual_energy == "intense":
         sentences.append("Keep the visuals intense and highly energetic.")
+    elif visual_energy == "tranquil":
+        sentences.append("Keep the visuals tranquil and serene.")
+    elif visual_energy == "dense":
+        sentences.append("Keep the visuals dense with layered detail.")
+    elif visual_energy == "chaotic":
+        sentences.append("Keep the visuals chaotic and unstable.")
+    elif visual_energy == "majestic":
+        sentences.append("Keep the visuals majestic and awe-inspiring.")
+    elif visual_energy == "urgent":
+        sentences.append("Keep the visuals urgent and tightly driven.")
+    elif visual_energy == "light":
+        sentences.append("Keep the visuals light and nimble.")
+    elif visual_energy == "heavy":
+        sentences.append("Keep the visuals heavy and oppressive.")
+    elif visual_energy == "seductive":
+        sentences.append("Keep the visuals seductive and alluring.")
+    elif visual_energy == "sharp":
+        sentences.append("Keep the visuals sharp, crisp, and cutting.")
+    elif visual_energy == "festive":
+        sentences.append("Keep the visuals festive and celebratory.")
 
     cut_duration_policy = direction_constraints.get("cut_duration_policy")
     if cut_duration_policy == "uniform":
@@ -495,6 +665,26 @@ def _compile_direction_constraints_to_sentences(direction_constraints: dict | No
         sentences.append("Use intentionally varied cut durations with weighted emphasis.")
     elif cut_duration_policy == "variable":
         sentences.append("Cut durations do not need to be evenly distributed.")
+    elif cut_duration_policy == "long_take":
+        sentences.append("Favor longer takes with fewer cuts.")
+    elif cut_duration_policy == "rapid_fire":
+        sentences.append("Favor short, rapid cuts.")
+    elif cut_duration_policy == "front_loaded":
+        sentences.append("Favor longer cuts earlier in the piece.")
+    elif cut_duration_policy == "back_loaded":
+        sentences.append("Favor longer cuts later in the piece.")
+    elif cut_duration_policy == "rhythmic":
+        sentences.append("Shape cut durations around a clear rhythmic pattern.")
+    elif cut_duration_policy == "mid_emphasis":
+        sentences.append("Favor longer cuts around the middle section of the piece.")
+    elif cut_duration_policy == "delayed_expansion":
+        sentences.append("Keep the opening cuts short, then expand shot durations after the introduction.")
+    elif cut_duration_policy == "pre_climax_accel":
+        sentences.append("Accelerate cut pacing leading into the climax.")
+    elif cut_duration_policy == "lingering_ending":
+        sentences.append("Let the ending linger with longer final cuts.")
+    elif cut_duration_policy == "contrastive":
+        sentences.append("Use strongly contrasting cut durations for emphasis.")
 
     focus_priority = direction_constraints.get("focus_priority")
     if isinstance(focus_priority, str) and focus_priority in _FOCUS_PRIORITY_SENTENCES:

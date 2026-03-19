@@ -15,6 +15,7 @@ if str(_APP_DIR) not in sys.path:
     sys.path.insert(0, str(_APP_DIR))
 
 import app_image_prompt_creator_qt as qt_app  # noqa: E402
+from modules import config as prompt_config  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -606,15 +607,53 @@ def test_compile_movie_instructions_include_bgm_details():
     assert "Let the bass stay soft." in instructions
 
 
+def test_all_bgm_dropdown_tokens_compile_to_sentences():
+    """BGM 詳細の全トークンが自然文へ変換でき、UI定義と文生成の契約が崩れていないこと。"""
+
+    from modules.prompt_text_utils import compile_movie_instructions
+
+    option_sets = (
+        ("bgm_genre", prompt_config.BGM_GENRE_CHOICES),
+        ("bgm_mood", prompt_config.BGM_MOOD_CHOICES),
+        ("bgm_tempo", prompt_config.BGM_TEMPO_CHOICES),
+        ("bgm_vocal", prompt_config.BGM_VOCAL_CHOICES),
+        ("bgm_sync", prompt_config.BGM_SYNC_CHOICES),
+    )
+
+    for key, choices in option_sets:
+        for _, token in choices:
+            if not token:
+                continue
+            instructions = compile_movie_instructions({"bgm_mode": "with_bgm", key: token}, None)
+            assert "Use background music." in instructions
+            assert len(instructions) >= 2
+
+
 def test_bgm_dropdown_labels_are_japanese(prompt_generator):
     """BGM のプルダウンは日本語ラベルで表示されること。"""
 
     genre_combo = prompt_generator.combo_tail_bgm_genre
     mood_combo = prompt_generator.combo_tail_bgm_mood
 
+    assert genre_combo.count() == 36
+    assert mood_combo.count() == 30
+    assert prompt_generator.combo_tail_bgm_tempo.count() == 18
+    assert prompt_generator.combo_tail_bgm_vocal.count() == 18
+    assert prompt_generator.combo_tail_bgm_sync.count() == 18
     assert genre_combo.itemText(0) == "未指定"
     assert genre_combo.itemText(genre_combo.findData("cinematic")) == "シネマティック"
+    assert genre_combo.itemText(genre_combo.findData("alien_ritual")) == "異界の儀式音楽"
     assert mood_combo.itemText(mood_combo.findData("melancholic")) == "切ない"
+    assert mood_combo.itemText(mood_combo.findData("nightmarish")) == "悪夢"
+    assert prompt_generator.combo_tail_bgm_tempo.itemText(
+        prompt_generator.combo_tail_bgm_tempo.findData("erratic_meter")
+    ) == "暴走変拍子"
+    assert prompt_generator.combo_tail_bgm_vocal.itemText(
+        prompt_generator.combo_tail_bgm_vocal.findData("robotic_chant")
+    ) == "ロボット詠唱"
+    assert prompt_generator.combo_tail_bgm_sync.itemText(
+        prompt_generator.combo_tail_bgm_sync.findData("counter_sync")
+    ) == "逆同期"
 
 
 def test_make_tail_flags_json_includes_bgm_details(prompt_generator):
@@ -722,6 +761,56 @@ def test_make_direction_constraints_json_from_ui(prompt_generator):
         }
     }
     assert prompt_generator.label_direction_common_subjects.text() in ("水辺・水域 / 天体", "天体 / 水辺・水域")
+
+
+def test_all_direction_choice_tokens_compile_to_sentences():
+    """direction_constraints の全トークンが自然文へ変換でき、UI定義と文生成の契約が崩れていないこと。"""
+
+    from modules.prompt_text_utils import compile_movie_instructions
+
+    single_value_option_sets = (
+        ("environment_scope", prompt_config.DIRECTION_ENVIRONMENT_SCOPE_CHOICES),
+        ("camera_motion", prompt_config.DIRECTION_CAMERA_MOTION_CHOICES),
+        ("visual_energy", prompt_config.DIRECTION_VISUAL_ENERGY_CHOICES),
+        ("cut_duration_policy", prompt_config.DIRECTION_CUT_DURATION_POLICY_CHOICES),
+        ("focus_priority", prompt_config.DIRECTION_SUBJECT_FOCUS_CHOICES),
+    )
+
+    for key, choices in single_value_option_sets:
+        for _, token in choices:
+            if not token:
+                continue
+            instructions = compile_movie_instructions(None, {key: token})
+            assert instructions, f"{key}={token} did not compile into any instruction"
+
+    for _, token in prompt_config.DIRECTION_COMMON_SUBJECT_TAGS:
+        instructions = compile_movie_instructions(None, {"subject_tags": [token]})
+        assert instructions, f"subject_tags={token} did not compile into any instruction"
+
+
+def test_direction_dropdown_and_menu_counts(prompt_generator):
+    """演出制約の各選択肢が追加後の件数になっていること。"""
+
+    assert prompt_generator.combo_direction_environment_scope.count() == 19
+    assert len(prompt_generator.direction_common_subject_actions) == 21
+    assert prompt_generator.combo_direction_camera_motion.count() == 14
+    assert prompt_generator.combo_direction_visual_energy.count() == 14
+    assert prompt_generator.combo_direction_cut_duration_policy.count() == 14
+    assert prompt_generator.combo_direction_subject_focus.count() == 13
+
+    assert prompt_generator.combo_direction_environment_scope.itemText(
+        prompt_generator.combo_direction_environment_scope.findData("wetlands")
+    ) == "湿地・沼地"
+    assert prompt_generator.combo_direction_subject_focus.itemText(
+        prompt_generator.combo_direction_subject_focus.findData("texture")
+    ) == "質感主体"
+    assert prompt_generator.direction_common_subject_actions["signage"].text() == "広告・看板"
+
+
+def test_resolve_focus_priority_from_defaults_accepts_new_tokens(prompt_generator):
+    """新しい focus_priority 既定値も UI に復元できること。"""
+
+    assert prompt_generator._resolve_focus_priority_from_defaults({"focus_priority": "depth"}) == "depth"
 
 
 def test_movie_direction_constraints_compile_new_quality_flags():
