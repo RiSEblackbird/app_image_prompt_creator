@@ -51,6 +51,25 @@
 pip install requests PyYAML PySide6
 ```
 
+### macOS 開発者向けクイックセットアップ
+
+macOS では初回起動時に `desktop_gui_settings.yaml` 未配置で躓きやすいため、以下の順序を推奨します。
+
+```bash
+# 1) 仮想環境作成
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 2) 依存導入
+python -m pip install --upgrade pip
+pip install requests PyYAML PySide6 pytest
+
+# 3) 起動補助スクリプト経由で実行（設定ファイルを必要に応じて自動生成）
+python scripts/dev_launcher.py
+```
+
+> `scripts/dev_launcher.py` は、`desktop_gui_settings.yaml` が存在しない場合のみ `desktop_gui_settings.yaml.example` から自動生成して起動します。既存設定は上書きしません。
+
 ### 設定ファイル
 `app_image_prompt_creator/desktop_gui_settings.yaml` を作成します。テンプレートは `desktop_gui_settings.yaml.example` を参照してください。
 
@@ -71,6 +90,12 @@ export OPENAI_API_KEY="sk-xxxxx"
 
 ```bash
 python app_image_prompt_creator/app_image_prompt_creator_qt.py
+```
+
+または、開発時は次の補助コマンドを使うと OS 差分を意識せず起動できます。
+
+```bash
+python scripts/dev_launcher.py
 ```
 
 ---
