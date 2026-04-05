@@ -64,16 +64,15 @@ def main() -> int:
 
     args = parse_args()
     repo_root = get_repo_root()
-    created = ensure_settings_file(repo_root)
-
-    if created:
-        print("[INFO] desktop_gui_settings.yaml をテンプレートから生成しました。")
-
     command = build_launch_command(repo_root)
     print(f"[INFO] launch command: {' '.join(command)}")
 
     if args.dry_run:
         return 0
+
+    created = ensure_settings_file(repo_root)
+    if created:
+        print("[INFO] desktop_gui_settings.yaml をテンプレートから生成しました。")
 
     completed = subprocess.run(command, cwd=repo_root, check=False)
     return completed.returncode

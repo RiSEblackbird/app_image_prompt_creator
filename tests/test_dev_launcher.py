@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 from scripts import dev_launcher
@@ -31,3 +32,15 @@ def test_build_launch_command_points_to_qt_entry(tmp_path: Path) -> None:
 
     assert len(command) == 2
     assert command[1] == str(tmp_path / "app_image_prompt_creator_qt.py")
+
+
+def test_main_dry_run_does_not_create_settings_file(tmp_path: Path, monkeypatch) -> None:
+    repo_root = tmp_path
+    (repo_root / "desktop_gui_settings.yaml.example").write_text("sample: true\n", encoding="utf-8")
+    monkeypatch.setattr(dev_launcher, "parse_args", lambda: argparse.Namespace(dry_run=True))
+    monkeypatch.setattr(dev_launcher, "get_repo_root", lambda: repo_root)
+
+    exit_code = dev_launcher.main()
+
+    assert exit_code == 0
+    assert not (repo_root / "desktop_gui_settings.yaml").exists()
